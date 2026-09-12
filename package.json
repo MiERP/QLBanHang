@@ -1,0 +1,40 @@
+{
+  "name": "qaromi-erp",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c green,blue \"npm run dev -w @qaromi/api\" \"npm run dev -w @qaromi/web\"",
+    "build": "npm run build -w @qaromi/api && npm run build -w @qaromi/web",
+    "start": "npm run start -w @qaromi/api",
+    "desktop:dev": "npm run build && electron ."
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.11.1",
+    "exceljs": "^4.4.0",
+    "express": "^5.2.1",
+    "lucide-react": "^1.27.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "concurrently": "^10.0.3",
+    "electron": "^43.1.0",
+    "tsx": "^4.23.0",
+    "typescript": "^5.7.2",
+    "vite": "^8.1.4"
+  },
+  "main": "desktop/main.cjs",
+  "allowScripts": {
+    "better-sqlite3@12.11.1": true,
+    "esbuild@0.28.2": true
+  }
+}
