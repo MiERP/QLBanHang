@@ -1,3 +1,9 @@
+> ⚠️ **TÀI LIỆU LỊCH SỬ (đã lỗi thời một phần).** Bản mô tả này ghi lại hiện trạng ở giai đoạn
+> 9 phân hệ, trước đợt đại tu giao diện & luồng nghiệp vụ. Hiện trạng mới nhất (12 phân hệ,
+> Tailwind v4 build, biểu đồ Recharts, danh mục CRUD, một CSDL duy nhất) xem tại
+> [`ARCHITECTURE.md`](./ARCHITECTURE.md), [`API_REFERENCE.md`](./API_REFERENCE.md) và
+> [`PROGRESS_AND_STATUS.md`](./PROGRESS_AND_STATUS.md).
+
 # BÁO CÁO TỔNG KẾT TOÀN DIỆN VỀ THIẾT KẾ & HIỆN TRẠNG PHẦN MỀM QAROMI ERP
 ### Đơn vị áp dụng: Xí Nghiệp Nước Hồng Gai - Công Ty Cổ Phần Nước Sạch Quảng Ninh (QUAWANCO)
 ### Sản phẩm: Nước tinh khiết & ion kiềm cao cấp QAROMI & Dịch vụ gia tăng (DVGT)

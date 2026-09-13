@@ -20,6 +20,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Excel lock/temp files
+~$*
+
 # System & IDE files
 .DS_Store
 Thumbs.db

@@ -1,3 +1,7 @@
+> ⚠️ **TÀI LIỆU LỊCH SỬ (đã lỗi thời một phần).** Đây là hồ sơ kế hoạch/thiết kế ở giai đoạn đầu,
+> mô tả 9 phân hệ và giao diện cũ. Hiện trạng mới nhất xem tại
+> [`ARCHITECTURE.md`](./ARCHITECTURE.md) và [`PROGRESS_AND_STATUS.md`](./PROGRESS_AND_STATUS.md).
+
 # KẾ HOẠCH & HỒ SƠ THIẾT KẾ KIẾN TRÚC TOÀN DIỆN
 ## PHẦN MỀM QUẢN LÝ BÁN HÀNG & ĐIỀU HÀNH DOANH NGHIỆP (QAROMI ERP)
 ### Áp dụng cho: XÍ NGHIỆP NƯỚC HỒNG GAI - CÔNG TY CỔ PHẦN NƯỚC SẠCH QUẢNG NINH (QUAWANCO)
