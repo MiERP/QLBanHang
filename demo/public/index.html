@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QAROMI ERP — Bản demo</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">Q</div>
+        <div>
+          <div class="brand-name">QAROMI</div>
+          <div class="brand-sub">Xí nghiệp Nước Hồng Gai</div>
+        </div>
+      </div>
+      <nav id="nav"></nav>
+      <div class="sidebar-foot">
+        <div class="period">Kỳ làm việc: <b>Tháng 9/2026</b></div>
+        <div class="hint">Dữ liệu nạp trực tiếp từ 3 file Excel vận hành.</div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h1 id="page-title">Tổng quan</h1>
+          <p id="page-sub" class="sub"></p>
+        </div>
+        <div class="topbar-right">
+          <span class="pill" id="data-pill">Nguồn: Excel</span>
+          <span class="avatar">Q</span>
+        </div>
+      </header>
+      <section id="view" class="view"></section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <div id="modal" class="modal-backdrop hidden"><div class="modal" id="modal-box"></div></div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
