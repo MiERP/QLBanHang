@@ -66,6 +66,11 @@
   .meta-table td.value {
     background: #f8fafc;
   }
+  .meta-table td.highlight {
+    background: #eff6ff;
+    color: #dc2626;
+    font-weight: 700;
+  }
   h1 {
     font-size: 13pt;
     font-weight: 800;
@@ -121,6 +126,37 @@
     margin-bottom: 20px;
     page-break-inside: avoid;
   }
+  .cost-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0 10px;
+    font-size: 9.5pt;
+    page-break-inside: avoid;
+  }
+  .cost-table th {
+    background: #1e3a8a;
+    color: #ffffff;
+    padding: 8px 10px;
+    font-weight: 700;
+    border: 1px solid #1e3a8a;
+    text-align: left;
+  }
+  .cost-table th.text-center { text-align: center; }
+  .cost-table th.text-right { text-align: right; }
+  .cost-table td {
+    padding: 8px 10px;
+    border: 1px solid #cbd5e1;
+    vertical-align: top;
+  }
+  .cost-table td.text-center { text-align: center; }
+  .cost-table td.text-right { text-align: right; }
+  .cost-table tr:nth-child(even) td { background: #f8fafc; }
+  .cost-table tr.total-row td {
+    background: #eff6ff;
+    border-top: 2px solid #1e3a8a;
+    font-weight: 700;
+    font-size: 10.5pt;
+  }
   .sig-table {
     width: 100%;
     margin-top: 36px;
@@ -174,8 +210,12 @@
       <td class="value"><b>Phạm Văn Long</b> — Tư vấn giải pháp ERP</td>
     </tr>
     <tr>
+      <td class="label">Chi phí tư vấn triển khai:</td>
+      <td class="value highlight">15.000.000 VNĐ (Mười lăm triệu đồng chẵn — Trọn gói chìa khóa trao tay)</td>
+    </tr>
+    <tr>
       <td class="label">Phiên bản tài liệu:</td>
-      <td class="value">Phiên bản 2.0.0 — Bản Trình Duyệt Chốt Phương Án (Kèm 23 ảnh minh chứng)</td>
+      <td class="value">Phiên bản 2.1.0 — Bản Trình Duyệt Chốt Phương Án (Kèm 23 ảnh minh chứng & Dự toán)</td>
     </tr>
   </table>
 </div>
@@ -222,9 +262,9 @@
     <img src="screenshots/02_worklist.png" alt="Việc cần xử lý & Hàng đợi cảnh báo tức thì (Actionable Worklist)" class="screenshot-img" />
     <div class="figcaption">Hình 2: Giao diện phân hệ Việc cần xử lý & Hàng đợi cảnh báo tức thì (Actionable Worklist) — QAROMI ERP</div>
   </div>
-  <p><b>1. Dùng để làm gì:</b> Bộ máy gom tụ các sự vụ tồn đọng cần hành động ngay, phân loại theo độ khẩn cấp (Cao - Trung bình - Thông tin), giúp nhân sự không bao giờ bị quên việc hay chậm trễ phục vụ khách hàng.</p>
-  <p><b>2. Quy trình & Liên kết dữ liệu:</b> Quét liên tục các trạng thái nghiệp vụ chưa hoàn tất: 32 đơn hàng đã giao nhưng chưa xuất hóa đơn VAT điện tử, các đại lý nợ vỏ bình quá 15 ngày chưa thu hồi, các trạm kho sắp chạm ngưỡng tồn an toàn (dưới 20 bình) và các ca bảo vệ chưa xác nhận chấm công.</p>
-  <p><b>3. Người dùng nhận được gì:</b> Nhân viên mở máy là thấy ngay danh sách việc phải làm hôm nay. Kế toán xử lý nhanh 32 đơn cần xuất HĐ bằng 1 cú click chuột, Thủ kho thấy ngay cảnh báo tiếp ứng kho, giảm thiểu 100% tình trạng sót việc và trễ hạn hợp đồng.</p>
+  <p><b>1. Dùng để làm gì:</b> Bộ máy gom tụ các sự vụ tồn đọng cần hành động ngay, phân loại theo độ khẩn cấp (Đơn hàng chờ giao, Đơn chưa nộp tiền COD, Cảnh báo tồn kho tiếp ứng), giúp nhân sự không bao giờ bị quên việc hay chậm trễ phục vụ khách hàng.</p>
+  <p><b>2. Quy trình & Liên kết dữ liệu:</b> Quét liên tục các trạng thái nghiệp vụ chưa hoàn tất: 15 đơn hàng chưa nộp tiền quỹ COD (tổng nợ 59.094.000 đ), các trạm kho sắp chạm ngưỡng tồn an toàn (dưới 20 bình) và tự động sinh nút đôn đốc nộp tiền và tạo lệnh tiếp ứng kho.</p>
+  <p><b>3. Người dùng nhận được gì:</b> Nhân viên mở máy là thấy ngay danh sách việc phải làm hôm nay. Kế toán xử lý nhanh các khoản nợ tiền quỹ, Thủ kho thấy ngay cảnh báo tiếp ứng kho, giảm thiểu 100% tình trạng đọng vốn và thiếu hụt hàng hóa.</p>
 </div>
 
 
@@ -479,7 +519,8 @@
   <p><b>3. Người dùng nhận được gì:</b> Đảm bảo tính an toàn dữ liệu tuyệt đối, ngăn ngừa truy cập trái phép, bảo vệ bí mật kinh doanh và sẵn sàng kết nối API với hệ thống Hóa đơn điện tử VNPT/Viettel và phần mềm kế toán tập đoàn.</p>
 </div>
 
-<h1>PHẦN III: LỘ TRÌNH TRIỂN KHAI & CAM KẾT DỊCH VỤ</h1>
+<h1>PHẦN III: LỘ TRÌNH TRIỂN KHAI & DỰ TOÁN KINH PHÍ TƯ VẤN</h1>
+
 <h2>1. Lộ trình triển khai 4 giai đoạn chuẩn (8 tuần)</h2>
 <ul>
   <li><b>Giai đoạn 1 (Tuần 1 - 2) — Chuẩn hóa Master Data & Cài đặt hạ tầng:</b> Tiếp nhận và làm sạch dữ liệu từ file mới 'ĐIỀU PHỐI NƯỚC LỌC. Nhung sửa (1).xlsx', khắc phục dứt điểm 12 lỗi #REF!, cài đặt máy chủ bảo mật.</li>
@@ -488,7 +529,65 @@
   <li><b>Giai đoạn 4 (Tuần 7 - 8) — Golive chính thức & Chuyển giao toàn diện:</b> Đưa hệ thống vào vận hành chính thức, bàn giao tài liệu kỹ thuật và phân công nhân sự trực hỗ trợ.</li>
 </ul>
 
-<h2>2. Cam kết chất lượng, bảo mật & hỗ trợ kỹ thuật</h2>
+<h2>2. Dự toán kinh phí tư vấn và triển khai giải pháp (15.000.000 VNĐ)</h2>
+<p>Chi phí tư vấn và triển khai phần mềm Quản trị doanh nghiệp QAROMI ERP được xây dựng theo hình thức trọn gói chìa khóa trao tay, bảo đảm tối ưu ngân sách cho xí nghiệp và tuyệt đối không phát sinh chi phí ẩn:</p>
+
+<table class="cost-table">
+  <thead>
+    <tr>
+      <th class="text-center" style="width:6%;">STT</th>
+      <th style="width:38%;">Hạng mục công việc tư vấn & triển khai</th>
+      <th style="width:32%;">Phạm vi thực hiện</th>
+      <th class="text-center" style="width:8%;">ĐVT</th>
+      <th class="text-right" style="width:16%;">Thành tiền (VNĐ)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="text-center">1</td>
+      <td><b>Khảo sát hiện trạng & Chuẩn hóa Master Data từ Excel</b></td>
+      <td>Bóc tách 13 sheets dữ liệu thực tế, xử lý triệt để 12 lỗi #REF!, làm sạch danh bạ 411 khách hàng, 202 CBCNV, 5 kho bãi</td>
+      <td class="text-center">Gói</td>
+      <td class="text-right font-bold" style="color:#1e3a8a;">3.500.000</td>
+    </tr>
+    <tr>
+      <td class="text-center">2</td>
+      <td><b>Cài đặt hệ thống lõi & Cấu hình 23 phân hệ QAROMI ERP</b></td>
+      <td>Thiết lập CSDL quan hệ ACID, đóng gói logic tự động trừ kho, công thức chia đều thù lao vận chuyển, tách VAT 8%, sổ nợ vỏ 19L</td>
+      <td class="text-center">Gói</td>
+      <td class="text-right font-bold" style="color:#1e3a8a;">5.500.000</td>
+    </tr>
+    <tr>
+      <td class="text-center">3</td>
+      <td><b>Đào tạo chuyển giao công nghệ & Vận hành thử nghiệm (UAT)</b></td>
+      <td>Đào tạo thực chiến Ban Giám đốc, Kế toán, Thủ kho, Tiếp thị, Tài xế xe tải điện; hỗ trợ chạy song song 14 ngày</td>
+      <td class="text-center">Gói</td>
+      <td class="text-right font-bold" style="color:#1e3a8a;">3.500.000</td>
+    </tr>
+    <tr>
+      <td class="text-center">4</td>
+      <td><b>Bảo hành, bảo trì & Hỗ trợ kỹ thuật sau Golive (06 tháng)</b></td>
+      <td>Trực hỗ trợ kỹ thuật 24/7, định kỳ sao lưu dữ liệu, bảo đảm hệ thống vận hành thông suốt, chuyển giao tài liệu kỹ thuật</td>
+      <td class="text-center">Gói</td>
+      <td class="text-right font-bold" style="color:#1e3a8a;">2.500.000</td>
+    </tr>
+    <tr class="total-row">
+      <td colspan="4" style="text-align:right; color:#1e3a8a;">TỔNG CỘNG KINH PHÍ TƯ VẤN TRIỂN KHAI (TRỌN GÓI):</td>
+      <td class="text-right" style="color:#dc2626; font-size:11pt;">15.000.000 đ</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><i>(Bằng chữ: Mười lăm triệu đồng chẵn. Đơn giá trên đã bao gồm toàn bộ chi phí khảo sát, cấu hình, chuyển đổi dữ liệu và đào tạo chuyển giao tại đơn vị.)</i></p>
+
+<p><b>Tiến độ thanh toán hợp đồng:</b></p>
+<ul>
+  <li><b>Đợt 1 (50% tương đương 7.500.000 VNĐ):</b> Tạm ứng ngay sau khi ký kết hợp đồng tư vấn và bắt đầu tiếp nhận dữ liệu Excel từ xí nghiệp.</li>
+  <li><b>Đợt 2 (50% tương đương 7.500.000 VNĐ):</b> Quyết toán sau khi hoàn thành công tác đào tạo UAT, nghiệm thu vận hành thử nghiệm và ký biên bản bàn giao chính thức.</li>
+</ul>
+<p><b>Cam kết kinh phí:</b> Mức kinh phí 15.000.000 VNĐ là chi phí trọn gói chìa khóa trao tay. Bên tư vấn cam kết không phát sinh bất kỳ khoản phụ phí nào ngoài hợp đồng trong suốt quá trình triển khai.</p>
+
+<h2>3. Cam kết chất lượng, bảo mật & hỗ trợ kỹ thuật</h2>
 <p>Cam kết bảo mật dữ liệu tuyệt đối theo tiêu chuẩn phân quyền RBAC, sao lưu tự động hàng ngày. Đội ngũ chuyên gia cam kết đồng hành hỗ trợ kỹ thuật 24/7 trong suốt quá trình vận hành của đơn vị.</p>
 
 <table class="sig-table">
