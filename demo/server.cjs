@@ -70,8 +70,23 @@ function toDate(v) {
 const cell = (row, n) => row.getCell(n).value;
 
 async function readBook(f) {
+  const files = fs.readdirSync(EXCEL_DIR);
+  let chosen = f;
+  if (f.includes('ĐIỀU PHỐI NƯỚC LỌC') || f.toLowerCase().includes('dieu phoi')) {
+    const f1 = files.find(x => (x.includes('ĐIỀU PHỐI') || x.toLowerCase().includes('dieu phoi')) && x.includes('(1)'));
+    if (f1) chosen = f1;
+    else {
+      const anyDp = files.find(x => x.includes('ĐIỀU PHỐI') || x.toLowerCase().includes('dieu phoi'));
+      if (anyDp) chosen = anyDp;
+    }
+  } else if (!files.includes(f)) {
+    const matched = files.find(x => x.toLowerCase().includes(f.toLowerCase().replace(/\.xlsx$/, '')));
+    if (matched) chosen = matched;
+  }
+  const fullPath = path.join(EXCEL_DIR, chosen);
+  console.log(`[ExcelJS] Loading workbook: ${chosen}`);
   const wb = new ExcelJS.Workbook();
-  await wb.xlsx.readFile(path.join(EXCEL_DIR, f));
+  await wb.xlsx.readFile(fullPath);
   return wb;
 }
 
@@ -182,13 +197,31 @@ function parseOrders(ws) {
         }
       }
     }
+    if (!code) {
+      if (toNum(cell(row, 8)) > 0) {
+        const descLower = (desc + ' ' + prodLabel).toLowerCase();
+        code = descLower.includes('kiềm') || descLower.includes('ion') ? 'KIEM_19L' : 'RO_19L';
+      } else if (toNum(cell(row, 7)) > 0) {
+        const descLower = (desc + ' ' + prodLabel).toLowerCase();
+        code = descLower.includes('350') ? 'VI_350' : 'VI_500';
+      }
+    }
     let qty = code ? toNum(cell(row, colFor[code])) : 0;
     if (!qty) qty = Math.max(0, ...[16, 17, 18, 19, 20, 21].map(n => toNum(cell(row, n))));
+    if (!qty) {
+      if (toNum(cell(row, 8)) > 0) qty = toNum(cell(row, 8));
+      else if (toNum(cell(row, 7)) > 0) qty = toNum(cell(row, 7));
+      else if (toNum(cell(row, 9)) > 0) qty = toNum(cell(row, 9));
+    }
     const product = PRODUCTS.find(p => p.code === code) || PRODUCTS[0];
     const price = toNum(cell(row, 24)) || product.price;
     const carriers = splitPeople(cell(row, 27));
+    if (!carriers.length) {
+      const p = splitPeople(cell(row, 10));
+      if (p.length) carriers.push(...p);
+    }
     let fee = toNum(cell(row, 28));
-    if (!fee && carriers.length) fee = Math.round(qty * 5000);
+    if (!fee && carriers.length && qty > 0) fee = Math.round(qty * 5000);
 
     out.push({
       date: toDate(cell(row, 2)) || '2026-09-07',
@@ -434,7 +467,7 @@ function parseInterbranch(wb3) {
 
 function parseGuardRoster(wb3) {
   const shifts = [];
-  const ws = wb3.getWorksheet('ĐIÈU PHỐI');
+  const ws = wb3.getWorksheet('ĐIÈU PHỐI') || wb3.getWorksheet('ĐIỀU PHỐI') || wb3.worksheets.find(w => w.name.toLowerCase().includes('phối'));
   if (!ws) return shifts;
   for (let r = 5; r <= 28; r++) {
     const row = ws.getRow(r);

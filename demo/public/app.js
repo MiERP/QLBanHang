@@ -1954,7 +1954,7 @@ window.openCreateOrderModal = async function() {
 
       <div class="form-group">
         <label class="form-label">Người bán (Cán bộ công nhân viên vận động)</label>
-        <input type="text" id="new-ord-seller" class="form-control" placeholder="Ví dụ: Lương Minh Hương, Đinh Thu Huế, Bùi Hà Thu...">
+        <input type="text" id="new-ord-seller" class="form-control" placeholder="Ví dụ: Phạm Văn Long, Đinh Thu Huế, Bùi Hà Thu...">
       </div>
 
       <div style="font-weight:700; margin: 16px 0 8px; font-size:13px;">Chọn mặt hàng & Số lượng:</div>
