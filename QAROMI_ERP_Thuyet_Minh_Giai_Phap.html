@@ -126,36 +126,44 @@
     margin-bottom: 20px;
     page-break-inside: avoid;
   }
-  .cost-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 14px 0 10px;
-    font-size: 9.5pt;
+  .compact-cost-box {
+    background: #f0f7ff;
+    border: 1px solid #93c5fd;
+    border-left: 5px solid #1e3a8a;
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin: 12px 0 16px;
     page-break-inside: avoid;
   }
-  .cost-table th {
-    background: #1e3a8a;
-    color: #ffffff;
-    padding: 8px 10px;
-    font-weight: 700;
-    border: 1px solid #1e3a8a;
-    text-align: left;
+  .compact-cost-header {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed #93c5fd;
   }
-  .cost-table th.text-center { text-align: center; }
-  .cost-table th.text-right { text-align: right; }
-  .cost-table td {
-    padding: 8px 10px;
-    border: 1px solid #cbd5e1;
-    vertical-align: top;
-  }
-  .cost-table td.text-center { text-align: center; }
-  .cost-table td.text-right { text-align: right; }
-  .cost-table tr:nth-child(even) td { background: #f8fafc; }
-  .cost-table tr.total-row td {
-    background: #eff6ff;
-    border-top: 2px solid #1e3a8a;
-    font-weight: 700;
+  .compact-cost-title {
+    font-weight: 800;
+    color: #1e3a8a;
     font-size: 10.5pt;
+  }
+  .compact-cost-amount {
+    font-weight: 800;
+    color: #dc2626;
+    font-size: 13pt;
+  }
+  .compact-cost-words {
+    font-style: italic;
+    font-size: 9pt;
+    color: #475569;
+  }
+  .compact-cost-body p {
+    margin: 0 0 4px;
+    font-size: 9.5pt;
+    color: #1e293b;
+    line-height: 1.45;
   }
   .sig-table {
     width: 100%;
@@ -533,63 +541,20 @@
   <li><b>Giai đoạn 4 (Tuần 7 - 8) — Golive chính thức & Chuyển giao toàn diện:</b> Đưa hệ thống vào vận hành chính thức, bàn giao tài liệu kỹ thuật và phân công nhân sự trực hỗ trợ.</li>
 </ul>
 
-<h2>2. Dự toán kinh phí tư vấn và triển khai giải pháp (15.000.000 VNĐ)</h2>
-<p>Chi phí tư vấn và triển khai phần mềm Quản trị doanh nghiệp QAROMI ERP được xây dựng theo hình thức trọn gói chìa khóa trao tay, bảo đảm tối ưu ngân sách cho xí nghiệp và tuyệt đối không phát sinh chi phí ẩn:</p>
+<h2>2. Kinh phí tư vấn và triển khai giải pháp (Trọn gói: 15.000.000 VNĐ)</h2>
 
-<table class="cost-table">
-  <thead>
-    <tr>
-      <th class="text-center" style="width:6%;">STT</th>
-      <th style="width:38%;">Hạng mục công việc tư vấn & triển khai</th>
-      <th style="width:32%;">Phạm vi thực hiện</th>
-      <th class="text-center" style="width:8%;">ĐVT</th>
-      <th class="text-right" style="width:16%;">Thành tiền (VNĐ)</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td class="text-center">1</td>
-      <td><b>Khảo sát hiện trạng & Chuẩn hóa Master Data từ Excel</b></td>
-      <td>Bóc tách 13 sheets dữ liệu thực tế, xử lý triệt để 12 lỗi #REF!, làm sạch danh bạ 411 khách hàng, 202 CBCNV, 5 kho bãi</td>
-      <td class="text-center">Gói</td>
-      <td class="text-right font-bold" style="color:#1e3a8a;">3.500.000</td>
-    </tr>
-    <tr>
-      <td class="text-center">2</td>
-      <td><b>Cài đặt hệ thống lõi & Cấu hình 23 phân hệ QAROMI ERP</b></td>
-      <td>Thiết lập CSDL quan hệ ACID, đóng gói logic tự động trừ kho, công thức chia đều thù lao vận chuyển, tách VAT 8%, sổ nợ vỏ 19L</td>
-      <td class="text-center">Gói</td>
-      <td class="text-right font-bold" style="color:#1e3a8a;">5.500.000</td>
-    </tr>
-    <tr>
-      <td class="text-center">3</td>
-      <td><b>Đào tạo chuyển giao công nghệ & Vận hành thử nghiệm (UAT)</b></td>
-      <td>Đào tạo thực chiến Ban Giám đốc, Kế toán, Thủ kho, Tiếp thị, Tài xế xe tải điện; hỗ trợ chạy song song 14 ngày</td>
-      <td class="text-center">Gói</td>
-      <td class="text-right font-bold" style="color:#1e3a8a;">3.500.000</td>
-    </tr>
-    <tr>
-      <td class="text-center">4</td>
-      <td><b>Bảo hành, bảo trì & Hỗ trợ kỹ thuật sau Golive (06 tháng)</b></td>
-      <td>Trực hỗ trợ kỹ thuật 24/7, định kỳ sao lưu dữ liệu, bảo đảm hệ thống vận hành thông suốt, chuyển giao tài liệu kỹ thuật</td>
-      <td class="text-center">Gói</td>
-      <td class="text-right font-bold" style="color:#1e3a8a;">2.500.000</td>
-    </tr>
-    <tr class="total-row">
-      <td colspan="4" style="text-align:right; color:#1e3a8a;">TỔNG CỘNG KINH PHÍ TƯ VẤN TRIỂN KHAI (TRỌN GÓI):</td>
-      <td class="text-right" style="color:#dc2626; font-size:11pt;">15.000.000 đ</td>
-    </tr>
-  </tbody>
-</table>
-
-<p><i>(Bằng chữ: Mười lăm triệu đồng chẵn. Đơn giá trên đã bao gồm toàn bộ chi phí khảo sát, cấu hình, chuyển đổi dữ liệu và đào tạo chuyển giao tại đơn vị.)</i></p>
-
-<p><b>Tiến độ thanh toán hợp đồng:</b></p>
-<ul>
-  <li><b>Đợt 1 (50% tương đương 7.500.000 VNĐ):</b> Tạm ứng ngay sau khi ký kết hợp đồng tư vấn và bắt đầu tiếp nhận dữ liệu Excel từ xí nghiệp.</li>
-  <li><b>Đợt 2 (50% tương đương 7.500.000 VNĐ):</b> Quyết toán sau khi hoàn thành công tác đào tạo UAT, nghiệm thu vận hành thử nghiệm và ký biên bản bàn giao chính thức.</li>
-</ul>
-<p><b>Cam kết kinh phí:</b> Mức kinh phí 15.000.000 VNĐ là chi phí trọn gói chìa khóa trao tay. Bên tư vấn cam kết không phát sinh bất kỳ khoản phụ phí nào ngoài hợp đồng trong suốt quá trình triển khai.</p>
+<div class="compact-cost-box">
+  <div class="compact-cost-header">
+    <span class="compact-cost-title">TỔNG KINH PHÍ TƯ VẤN &amp; TRIỂN KHAI TRỌN GÓI:</span>
+    <span class="compact-cost-amount">15.000.000 VNĐ</span>
+    <span class="compact-cost-words">(Mười lăm triệu đồng chẵn)</span>
+  </div>
+  <div class="compact-cost-body">
+    <p><b>• Phạm vi thực hiện trọn gói:</b> Chuẩn hóa toàn diện Master Data từ Excel cũ (xử lý triệt để 12 lỗi #REF!), cài đặt hệ thống lõi &amp; cấu hình đầy đủ 23 phân hệ, đào tạo chuyển giao UAT thực chiến và bảo hành bảo trì kỹ thuật 06 tháng sau Golive.</p>
+    <p><b>• Tiến độ thanh toán (02 đợt):</b> Đợt 1 (50% = 7.500.000 VNĐ) tạm ứng khi ký hợp đồng và bàn giao dữ liệu; Đợt 2 (50% = 7.500.000 VNĐ) quyết toán sau khi hoàn thành đào tạo UAT và ký biên bản nghiệm thu.</p>
+    <p style="margin-bottom:0;"><b>• Cam kết chìa khóa trao tay:</b> Chi phí cố định trọn gói, bảo đảm 100% không phát sinh bất kỳ khoản phụ phí nào ngoài hợp đồng trong suốt quá trình triển khai.</p>
+  </div>
+</div>
 
 <h2>3. Cam kết chất lượng, bảo mật & hỗ trợ kỹ thuật</h2>
 <p>Cam kết bảo mật dữ liệu tuyệt đối theo tiêu chuẩn phân quyền RBAC, sao lưu tự động hàng ngày. Đội ngũ chuyên gia cam kết đồng hành hỗ trợ kỹ thuật 24/7 trong suốt quá trình vận hành của đơn vị.</p>
