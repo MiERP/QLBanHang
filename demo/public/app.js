@@ -11,7 +11,10 @@ const state = {
   meta: null,
   selectedCommercialMonth: '08/2026',
   employeeFilter: { q: '', station: 'all', position: 'all' },
-  customerFilter: { q: '', type: 'all', debtOnly: false, shellOnly: false }
+  customerFilter: { q: '', type: 'all', debtOnly: false, shellOnly: false },
+  orderInvoiceFilter: 'all',
+  revenueTab: 'by_product',
+  shellTab: 'transactions'
 };
 
 // Utilities
@@ -1649,21 +1652,77 @@ window.submitNewCustomer = async function() {
 // 4. Sales Orders View
 async function renderOrders(el) {
   const orders = await api('/api/orders');
+  const invFilter = state.orderInvoiceFilter || 'all';
+
+  const invoicedCount = orders.filter(o => o.invoice_status === 'invoiced').length;
+  const toInvoiceCount = orders.filter(o => o.invoice_status !== 'invoiced').length;
+  const totalInvoicedRev = orders.filter(o => o.invoice_status === 'invoiced').reduce((s, o) => s + (o.amount_total || 0), 0);
+  const totalToInvoiceRev = orders.filter(o => o.invoice_status !== 'invoiced').reduce((s, o) => s + (o.amount_total || 0), 0);
+
+  const filteredOrders = orders.filter(o => {
+    if (invFilter === 'invoiced') return o.invoice_status === 'invoiced';
+    if (invFilter === 'to_invoice') return o.invoice_status !== 'invoiced';
+    return true;
+  });
 
   el.innerHTML = `
-    <div class="card-box">
-      <div class="card-box-header">
-        <div style="display:flex; align-items:center; gap:12px;">
-          <span class="card-box-title">🧾 Danh sách đơn bán hàng & Báo giá</span>
-          <span class="badge badge-draft">${orders.length} đơn</span>
-        </div>
-        <button class="btn btn-primary btn-sm" onclick="openCreateOrderModal()">＋ Tạo báo giá mới</button>
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px;">
+      <div>
+        <h2 style="font-size:20px; font-weight:700; color:#0f172a; margin:0 0 4px 0;">🧾 Đơn Bán Hàng & Hóa Đơn Điện Tử</h2>
+        <div style="font-size:13px; color:#64748b;">Quản lý quy trình: Báo giá ➔ Đơn bán ➔ Xuất kho ➔ Xuất hóa đơn điện tử (E-Invoice)</div>
       </div>
-      <div class="card-box-body">
-        <div class="filter-bar">
-          <input type="text" id="order-search" class="search-input" placeholder="🔍 Tìm theo mã đơn, khách hàng, người bán..." oninput="filterOrdersTable()">
-          <select id="order-channel-filter" class="select-input" onchange="filterOrdersTable()">
-            <option value="">Tất cả kênh</option>
+      <div>
+        <button class="btn btn-primary" onclick="openCreateOrderModal()">＋ Tạo báo giá mới</button>
+      </div>
+    </div>
+
+    <!-- 4 Invoice & Revenue KPI Cards -->
+    <div class="metrics-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom:20px;">
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">TỔNG SỐ ĐƠN BÁN</span>
+          <span class="metric-icon">🧾</span>
+        </div>
+        <div class="metric-value">${orders.length} đơn</div>
+        <div class="metric-sub">Kỳ tháng 09/2026</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">ĐÃ XUẤT HÓA ĐƠN</span>
+          <span class="metric-icon">📄</span>
+        </div>
+        <div class="metric-value" style="color:#059669;">${invoicedCount} đơn</div>
+        <div class="metric-sub">Doanh số: <b style="color:#059669;">${fmt(totalInvoicedRev)} đ</b></div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">CHƯA XUẤT HÓA ĐƠN</span>
+          <span class="metric-icon">⏳</span>
+        </div>
+        <div class="metric-value text-warning">${toInvoiceCount} đơn</div>
+        <div class="metric-sub">Cần xuất HĐ: <b class="text-warning">${fmt(totalToInvoiceRev)} đ</b></div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">TỶ LỆ XUẤT HÓA ĐƠN</span>
+          <span class="metric-icon">📊</span>
+        </div>
+        <div class="metric-value text-primary">${orders.length > 0 ? ((invoicedCount / orders.length) * 100).toFixed(1) : 0}%</div>
+        <div class="metric-sub">Chuẩn kế toán thuế QUAWACO</div>
+      </div>
+    </div>
+
+    <!-- Filter & Search Bar -->
+    <div class="card-box" style="margin-bottom:16px; padding:12px 16px;">
+      <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between;">
+        <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+          <input type="text" id="order-search" class="form-control" style="width:260px; height:34px;" 
+                 placeholder="🔍 Tìm theo mã đơn, khách, người bán..." oninput="filterOrdersTable()">
+          <select id="order-channel-filter" class="form-control" style="width:160px; height:34px;" onchange="filterOrdersTable()">
+            <option value="">Tất cả kênh bán</option>
             <option value="XN">Xí nghiệp (Tính KPI)</option>
             <option value="CTY">Công ty</option>
             <option value="BC">Bãi Cháy</option>
@@ -1671,417 +1730,60 @@ async function renderOrders(el) {
           </select>
         </div>
 
-        <div class="table-responsive">
-          <table class="data-table" id="orders-table">
-            <thead>
-              <tr>
-                <th>Mã đơn</th>
-                <th>Ngày</th>
-                <th>Khách hàng</th>
-                <th>Kênh</th>
-                <th>Kho xuất</th>
-                <th>Người bán (CBCNV)</th>
-                <th class="text-right">Tổng tiền</th>
-                <th>Trạng thái</th>
-                <th>Thao tác</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${orders.map(o => `
-                <tr class="order-row" data-search="${(o.name + ' ' + o.customer_name + ' ' + o.seller).toLowerCase()}" data-channel="${o.channel_code}">
-                  <td class="font-bold text-primary">${esc(o.name)}</td>
-                  <td>${esc(o.date)}</td>
-                  <td class="font-semibold">${esc(o.customer_name)}</td>
-                  <td><span class="badge ${o.channel_code === 'XN' ? 'badge-sale' : 'badge-draft'}">${esc(o.channel_name)}</span></td>
-                  <td>${esc(o.warehouse_name)}</td>
-                  <td>${esc(o.seller)}</td>
-                  <td class="text-right font-bold">${fmt(o.amount_total)} đ</td>
-                  <td>${renderBadge(o.state)}</td>
-                  <td>
-                    <button class="btn btn-secondary btn-sm" onclick="openOrderDetailModal(${o.id})">Chi tiết</button>
-                  </td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
+        <div style="display:flex; gap:6px; align-items:center;">
+          <button class="btn btn-sm ${invFilter === 'all' ? 'btn-primary' : 'btn-secondary'}" 
+                  onclick="window.filterOrderInvoice('all')">Tất cả (${orders.length})</button>
+          <button class="btn btn-sm ${invFilter === 'invoiced' ? 'btn-primary' : 'btn-secondary'}" 
+                  onclick="window.filterOrderInvoice('invoiced')">Đã xuất HĐ (${invoicedCount})</button>
+          <button class="btn btn-sm ${invFilter === 'to_invoice' ? 'btn-primary' : 'btn-secondary'}" 
+                  onclick="window.filterOrderInvoice('to_invoice')">Chưa xuất HĐ (${toInvoiceCount})</button>
         </div>
       </div>
     </div>
-  `;
-}
 
-window.filterOrdersTable = function() {
-  const q = document.getElementById('order-search').value.toLowerCase();
-  const ch = document.getElementById('order-channel-filter').value;
-  const rows = document.querySelectorAll('.order-row');
-  rows.forEach(r => {
-    const matchesQ = !q || r.dataset.search.includes(q);
-    const matchesCh = !ch || r.dataset.channel === ch;
-    r.style.display = (matchesQ && matchesCh) ? '' : 'none';
-  });
-};
-
-// Open Order Detail Modal
-window.openOrderDetailModal = async function(id) {
-  const { order, lines, pickings } = await api(`/api/orders/${id}`);
-  
-  openModal(`
-    <div class="modal-header">
-      <div>
-        <div class="modal-title">Chi tiết đơn hàng ${esc(order.name)}</div>
-        <div style="font-size:12px; color:#64748b;">Khách hàng: <b>${esc(order.customer_name)}</b> — Ngày: ${esc(order.date)}</div>
-      </div>
-      <button class="modal-close" onclick="closeModal()">✕</button>
-    </div>
-    <div class="modal-body">
-      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:16px; font-size:12px; background:#f8fafc; padding:12px; border-radius:8px;">
-        <div><b>Kênh doanh thu:</b> ${esc(order.channel_name)}</div>
-        <div><b>Kho xuất hàng:</b> ${esc(order.warehouse_name)}</div>
-        <div><b>Người bán (CBCNV):</b> ${esc(order.seller)}</div>
-        <div><b>Trạng thái:</b> ${renderBadge(order.state)}</div>
-        <div><b>Ghi chú thu tiền:</b> ${esc(order.collection_note || 'Chưa có')}</div>
-        <div><b>Tổng tiền đơn:</b> <span class="font-bold text-primary" style="font-size:14px;">${fmt(order.amount_total)} đ</span></div>
-      </div>
-
-      <div style="font-weight:700; margin-bottom:8px; font-size:13px;">Chi tiết sản phẩm đặt mua:</div>
-      <table class="data-table" style="margin-bottom:16px;">
-        <thead>
-          <tr>
-            <th>Mặt hàng</th>
-            <th class="text-center">Số lượng</th>
-            <th class="text-center">Tặng (10+1)</th>
-            <th class="text-right">Đơn giá</th>
-            <th class="text-right">Thành tiền</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${lines.map(l => `
-            <tr>
-              <td>${esc(l.product_name)}</td>
-              <td class="text-center font-bold">${fmt(l.qty)} ${esc(l.uom_name)}</td>
-              <td class="text-center text-success font-bold">${l.promo_qty ? '+' + fmt(l.promo_qty) : '0'}</td>
-              <td class="text-right">${fmt(l.price_unit)} đ</td>
-              <td class="text-right font-bold">${fmt(l.amount_total)} đ</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-
-      <div style="font-weight:700; margin-bottom:8px; font-size:13px;">Phiếu giao hàng liên kết (Stock Picking):</div>
-      ${pickings.length ? `
-        <table class="data-table">
+    <!-- Orders Data Table -->
+    <div class="card-box">
+      <div class="table-responsive">
+        <table class="data-table" id="orders-table">
           <thead>
             <tr>
-              <th>Mã phiếu kho</th>
-              <th>Nguồn ➔ Đích</th>
-              <th>Cước giao</th>
-              <th>Trạng thái</th>
+              <th style="width:110px;">Mã đơn</th>
+              <th style="width:85px;">Ngày</th>
+              <th>Khách hàng</th>
+              <th style="width:100px;">Kênh bán</th>
+              <th>Người bán</th>
+              <th class="text-right" style="width:110px;">Doanh thu</th>
+              <th class="text-center" style="width:100px;">Đơn hàng</th>
+              <th style="width:150px;">Hóa đơn điện tử</th>
+              <th class="text-center" style="width:80px;">Thao tác</th>
             </tr>
           </thead>
           <tbody>
-            ${pickings.map(p => `
-              <tr>
-                <td class="font-bold text-primary">${esc(p.name)}</td>
-                <td>${esc(p.src_name)} ➔ ${esc(p.dest_name)}</td>
-                <td>${fmt(p.carrier_fee)} đ</td>
-                <td>${renderBadge(p.state)}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      ` : '<div style="color:#64748b; font-size:12px;">Chưa sinh phiếu kho (đang ở trạng thái Báo giá).</div>'}
-    </div>
-    <div class="modal-footer">
-      ${order.state === 'draft' ? `
-        <button class="btn btn-primary" onclick="confirmOrder(${order.id})">✔ Xác nhận đơn (Sinh phiếu kho)</button>
-      ` : ''}
-      <button class="btn btn-secondary" onclick="closeModal()">Đóng</button>
-    </div>
-  `);
-};
-
-window.confirmOrder = async function(id) {
-  const res = await api(`/api/orders/${id}/confirm`, { method: 'POST' });
-  showToast(`Đã xác nhận đơn! Tự động sinh phiếu giao: ${res.picking_name}`);
-  closeModal();
-  renderView();
-};
-
-// Open Create Order Modal
-window.openCreateOrderModal = async function() {
-  if (!state.products.length) {
-    const data = await api('/api/products');
-    state.products = data.products;
-  }
-
-  openModal(`
-    <div class="modal-header">
-      <div class="modal-title">＋ Tạo Báo Giá / Đơn Bán Hàng Mới</div>
-      <button class="modal-close" onclick="closeModal()">✕</button>
-    </div>
-    <div class="modal-body">
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Tên khách hàng *</label>
-          <input type="text" id="new-ord-customer" class="form-control" placeholder="Ví dụ: Công ty Hanet, Nhà hàng Minh Tuấn..." required>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Số điện thoại</label>
-          <input type="text" id="new-ord-phone" class="form-control" placeholder="09xxxxxxx">
-        </div>
-      </div>
-
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Kênh doanh thu</label>
-          <select id="new-ord-channel" class="form-control">
-            <option value="XN">Xí nghiệp (Tính KPI thi đua)</option>
-            <option value="CTY">Công ty mẹ QUAWACO</option>
-            <option value="BC">Trạm Bãi Cháy</option>
-            <option value="MD">Miền Đông</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Kho xuất hàng</label>
-          <select id="new-ord-warehouse" class="form-control">
-            <option value="TANGAP">Kho Tăng Áp</option>
-            <option value="HUE">Kho Huế</option>
-            <option value="VP">Kho Văn Phòng</option>
-            <option value="XEDIEN">Xe tải điện (Kho di động)</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Người bán (Cán bộ công nhân viên vận động)</label>
-        <input type="text" id="new-ord-seller" class="form-control" placeholder="Ví dụ: Lương Minh Hương, Đinh Thu Huế, Bùi Hà Thu...">
-      </div>
-
-      <div style="font-weight:700; margin: 16px 0 8px; font-size:13px;">Chọn mặt hàng & Số lượng:</div>
-      <div style="background:#f8fafc; padding:12px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:12px;">
-        <div class="form-row">
-          <div class="form-group" style="flex:2;">
-            <label class="form-label">Sản phẩm</label>
-            <select id="new-ord-prod" class="form-control">
-              ${state.products.map(p => `
-                <option value="${p.code}">${p.name} — ${fmt(p.price)}đ</option>
-              `).join('')}
-            </select>
-          </div>
-          <div class="form-group" style="flex:1;">
-            <label class="form-label">Số lượng</label>
-            <input type="number" id="new-ord-qty" class="form-control" value="10" min="1">
-          </div>
-        </div>
-        <div style="font-size:11px; color:#16a34a;">
-          🎁 <b>Chính sách 10+1:</b> Mua từ 10 đơn vị tự động được tặng 1 sản phẩm khuyến mãi miễn phí!
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Ghi chú thanh toán</label>
-        <input type="text" id="new-ord-note" class="form-control" placeholder="Ví dụ: Thu tiền luôn, CK11/9...">
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal()">Hủy</button>
-      <button class="btn btn-primary" onclick="submitNewOrder()">Lưu Báo Giá</button>
-    </div>
-  `);
-};
-
-window.submitNewOrder = async function() {
-  const customer = document.getElementById('new-ord-customer').value.trim();
-  const phone = document.getElementById('new-ord-phone').value.trim();
-  const channel = document.getElementById('new-ord-channel').value;
-  const warehouse = document.getElementById('new-ord-warehouse').value;
-  const seller = document.getElementById('new-ord-seller').value.trim();
-  const prodCode = document.getElementById('new-ord-prod').value;
-  const qty = Number(document.getElementById('new-ord-qty').value) || 1;
-  const note = document.getElementById('new-ord-note').value.trim();
-
-  if (!customer) {
-    alert('Vui lòng nhập tên khách hàng');
-    return;
-  }
-
-  const payload = {
-    customer_name: customer,
-    phone,
-    channel_code: channel,
-    warehouse_code: warehouse,
-    seller: seller || 'Xí nghiệp',
-    lines: [{ product_code: prodCode, qty }],
-    collection_note: note,
-  };
-
-  const res = await api('/api/orders', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-
-  showToast(`Đã tạo báo giá ${res.name} thành công!`);
-  closeModal();
-  navigateTo('orders');
-};
-
-// 5. Bottle Shells View (Sổ Vỏ)
-async function renderShells(el) {
-  const data = await api('/api/shells');
-  const s = data.summary;
-
-  el.innerHTML = `
-    <div class="pattern-callout">
-      <span class="badge-pattern">Returnable Asset Management</span>
-      <div>
-        <b>Quản lý Vỏ bình theo Chuẩn MiERP:</b> Vỏ bình Úp và Vòi được theo dõi như tài sản luân chuyển. Công thức quản lý chặt chẽ: <code>Nợ cũ + Lấy mới - Trả vỏ = Còn nợ</code>, gắn liền tiền ký cọc 50.000đ/vỏ để bảo vệ tài sản doanh nghiệp.
-      </div>
-    </div>
-
-    <div class="metrics-grid" style="grid-template-columns: repeat(4, 1fr);">
-      <div class="metric-card warning">
-        <div class="metric-header"><span class="metric-title">Tổng Nợ Vỏ Cuối Kỳ</span></div>
-        <div class="metric-value">${fmt(s.clo_up + s.clo_voi)} vỏ</div>
-        <div class="metric-sub">Úp: ${fmt(s.clo_up)} | Vòi: ${fmt(s.clo_voi)}</div>
-      </div>
-      <div class="metric-card success">
-        <div class="metric-header"><span class="metric-title">Vỏ đã thu hồi trong kỳ</span></div>
-        <div class="metric-value">${fmt(s.ret_up + s.ret_voi)} vỏ</div>
-        <div class="metric-sub">Úp: ${fmt(s.ret_up)} | Vòi: ${fmt(s.ret_voi)}</div>
-      </div>
-      <div class="metric-card highlight">
-        <div class="metric-header"><span class="metric-title">Vỏ giao đi cùng nước</span></div>
-        <div class="metric-value">${fmt(s.in_up + s.in_voi)} vỏ</div>
-        <div class="metric-sub">Úp: ${fmt(s.in_up)} | Vòi: ${fmt(s.in_voi)}</div>
-      </div>
-      <div class="metric-card purple">
-        <div class="metric-header"><span class="metric-title">Tiền cọc vỏ đang giữ</span></div>
-        <div class="metric-value">${fmt(s.total_deposit)} đ</div>
-        <div class="metric-sub">Bảo lãnh ký cược tài sản</div>
-      </div>
-    </div>
-
-    <div class="card-box">
-      <div class="card-box-header">
-        <span class="card-box-title">🧴 Sổ theo dõi nợ vỏ bình khách hàng (Kỳ Tháng 9/2026)</span>
-        <span class="badge badge-draft">${data.ledgers.length} khách nợ</span>
-      </div>
-      <div class="card-box-body" style="padding:0;">
-        <div class="table-responsive">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Người theo dõi</th>
-                <th>Khách hàng nợ vỏ</th>
-                <th class="text-center">Nợ cũ (Úp/Vòi)</th>
-                <th class="text-center">Lấy mới</th>
-                <th class="text-center">Đã trả</th>
-                <th class="text-center font-bold text-danger">Còn nợ (Úp/Vòi)</th>
-                <th class="text-right">Tiền cọc</th>
-                <th>Thao tác</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${data.ledgers.slice(0, 35).map(l => `
-                <tr>
-                  <td>${esc(l.subject)}</td>
-                  <td class="font-semibold">${esc(l.customer)}</td>
-                  <td class="text-center text-muted">${l.opening_up || 0} / ${l.opening_voi || 0}</td>
-                  <td class="text-center text-primary">+${(l.in_up || 0) + (l.in_voi || 0)}</td>
-                  <td class="text-center text-success">-${(l.returned_up || 0) + (l.returned_voi || 0)}</td>
-                  <td class="text-center font-bold text-danger">${l.closing_up || 0} Úp / ${l.closing_voi || 0} Vòi</td>
-                  <td class="text-right">${l.deposit ? fmt(l.deposit) + 'đ' : '—'}</td>
-                  <td>
-                    <button class="btn btn-secondary btn-sm" onclick="openReturnShellModal(${l.id}, '${esc(l.customer)}', ${l.closing_up}, ${l.closing_voi})">
-                      Thu vỏ
-                    </button>
-                  </td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-window.openReturnShellModal = function(id, customer, curUp, curVoi) {
-  openModal(`
-    <div class="modal-header">
-      <div class="modal-title">Thu hồi vỏ bình — ${esc(customer)}</div>
-      <button class="modal-close" onclick="closeModal()">✕</button>
-    </div>
-    <div class="modal-body">
-      <div style="margin-bottom:14px; font-size:12px; color:#64748b;">
-        Khách hàng hiện đang nợ: <b>${curUp} vỏ Úp</b> và <b>${curVoi} vỏ Vòi</b>.
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Số vỏ Úp thu về</label>
-          <input type="number" id="ret-up-qty" class="form-control" value="${Math.min(1, curUp)}" min="0" max="${curUp}">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Số vỏ Vòi thu về</label>
-          <input type="number" id="ret-voi-qty" class="form-control" value="${Math.min(1, curVoi)}" min="0" max="${curVoi}">
-        </div>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal()">Hủy</button>
-      <button class="btn btn-success" onclick="submitReturnShell(${id})">Xác nhận thu hồi vỏ</button>
-    </div>
-  `);
-};
-
-window.submitReturnShell = async function(id) {
-  const up = Number(document.getElementById('ret-up-qty').value) || 0;
-  const voi = Number(document.getElementById('ret-voi-qty').value) || 0;
-  const res = await api('/api/shells/return', {
-    method: 'POST',
-    body: JSON.stringify({ id, ret_up: up, ret_voi: voi }),
-  });
-  showToast(res.message);
-  closeModal();
-  renderShells(document.getElementById('view-container'));
-};
-
-// 6. Pickings View (Phiếu Kho)
-async function renderPickings(el) {
-  const pickings = await api('/api/pickings');
-  el.innerHTML = `
-    <div class="card-box">
-      <div class="card-box-header">
-        <span class="card-box-title">📋 Danh sách phiếu kho (Nhập / Xuất / Chuyển nội bộ)</span>
-        <span class="badge badge-draft">${pickings.length} phiếu</span>
-      </div>
-      <div class="card-box-body" style="padding:0;">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Mã phiếu</th>
-              <th>Loại phiếu</th>
-              <th>Nguồn ➔ Đích</th>
-              <th>Chứng từ gốc</th>
-              <th>Ngày lên lịch</th>
-              <th>Cước vận chuyển</th>
-              <th>Trạng thái</th>
-              <th>Thao tác</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${pickings.slice(0, 30).map(p => `
-              <tr>
-                <td class="font-bold text-primary">${esc(p.name)}</td>
-                <td><span class="badge ${p.type_code === 'outgoing' ? 'badge-sale' : 'badge-purple'}">${p.type_code === 'outgoing' ? 'Xuất giao' : 'Điều chuyển'}</span></td>
-                <td>${esc(p.src_name)} ➔ ${esc(p.dest_name)}</td>
-                <td>${esc(p.origin || '—')}</td>
-                <td>${esc(p.scheduled_date)}</td>
-                <td>${fmt(p.carrier_fee)} đ</td>
-                <td>${renderBadge(p.state)}</td>
+            ${filteredOrders.map(o => `
+              <tr class="order-row" data-search="${(o.name + ' ' + o.customer_name + ' ' + o.seller).toLowerCase()}" data-channel="${o.channel_code}">
+                <td class="font-bold text-primary">${esc(o.name)}</td>
+                <td style="font-size:12px; color:#64748b;">${esc(o.date)}</td>
+                <td class="font-semibold">${esc(o.customer_name)}</td>
+                <td><span class="badge ${o.channel_code === 'XN' ? 'badge-sale' : 'badge-draft'}">${esc(o.channel_name)}</span></td>
+                <td style="font-size:12px;">${esc(o.seller)}</td>
+                <td class="text-right font-bold">${fmt(o.amount_total)} đ</td>
+                <td class="text-center">${renderBadge(o.state)}</td>
                 <td>
-                  <button class="btn btn-secondary btn-sm" onclick="openPickingDetailModal(${p.id})">Chi tiết</button>
-                  ${p.state !== 'done' ? `<button class="btn btn-success btn-sm" onclick="confirmPicking(${p.id})">✔ Xác nhận</button>` : ''}
+                  ${o.invoice_status === 'invoiced' ? `
+                    <div>
+                      <span class="badge badge-done" style="font-family:monospace;">📄 ${esc(o.invoice_number)}</span>
+                      <div style="font-size:11px; color:#64748b; margin-top:2px;">Ngày: ${esc(o.invoice_date || o.date)}</div>
+                    </div>
+                  ` : `
+                    <div style="display:flex; align-items:center; gap:6px;">
+                      <span class="badge badge-warning">Chờ xuất</span>
+                      <button class="btn btn-primary btn-sm" style="padding:2px 6px; font-size:11px;" 
+                              onclick="window.issueOrderInvoice(${o.id}, '${esc(o.name)}')">Xuất HĐ</button>
+                    </div>
+                  `}
+                </td>
+                <td class="text-center">
+                  <button class="btn btn-secondary btn-sm" onclick="openOrderDetailModal(${o.id})">Chi tiết</button>
                 </td>
               </tr>
             `).join('')}
@@ -2092,353 +1794,21 @@ async function renderPickings(el) {
   `;
 }
 
-window.openPickingDetailModal = async function(id) {
-  const { picking, moves, workers } = await api(`/api/pickings/${id}`);
-  openModal(`
-    <div class="modal-header">
-      <div class="modal-title">Phiếu kho ${esc(picking.name)}</div>
-      <button class="modal-close" onclick="closeModal()">✕</button>
-    </div>
-    <div class="modal-body">
-      <div style="background:#f8fafc; padding:12px; border-radius:8px; font-size:12px; margin-bottom:14px; display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-        <div><b>Nguồn:</b> ${esc(picking.src_name)}</div>
-        <div><b>Đích:</b> ${esc(picking.dest_name)}</div>
-        <div><b>Trạng thái:</b> ${renderBadge(picking.state)}</div>
-        <div><b>Cước phí:</b> ${fmt(picking.carrier_fee)} đ</div>
-      </div>
-
-      <div style="font-weight:700; margin-bottom:8px;">Dòng dịch chuyển mặt hàng (Bút toán kép):</div>
-      <table class="data-table" style="margin-bottom:14px;">
-        <thead>
-          <tr>
-            <th>Mặt hàng</th>
-            <th class="text-right">Số lượng</th>
-            <th class="text-right">Hàng tặng (KM)</th>
-            <th>Trạng thái</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${moves.map(m => `
-            <tr>
-              <td>${esc(m.product_name)}</td>
-              <td class="text-right font-bold">${fmt(m.qty)}</td>
-              <td class="text-right text-success font-bold">${m.promo_qty ? '+' + fmt(m.promo_qty) : '0'}</td>
-              <td>${renderBadge(m.state)}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-
-      <div style="font-weight:700; margin-bottom:8px;">Nhân viên giao hàng nhận thù lao (5.000đ/bình):</div>
-      ${workers.length ? `
-        <div style="font-size:12px; color:#1e293b;">
-          ${workers.map(w => `• <b>${esc(w.employee)}</b> được chia: <span class="text-success font-bold">${fmt(w.fee_share)} đ</span>`).join('<br>')}
-        </div>
-      ` : '<div style="font-size:12px; color:#64748b;">Chưa phân công người đi giao.</div>'}
-    </div>
-    <div class="modal-footer">
-      ${picking.state !== 'done' ? `
-        <button class="btn btn-success" onclick="confirmPicking(${picking.id})">✔ Xác nhận xuất kho ngay</button>
-      ` : ''}
-      <button class="btn btn-secondary" onclick="closeModal()">Đóng</button>
-    </div>
-  `);
+window.filterOrderInvoice = function(status) {
+  state.orderInvoiceFilter = status;
+  renderOrders(document.getElementById('view-container'));
 };
 
-window.confirmPicking = async function(id) {
-  await api(`/api/pickings/${id}/confirm`, { method: 'POST' });
-  showToast('Phiếu kho đã được xác nhận! Tồn kho và sổ vỏ đã được cập nhật.');
-  closeModal();
-  renderView();
+window.issueOrderInvoice = async function(id, name) {
+  if (!confirm('Bạn có chắc chắn muốn xuất Hóa đơn điện tử cho đơn hàng ' + name + '?')) return;
+  try {
+    const res = await api('/api/orders/' + id + '/invoice', { method: 'POST' });
+    showToast(res.message);
+    renderOrders(document.getElementById('view-container'));
+  } catch (err) {
+    alert('Lỗi xuất hóa đơn: ' + err.message);
+  }
 };
-
-// 7. Stock Quants View
-async function renderQuants(el) {
-  const quants = await api('/api/quants');
-  el.innerHTML = `
-    <div class="card-box">
-      <div class="card-box-header">
-        <span class="card-box-title">🏬 Tồn kho thời gian thực theo từng vị trí</span>
-        <span class="badge badge-sale">Trực tiếp thời gian thực</span>
-      </div>
-      <div class="card-box-body" style="padding:0;">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Địa điểm kho</th>
-              <th>Mã vị trí</th>
-              <th>Sản phẩm</th>
-              <th>ĐVT</th>
-              <th class="text-right">Số lượng tồn</th>
-              <th>Đánh giá an toàn</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${quants.map(q => `
-              <tr>
-                <td class="font-bold">${esc(q.location_name)}</td>
-                <td><code>${esc(q.location_code)}</code></td>
-                <td>${esc(q.product_name)}</td>
-                <td><span class="badge badge-draft">${esc(q.uom_name)}</span></td>
-                <td class="text-right font-bold ${q.quantity < 20 ? 'text-danger' : 'text-success'}" style="font-size:14px;">${fmt(q.quantity)}</td>
-                <td>${q.quantity < 20 ? '<span class="badge badge-danger">Thiếu hàng</span>' : '<span class="badge badge-done">An toàn</span>'}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  `;
-}
-
-// 8. Moves View
-async function renderMoves(el) {
-  const moves = await api('/api/moves');
-  el.innerHTML = `
-    <div class="pattern-callout">
-      <span class="badge-pattern">Double-Entry Stock</span>
-      <div>
-        <b>Nguyên lý Bút toán kép:</b> Không có hàng hóa nào tự nhiên sinh ra hay mất đi. Mọi dịch chuyển đều ghi rõ <code>Vị trí Nguồn ➔ Vị trí Đích</code>, đảm bảo tính toàn vẹn và kiểm toán 100%.
-      </div>
-    </div>
-    <div class="card-box">
-      <div class="card-box-header"><span class="card-box-title">🔄 Lịch sử các dòng dịch chuyển kho</span></div>
-      <div class="card-box-body" style="padding:0;">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Phiếu kho</th>
-              <th>Mặt hàng</th>
-              <th>Vị trí Nguồn</th>
-              <th>Vị trí Đích</th>
-              <th class="text-right">Số lượng</th>
-              <th>Loại dịch chuyển</th>
-              <th>Trạng thái</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${moves.slice(0, 50).map(m => `
-              <tr>
-                <td class="font-bold text-primary">${esc(m.picking_name || 'Stock Move')}</td>
-                <td>${esc(m.product_name)}</td>
-                <td>${esc(m.src_name)}</td>
-                <td>${esc(m.dest_name)}</td>
-                <td class="text-right font-bold">${fmt(m.qty)}</td>
-                <td>${m.is_promo ? '<span class="badge badge-warning">Khuyến mãi</span>' : '<span class="badge badge-draft">Thương mại</span>'}</td>
-                <td>${renderBadge(m.state)}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  `;
-}
-
-// 9. Delivery View
-async function renderDelivery(el) {
-  const data = await api('/api/delivery');
-  el.innerHTML = `
-    <div class="pattern-callout">
-      <span class="badge-pattern">Thù lao bốc xếp 5.000đ/bình</span>
-      <div>
-        <b>Giải quyết Sheet Vận chuyển của Excel:</b> Mỗi đơn hàng được tự động tính cước 5.000đ/bình. Khi có nhiều người cùng đi giao (Phương, Huế, Hưng, Khoa...), hệ thống tự chia đều thù lao cho từng cá nhân và tổng hợp chuyển sang bảng lương.
-      </div>
-    </div>
-
-    <div style="display:grid; grid-template-columns: 1fr 2fr; gap:20px;">
-      <div class="card-box">
-        <div class="card-box-header"><span class="card-box-title">🚚 Tổng thù lao theo nhân viên</span></div>
-        <div class="card-box-body" style="padding:0;">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Nhân viên giao nhận</th>
-                <th class="text-center">Số chuyến</th>
-                <th class="text-right">Tiền thù lao</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${data.workers.map(w => `
-                <tr>
-                  <td class="font-semibold">${esc(w.employee)}</td>
-                  <td class="text-center">${w.total_trips}</td>
-                  <td class="text-right font-bold text-success">${fmt(w.total_fee)} đ</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="card-box">
-        <div class="card-box-header"><span class="card-box-title">📋 Lịch sử chuyến giao & Phân chia cước</span></div>
-        <div class="card-box-body" style="padding:0;">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Phiếu giao</th>
-                <th>Ngày</th>
-                <th class="text-right">Tổng cước</th>
-                <th>Nhân sự chia tiền cước</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${data.trips.map(t => `
-                <tr>
-                  <td class="font-bold text-primary">${esc(t.picking_name)}</td>
-                  <td>${esc(t.scheduled_date)}</td>
-                  <td class="text-right font-bold">${fmt(t.carrier_fee)} đ</td>
-                  <td style="font-size:12px;">${esc(t.shared_workers || '—')}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-// 10. Cash & Customer Debt View
-async function renderCash(el) {
-  const data = await api('/api/cash');
-  el.innerHTML = `
-    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
-      <div class="card-box">
-        <div class="card-box-header"><span class="card-box-title">💵 Tiền theo nhân viên bán hàng</span></div>
-        <div class="card-box-body" style="padding:0;">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Người bán</th>
-                <th class="text-right">Doanh số</th>
-                <th class="text-right">Đã nộp quỹ</th>
-                <th class="text-right">Còn nợ đọng</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${data.bySeller.map(s => `
-                <tr>
-                  <td class="font-semibold">${esc(s.seller)}</td>
-                  <td class="text-right font-bold">${fmt(s.total_sales)} đ</td>
-                  <td class="text-right text-success">${fmt(s.total_collected)} đ</td>
-                  <td class="text-right font-bold ${s.remaining_debt > 0 ? 'text-danger' : 'text-muted'}">${fmt(s.remaining_debt)} đ</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="card-box">
-        <div class="card-box-header"><span class="card-box-title">📄 Công nợ tiền khách hàng</span></div>
-        <div class="card-box-body" style="padding:0;">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Khách hàng</th>
-                <th class="text-right">Tổng mua</th>
-                <th class="text-right">Đã trả</th>
-                <th class="text-right">Còn nợ</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${data.byCustomer.map(c => `
-                <tr>
-                  <td class="font-semibold">${esc(c.customer_name)}</td>
-                  <td class="text-right">${fmt(c.total_bought)} đ</td>
-                  <td class="text-right text-success">${fmt(c.total_paid)} đ</td>
-                  <td class="text-right font-bold text-danger">${fmt(c.debt_balance)} đ</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-// 11. DVGT View
-async function renderDvgt(el) {
-  const data = await api('/api/dvgt');
-  el.innerHTML = `
-    <div class="pattern-callout">
-      <span class="badge-pattern">Field Service & Technical Water Service</span>
-      <div>
-        <b>Chuẩn hóa Dịch vụ gia tăng (DVGT) & Kỹ thuật mạng nước QUAWACO:</b>
-        Tích hợp <b>Mã danh bạ đồng hồ nước (HG095791...)</b> · <b>Khung giờ hẹn khách (Time-slots)</b> · <b>Vật tư phụ tùng thay thế (Thanh Magie, phao, zoăng, hộp đồng hồ)</b>.
-      </div>
-    </div>
-
-    <!-- Summary metrics -->
-    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px; margin-bottom:20px;">
-      ${data.summary.slice(0, 4).map(s => `
-        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:14px;">
-          <div style="font-size:11.5px; color:#64748b; font-weight:600;">${esc(s.service)}</div>
-          <div style="font-size:18px; font-weight:700; color:#1e293b; margin:4px 0;">${fmt(s.total_revenue)} đ</div>
-          <div style="font-size:11px; color:#7c3aed;">${s.count} ca thực hiện (Vật tư: ${fmt(s.total_parts)}đ)</div>
-        </div>
-      `).join('')}
-    </div>
-
-    <div class="card-box">
-      <div class="card-box-header">
-        <div style="display:flex; align-items:center; gap:12px;">
-          <span class="card-box-title">🔧 Sổ Quản Lý DVGT & Kỹ Thuật Hiện Trường</span>
-          <span class="badge badge-draft">${data.list.length} yêu cầu</span>
-        </div>
-        <button class="btn btn-primary btn-sm" onclick="openCreateDvgtModal()">＋ Đăng ký ca dịch vụ & vật tư</button>
-      </div>
-      <div class="card-box-body" style="padding:0;">
-        <div class="table-responsive">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Ngày</th>
-                <th>Mã ĐH QUAWACO</th>
-                <th>Khách hàng & SĐT</th>
-                <th>Dịch vụ yêu cầu</th>
-                <th>Vật tư thay thế</th>
-                <th>Khung giờ hẹn</th>
-                <th>Người vận động</th>
-                <th class="text-right">Tiền vật tư</th>
-                <th class="text-right">Tổng thu</th>
-                <th>Trạng thái</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${data.list.slice(0, 50).map(d => `
-                <tr>
-                  <td>${esc(d.date)}</td>
-                  <td>
-                    ${d.water_meter_code ? `<span class="meter-pill">QUAWACO ${esc(d.water_meter_code)}</span>` : '<span style="color:#94a3b8; font-size:11px;">—</span>'}
-                  </td>
-                  <td>
-                    <div class="font-semibold">${esc(d.customer)}</div>
-                    <div style="font-size:11px; color:#64748b;">${esc(d.phone || 'Chưa có SĐT')}</div>
-                  </td>
-                  <td><span class="badge badge-purple">${esc(d.service || 'DV Kỹ thuật')}</span></td>
-                  <td>
-                    ${d.parts_used ? `<span class="parts-pill">🔩 ${esc(d.parts_used)}</span>` : '<span style="color:#94a3b8; font-size:11px;">Không có</span>'}
-                  </td>
-                  <td>
-                    <span class="timeslot-pill">⏰ ${esc(d.time_slot || 'Giờ hành chính')}</span>
-                  </td>
-                  <td>${esc(d.referrer || 'Xí nghiệp')}</td>
-                  <td class="text-right font-semibold ${d.parts_fee > 0 ? 'text-warning' : 'text-muted'}">${fmt(d.parts_fee)} đ</td>
-                  <td class="text-right font-bold text-primary">${fmt(d.revenue)} đ</td>
-                  <td>${d.doc_status && d.doc_status.includes('đã') ? '<span class="badge badge-done">Đã có phiếu</span>' : (d.doc_status && d.doc_status.includes('Hủy') ? '<span class="badge badge-danger">Đã hủy</span>' : '<span class="badge badge-warning">Đang xử lý</span>')}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  `;
-}
 
 window.openCreateDvgtModal = function() {
   openModal(`

@@ -563,8 +563,29 @@ function initDb(seed) {
       amount_total REAL DEFAULT 0,
       paid_amount REAL DEFAULT 0,
       collection_note TEXT,
+      invoice_status TEXT DEFAULT 'to_invoice',
+      invoice_number TEXT,
+      invoice_date TEXT,
       note TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE shell_loan_transaction(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT UNIQUE,
+      partner_id INT,
+      customer_name TEXT,
+      borrow_date TEXT,
+      borrow_up INT DEFAULT 0,
+      borrow_voi INT DEFAULT 0,
+      return_date TEXT,
+      return_up INT DEFAULT 0,
+      return_voi INT DEFAULT 0,
+      remaining_up INT DEFAULT 0,
+      remaining_voi INT DEFAULT 0,
+      deposit REAL DEFAULT 0,
+      status TEXT DEFAULT 'borrowed',
+      note TEXT
     );
 
     CREATE TABLE sale_order_line(
@@ -804,7 +825,7 @@ function initDb(seed) {
 
   // Populate Orders & Movements
   let orderIdx = 1;
-  const insertOrder = I('sale_order', 'name,partner_id,channel_code,warehouse_code,state,date,seller,carrier_id,work_type,amount_untaxed,amount_total,paid_amount,collection_note,note');
+  const insertOrder = I('sale_order', 'name,partner_id,channel_code,warehouse_code,state,date,seller,carrier_id,work_type,amount_untaxed,amount_total,paid_amount,collection_note,invoice_status,invoice_number,invoice_date,note');
   const insertLine = I('sale_order_line', 'order_id,product_code,uom_id,qty,promo_qty,price_unit,amount_total,shell_type');
   const insertPicking = I('stock_picking', 'name,type_code,src_location_id,dest_location_id,partner_id,origin,state,scheduled_date,date_done,sale_id,carrier_fee,note');
   const insertMove = I('stock_move', 'picking_id,product_code,qty,promo_qty,src_location_id,dest_location_id,state,is_promo');
@@ -818,8 +839,14 @@ function initDb(seed) {
     const isDone = o.result.includes('hoàn thành');
     const state = isDone ? 'done' : 'sale';
 
+    // Invoicing logic: Completed orders or specific channels get invoiced with realistic invoice number
+    const isInvoiced = (isDone || paid > 0) && (orderIdx % 3 !== 0);
+    const invStatus = isInvoiced ? 'invoiced' : 'to_invoice';
+    const invNum = isInvoiced ? ('HD/2026/09/' + String(orderIdx).padStart(4, '0')) : null;
+    const invDate = isInvoiced ? o.date : null;
+
     const ordRes = insertOrder.run(
-      orderName, pId, o.channel, o.warehouse, state, o.date, o.seller, 1, o.work_type, total, total, paid, o.collection_note, o.note
+      orderName, pId, o.channel, o.warehouse, state, o.date, o.seller, 1, o.work_type, Math.round(total / 1.08), total, paid, o.collection_note, invStatus, invNum, invDate, o.note
     );
     const orderId = ordRes.lastInsertRowid;
 
@@ -839,12 +866,16 @@ function initDb(seed) {
       insertMove.run(pickId, prod.code, o.promo_qty, 0, whLoc.id, 200, isDone ? 'done' : 'confirmed', 1);
     }
 
-    if (o.carriers && o.carriers.length > 0) {
-      const share = Math.round((o.fee || (o.qty * 5000)) / o.carriers.length);
-      for (const worker of o.carriers) insertWorker.run(pickId, worker, share);
-    } else if (o.performers && o.performers.length > 0) {
-      const share = Math.round((o.fee || (o.qty * 5000)) / o.performers.length);
-      for (const worker of o.performers) insertWorker.run(pickId, worker, share);
+    // Explicit equal division of delivery fees (e.g. 50.000 đ with 2 workers -> 25.000 đ each)
+    let carriers = o.carriers && o.carriers.length > 0 ? o.carriers : (o.performers && o.performers.length > 0 ? o.performers : []);
+    if (!carriers || carriers.length === 0) {
+      // Allocate 2 workers or 1 worker realistically
+      carriers = (orderIdx % 2 === 0) ? ['Nguyễn Văn Tuấn', 'Trần Văn Hưng'] : ['Nguyễn Văn Tuấn'];
+    }
+    const totalFee = o.fee && o.fee > 0 ? o.fee : (carriers.length === 2 ? 50000 : 25000);
+    const feeShare = Math.round(totalFee / carriers.length);
+    for (const worker of carriers) {
+      insertWorker.run(pickId, worker, feeShare);
     }
 
     orderIdx++;
@@ -886,6 +917,32 @@ function initDb(seed) {
   ];
   for (const c of COMMERCIAL_CLIENTS) {
     getOrCreatePartner(c.name, '', c.address, c.type);
+  }
+
+  // Populate Detailed Shell Loan & Return Transactions (Quản lý vật tư vỏ bình chi tiết)
+  const insertShellTx = I('shell_loan_transaction', 'code,partner_id,customer_name,borrow_date,borrow_up,borrow_voi,return_date,return_up,return_voi,remaining_up,remaining_voi,deposit,status,note');
+  
+  const SHELL_TRANSACTIONS = [
+    { code: 'MB/2026/09/001', cust: 'Công ty Công nghiệp Hóa chất mỏ Quảng Ninh', b_date: '2026-09-01', b_up: 20, b_voi: 10, r_date: '2026-09-08', r_up: 15, r_voi: 8, rem_up: 5, rem_voi: 2, dep: 0, st: 'partially_returned', note: 'Hợp đồng cơ quan mỏ, nợ theo quý' },
+    { code: 'MB/2026/09/002', cust: 'Công ty Hanet', b_date: '2026-09-02', b_up: 10, b_voi: 5, r_date: '2026-09-07', r_up: 4, r_voi: 2, rem_up: 6, rem_voi: 3, dep: 0, st: 'partially_returned', note: 'Đổi vỏ bình tuần 1' },
+    { code: 'MB/2026/09/003', cust: 'Văn Phòng Ủy ban nhân dân tỉnh Quảng Ninh', b_date: '2026-09-01', b_up: 15, b_voi: 0, r_date: '2026-09-10', r_up: 15, r_voi: 0, rem_up: 0, rem_voi: 0, dep: 0, st: 'returned', note: 'Đã hoàn trả đủ 100% vỏ kỳ 1' },
+    { code: 'MB/2026/09/004', cust: 'Nhà hàng Minh Tuấn 3', b_date: '2026-09-04', b_up: 12, b_voi: 6, r_date: null, r_up: 0, r_voi: 0, rem_up: 12, rem_voi: 6, dep: 900000, st: 'borrowed', note: 'Khách hàng mới cọc 50k/vỏ' },
+    { code: 'MB/2026/09/005', cust: 'Quán Bò Sính Cao Thắng', b_date: '2026-09-03', b_up: 10, b_voi: 0, r_date: '2026-09-09', r_up: 5, r_voi: 0, rem_up: 5, rem_voi: 0, dep: 250000, st: 'partially_returned', note: 'Đã trả 5 bình úp' },
+    { code: 'MB/2026/09/006', cust: 'Chung cư RuBy Tower', b_date: '2026-09-04', b_up: 11, b_voi: 4, r_date: null, r_up: 0, r_voi: 0, rem_up: 11, rem_voi: 4, dep: 750000, st: 'borrowed', note: 'Đại lý giao sảnh A tầng 1' },
+    { code: 'MB/2026/09/007', cust: 'Sở Dân tộc và Tôn giáo', b_date: '2026-09-02', b_up: 10, b_voi: 5, r_date: '2026-09-09', r_up: 10, r_voi: 5, rem_up: 0, rem_voi: 0, dep: 0, st: 'returned', note: 'Đã hoàn trả đủ' },
+    { code: 'MB/2026/09/008', cust: 'Trạm y tế phường Cao Xanh', b_date: '2026-09-05', b_up: 8, b_voi: 4, r_date: null, r_up: 0, r_voi: 0, rem_up: 8, rem_voi: 4, dep: 0, st: 'borrowed', note: 'Hẹn thu vỏ ngày 15/9' },
+    { code: 'MB/2026/09/009', cust: 'Ngân hàng SHB - cột 8', b_date: '2026-09-03', b_up: 12, b_voi: 0, r_date: '2026-09-10', r_up: 6, r_voi: 0, rem_up: 6, rem_voi: 0, dep: 0, st: 'partially_returned', note: 'Đã trả 6 vỏ' },
+    { code: 'MB/2026/09/010', cust: 'Ban Quản Lý Vịnh Hạ Long', b_date: '2026-09-02', b_up: 18, b_voi: 8, r_date: '2026-09-11', r_up: 14, r_voi: 6, rem_up: 4, rem_voi: 2, dep: 0, st: 'partially_returned', note: 'Cơ quan hành chính' },
+    { code: 'MB/2026/09/011', cust: 'Đỗ Đức Việt', b_date: '2026-09-06', b_up: 2, b_voi: 1, r_date: null, r_up: 0, r_voi: 0, rem_up: 2, rem_voi: 1, dep: 150000, st: 'borrowed', note: 'Khách lẻ sinh hoạt gia đình' },
+    { code: 'MB/2026/09/012', cust: 'Karaoke Diamond Luxury', b_date: '2026-09-04', b_up: 15, b_voi: 5, r_date: '2026-09-10', r_up: 10, r_voi: 5, rem_up: 5, rem_voi: 0, dep: 250000, st: 'partially_returned', note: 'Còn nợ 5 vỏ úp' },
+    { code: 'MB/2026/09/013', cust: 'Trường Chính Trị Nguyễn Văn Cừ', b_date: '2026-09-01', b_up: 25, b_voi: 10, r_date: '2026-09-08', r_up: 20, r_voi: 10, rem_up: 5, rem_voi: 0, dep: 0, st: 'partially_returned', note: 'Nước phục vụ năm học mới' },
+    { code: 'MB/2026/09/014', cust: 'Viện Kiểm Sát Nhân Dân Tỉnh Quảng Ninh', b_date: '2026-09-03', b_up: 10, b_voi: 4, r_date: '2026-09-11', r_up: 10, r_voi: 4, rem_up: 0, rem_voi: 0, dep: 0, st: 'returned', note: 'Đã trả đủ 100%' },
+    { code: 'MB/2026/09/015', cust: 'Kho Bạc Nhà Nước Tỉnh Quảng Ninh', b_date: '2026-09-02', b_up: 14, b_voi: 6, r_date: '2026-09-09', r_up: 10, r_voi: 4, rem_up: 4, rem_voi: 2, dep: 0, st: 'partially_returned', note: 'Nợ gối kỳ 2' }
+  ];
+
+  for (const t of SHELL_TRANSACTIONS) {
+    const p = db.prepare('SELECT id FROM partner WHERE lower(name) = lower(?)').get(t.cust);
+    insertShellTx.run(t.code, p ? p.id : null, t.cust, t.b_date, t.b_up, t.b_voi, t.r_date, t.r_up, t.r_voi, t.rem_up, t.rem_voi, t.dep, t.st, t.note);
   }
 
   // Populate Shell Ledgers
@@ -1402,26 +1459,42 @@ async function startServer() {
     res.json({ ok: true, message: `Đã thu hồi ${u} vỏ úp và ${v} vỏ vòi.` });
   });
 
-  // 9. Delivery Worker Fee Share
+  // 9. Delivery & Carriers (Chi phí vận chuyển chia đều)
   app.get('/api/delivery', (req, res) => {
     const workers = db.prepare(`
-      SELECT dw.employee, COUNT(DISTINCT dw.picking_id) as total_trips,
-             SUM(dw.fee_share) as total_fee
+      SELECT dw.employee, COUNT(*) as trip_count, SUM(dw.fee_share) as total_fee
       FROM delivery_worker dw
       GROUP BY dw.employee
       ORDER BY total_fee DESC
     `).all();
 
     const trips = db.prepare(`
-      SELECT sp.name as picking_name, sp.scheduled_date, sp.carrier_fee,
-             GROUP_CONCAT(dw.employee || ' (' || dw.fee_share || 'đ)', ', ') as shared_workers
+      SELECT 
+        sp.id, sp.name as picking_name, sp.origin as order_name, sp.scheduled_date, 
+        sp.carrier_fee, sp.note as delivery_note,
+        p.name as customer_name,
+        COUNT(dw.id) as worker_count,
+        MIN(dw.fee_share) as fee_per_worker,
+        GROUP_CONCAT(dw.employee, ', ') as worker_names,
+        GROUP_CONCAT(dw.employee || ': ' || dw.fee_share || 'đ', ' | ') as worker_details
       FROM stock_picking sp
+      LEFT JOIN partner p ON sp.partner_id = p.id
       JOIN delivery_worker dw ON sp.id = dw.picking_id
       GROUP BY sp.id
-      ORDER BY sp.id DESC LIMIT 30
-    `).all();
+      ORDER BY sp.id DESC LIMIT 40
+    `).all().map(t => ({
+      ...t,
+      // Formula string showcasing equal division
+      formula_text: t.carrier_fee + ' đ ÷ ' + t.worker_count + ' người = ' + t.fee_per_worker + ' đ / người'
+    }));
 
-    res.json({ workers, trips });
+    const summary = {
+      total_trips: trips.length,
+      total_carrier_fee: trips.reduce((sum, t) => sum + (t.carrier_fee || 0), 0),
+      total_active_workers: workers.length
+    };
+
+    res.json({ summary, workers, trips });
   });
 
   // 10. Cash & Debt
@@ -2057,6 +2130,139 @@ async function startServer() {
 
     const newCust = db.prepare('SELECT * FROM partner WHERE id = ?').get(ins.lastInsertRowid);
     res.json({ ok: true, customer: newCust });
+  });
+
+
+  // ══════════════════════════ 23. REVENUE BY PRODUCT & REVENUE ANALYSIS ══════════════════════════ //
+  app.get('/api/revenue/by-product', (req, res) => {
+    const productStats = db.prepare(`
+      SELECT 
+        p.code, p.name, u.name as uom_name, p.price as price_vat,
+        ROUND(p.price / 1.08, 0) as price_untaxed,
+        COALESCE(SUM(l.qty), 0) as total_qty,
+        COALESCE(SUM(l.promo_qty), 0) as total_promo,
+        COALESCE(SUM(l.amount_total), 0) as revenue_vat,
+        COALESCE(SUM(ROUND(l.amount_total / 1.08, 0)), 0) as revenue_untaxed,
+        COALESCE(SUM(l.amount_total - ROUND(l.amount_total / 1.08, 0)), 0) as vat_8_amount,
+        COUNT(DISTINCT o.id) as order_count,
+        COALESCE(SUM(CASE WHEN o.invoice_status = 'invoiced' THEN l.amount_total ELSE 0 END), 0) as invoiced_revenue,
+        COALESCE(SUM(CASE WHEN o.invoice_status != 'invoiced' THEN l.amount_total ELSE 0 END), 0) as to_invoice_revenue
+      FROM product p
+      LEFT JOIN uom u ON p.uom_id = u.id
+      LEFT JOIN sale_order_line l ON l.product_code = p.code
+      LEFT JOIN sale_order o ON l.order_id = o.id
+      GROUP BY p.code
+      ORDER BY revenue_vat DESC
+    `).all();
+
+    const totalCompanyRevenue = productStats.reduce((sum, p) => sum + p.revenue_vat, 0);
+    const totalUntaxedRevenue = productStats.reduce((sum, p) => sum + p.revenue_untaxed, 0);
+    const totalVat = productStats.reduce((sum, p) => sum + p.vat_8_amount, 0);
+    const totalInvoiced = productStats.reduce((sum, p) => sum + p.invoiced_revenue, 0);
+    const totalToInvoice = productStats.reduce((sum, p) => sum + p.to_invoice_revenue, 0);
+
+    const products = productStats.map(p => ({
+      ...p,
+      share_percent: totalCompanyRevenue > 0 ? Number(((p.revenue_vat / totalCompanyRevenue) * 100).toFixed(1)) : 0
+    }));
+
+    res.json({
+      summary: {
+        total_revenue_vat: totalCompanyRevenue,
+        total_revenue_untaxed: totalUntaxedRevenue,
+        total_vat_8: totalVat,
+        total_invoiced: totalInvoiced,
+        total_to_invoice: totalToInvoice,
+        invoiced_rate: totalCompanyRevenue > 0 ? Number(((totalInvoiced / totalCompanyRevenue) * 100).toFixed(1)) : 0
+      },
+      products
+    });
+  });
+
+  // ══════════════════════════ 24. INVOICE ISSUANCE API ══════════════════════════ //
+  app.post('/api/orders/:id/invoice', (req, res) => {
+    const id = Number(req.params.id);
+    const order = db.prepare('SELECT * FROM sale_order WHERE id = ?').get(id);
+    if (!order) return res.status(404).json({ error: 'Không tìm thấy đơn hàng' });
+
+    if (order.invoice_status === 'invoiced') {
+      return res.status(400).json({ error: 'Đơn hàng này đã được xuất hóa đơn điện tử: ' + order.invoice_number });
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const invNumber = 'HD/2026/09/' + String(id).padStart(4, '0');
+
+    db.prepare(`
+      UPDATE sale_order 
+      SET invoice_status = 'invoiced', invoice_number = ?, invoice_date = ?
+      WHERE id = ?
+    `).run(invNumber, today, id);
+
+    const updated = db.prepare('SELECT * FROM sale_order WHERE id = ?').get(id);
+    res.json({ ok: true, message: 'Đã xuất hóa đơn điện tử thành công: ' + invNumber, order: updated });
+  });
+
+  // ══════════════════════════ 25. SHELL LOAN & RETURN TRANSACTIONS API ══════════════════════════ //
+  app.get('/api/shells/transactions', (req, res) => {
+    const { status, q } = req.query;
+    let sql = 'SELECT * FROM shell_loan_transaction WHERE 1=1';
+    const params = [];
+
+    if (status && status !== 'all') {
+      sql += ' AND status = ?';
+      params.push(status);
+    }
+    if (q) {
+      sql += ' AND (code LIKE ? OR customer_name LIKE ? OR note LIKE ?)';
+      const s = `%${q}%`;
+      params.push(s, s, s);
+    }
+    sql += ' ORDER BY id DESC';
+
+    const transactions = db.prepare(sql).all(...params);
+
+    const summary = db.prepare(`
+      SELECT 
+        COUNT(*) as total_trans,
+        SUM(borrow_up) as total_borrowed_up,
+        SUM(borrow_voi) as total_borrowed_voi,
+        SUM(return_up) as total_returned_up,
+        SUM(return_voi) as total_returned_voi,
+        SUM(remaining_up) as total_remaining_up,
+        SUM(remaining_voi) as total_remaining_voi,
+        SUM(deposit) as total_deposit,
+        SUM(CASE WHEN status = 'borrowed' THEN 1 ELSE 0 END) as active_loans_count,
+        SUM(CASE WHEN status = 'returned' THEN 1 ELSE 0 END) as fully_returned_count
+      FROM shell_loan_transaction
+    `).get();
+
+    res.json({ summary, transactions });
+  });
+
+  app.post('/api/shells/transactions/return', (req, res) => {
+    const { id, return_date, return_up, return_voi, refund_deposit } = req.body;
+    const tx = db.prepare('SELECT * FROM shell_loan_transaction WHERE id = ?').get(id);
+    if (!tx) return res.status(404).json({ error: 'Không tìm thấy phiếu mượn vỏ' });
+
+    const retUp = Math.min(tx.remaining_up, Number(return_up) || 0);
+    const retVoi = Math.min(tx.remaining_voi, Number(return_voi) || 0);
+    const newTotalRetUp = tx.return_up + retUp;
+    const newTotalRetVoi = tx.return_voi + retVoi;
+    const newRemUp = Math.max(0, tx.borrow_up - newTotalRetUp);
+    const newRemVoi = Math.max(0, tx.borrow_voi - newTotalRetVoi);
+    const newDeposit = Math.max(0, tx.deposit - (Number(refund_deposit) || 0));
+    const newStatus = (newRemUp === 0 && newRemVoi === 0) ? 'returned' : 'partially_returned';
+    const dateOfReturn = return_date || new Date().toISOString().slice(0, 10);
+
+    db.prepare(`
+      UPDATE shell_loan_transaction
+      SET return_date = ?, return_up = ?, return_voi = ?,
+          remaining_up = ?, remaining_voi = ?, deposit = ?, status = ?
+      WHERE id = ?
+    `).run(dateOfReturn, newTotalRetUp, newTotalRetVoi, newRemUp, newRemVoi, newDeposit, newStatus, id);
+
+    const updated = db.prepare('SELECT * FROM shell_loan_transaction WHERE id = ?').get(id);
+    res.json({ ok: true, message: 'Đã ghi nhận trả vỏ bình thành công', transaction: updated });
   });
 
   // ══════════════════════════ 16. SIMULATION APIS ══════════════════════════ //
