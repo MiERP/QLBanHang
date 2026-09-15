@@ -1185,7 +1185,14 @@ async function startServer() {
       ORDER BY q.quantity ASC LIMIT 10
     `).all();
 
-    res.json({ pendingOrders, pendingDeliveries, uncollectedCash, lowStocks });
+    res.json({
+      pendingOrders,
+      unpaidOrders: uncollectedCash,
+      confirmedPickings: pendingDeliveries,
+      pendingDeliveries,
+      uncollectedCash,
+      lowStocks
+    });
   });
 
   // 3. Products

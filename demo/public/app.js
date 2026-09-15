@@ -417,30 +417,35 @@ async function renderOverview(el) {
 
 // ══════════════════════════ 2. VIỆC CẦN XỬ LÝ ══════════════════════════ //
 async function renderWorklist(el) {
-  const data = await api('/api/worklist');
+  const data = (await api('/api/worklist')) || {};
+  const pendingOrders = data.pendingOrders || [];
+  const unpaidOrders = data.unpaidOrders || data.uncollectedCash || [];
+  const confirmedPickings = data.confirmedPickings || data.pendingDeliveries || [];
+  const lowStocks = data.lowStocks || [];
 
   el.innerHTML = `
     <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:16px; margin-bottom:20px;">
       <div class="metric-card">
-        <div class="metric-label">Đơn hàng chờ giao</div>
-        <div class="metric-value text-primary">${data.pendingOrders.length}</div>
+        <div class="metric-label">Đơn hàng chờ xử lý / Giao</div>
+        <div class="metric-value text-primary">${pendingOrders.length}</div>
         <div class="metric-trend">Cần điều xe tải điện nạp kho</div>
       </div>
       <div class="metric-card">
-        <div class="metric-label">Đơn hàng chưa thu tiền</div>
-        <div class="metric-value text-danger">${data.unpaidOrders.length}</div>
-        <div class="metric-trend text-danger">Theo dõi lái xe nộp COD</div>
+        <div class="metric-label">Đơn hàng chưa thu tiền (COD)</div>
+        <div class="metric-value text-danger">${unpaidOrders.length}</div>
+        <div class="metric-trend text-danger">Theo dõi lái xe nộp tiền quỹ</div>
       </div>
       <div class="metric-card">
-        <div class="metric-label">Phiếu kho chờ xuất</div>
-        <div class="metric-value text-warning">${data.confirmedPickings.length}</div>
-        <div class="metric-trend">Thủ kho xác nhận xuất hàng</div>
+        <div class="metric-label">Cảnh báo tồn kho / Tiếp ứng</div>
+        <div class="metric-value text-warning">${lowStocks.length}</div>
+        <div class="metric-trend">Trạm cần bổ sung sản phẩm</div>
       </div>
     </div>
 
+    <!-- Danh sách đơn hàng chưa thu tiền -->
     <div class="card-box" style="margin-bottom:20px;">
       <div class="card-box-header">
-        <span class="card-box-title">🧾 Đơn Bán Chờ Giao Hàng (${data.pendingOrders.length})</span>
+        <span class="card-box-title">💰 Danh Sách Đơn Hàng Chưa Nộp Tiền Quỹ (${unpaidOrders.length})</span>
       </div>
       <div class="card-box-body">
         <div class="table-responsive">
@@ -450,21 +455,60 @@ async function renderWorklist(el) {
                 <th>Mã đơn</th>
                 <th>Ngày</th>
                 <th>Khách hàng</th>
-                <th>Người bán</th>
-                <th class="text-right">Tổng tiền</th>
+                <th>Người bán / Phụ trách</th>
+                <th class="text-right">Số tiền nợ</th>
+                <th>Ghi chú thu tiền</th>
                 <th>Thao tác</th>
               </tr>
             </thead>
             <tbody>
-              ${data.pendingOrders.map(o => `
+              ${unpaidOrders.length === 0 ? `<tr><td colspan="7" class="text-center" style="padding:20px; color:#64748b;">Không có đơn hàng tồn đọng nợ</td></tr>` : 
+                unpaidOrders.map(o => `
                 <tr>
-                  <td class="font-bold text-primary">${esc(o.name)}</td>
-                  <td>${esc(o.date)}</td>
-                  <td class="font-bold">${esc(o.partner_name)}</td>
-                  <td>${esc(o.seller)}</td>
-                  <td class="text-right font-bold">${fmt(o.amount_total)} đ</td>
+                  <td class="font-bold text-primary">${esc(o.name || '')}</td>
+                  <td>${esc(o.date || '')}</td>
+                  <td class="font-bold">${esc(o.customer_name || o.partner_name || 'Khách hàng')}</td>
+                  <td>${esc(o.seller || '')}</td>
+                  <td class="text-right font-bold text-danger">${fmt(o.debt_amount || o.amount_total || 0)} đ</td>
+                  <td><span class="badge badge-amber">${esc(o.collection_note || 'Chưa thu tiền')}</span></td>
                   <td>
-                    <button class="btn btn-primary btn-sm" onclick="confirmOrder(${o.id})">Xác nhận & Điều xe</button>
+                    <button class="btn btn-secondary btn-sm" onclick="showToast('Đã ghi nhận đôn đốc nộp tiền: ' + '${esc(o.name || '')}', 'info')">Đôn đốc</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cảnh báo tồn kho thấp -->
+    <div class="card-box" style="margin-bottom:20px;">
+      <div class="card-box-header">
+        <span class="card-box-title">⚠️ Cảnh Báo Tồn Kho Cần Tiếp Ứng (${lowStocks.length})</span>
+      </div>
+      <div class="card-box-body">
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Sản phẩm</th>
+                <th>Vị trí kho</th>
+                <th class="text-right">Số lượng tồn</th>
+                <th>Mức độ</th>
+                <th>Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${lowStocks.length === 0 ? `<tr><td colspan="5" class="text-center" style="padding:20px; color:#64748b;">Tất cả các kho đều đạt ngưỡng an toàn</td></tr>` :
+                lowStocks.map(s => `
+                <tr>
+                  <td class="font-bold">${esc(s.name || '')}</td>
+                  <td><span class="badge badge-purple">${esc(s.warehouse || '')}</span></td>
+                  <td class="text-right font-bold text-danger">${fmt(s.quantity || 0)}</td>
+                  <td><span class="badge badge-danger">Dưới ngưỡng 20</span></td>
+                  <td>
+                    <button class="btn btn-primary btn-sm" onclick="window.location.hash='#interbranch'">Tạo lệnh tiếp ứng</button>
                   </td>
                 </tr>
               `).join('')}
