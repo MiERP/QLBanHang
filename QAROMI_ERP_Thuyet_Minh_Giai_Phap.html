@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Bản Thuyết Minh Chi Tiết Giải Pháp QAROMI ERP</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 20mm 15mm 20mm 15mm;
+      @bottom-right {
+        content: "Trang " counter(page);
+        font-family: 'Segoe UI', Arial, sans-serif;
+        font-size: 9pt;
+        color: #64748b;
+      }
+    }
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      font-size: 10.5pt;
+      line-height: 1.5;
+      color: #0f172a;
+      margin: 0;
+      padding: 0;
+    }
+    .header-block {
+      border-bottom: 2px solid #1e3a8a;
+      padding-bottom: 15px;
+      margin-bottom: 25px;
+    }
+    .org-name {
+      font-size: 9.5pt;
+      font-weight: 700;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    h1.doc-title {
+      font-size: 18pt;
+      font-weight: 800;
+      color: #1e3a8a;
+      margin: 10px 0 6px 0;
+      line-height: 1.25;
+    }
+    .doc-subtitle {
+      font-size: 11pt;
+      color: #0284c7;
+      font-style: italic;
+      margin-bottom: 14px;
+    }
+    .meta-box {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 9.5pt;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 20px;
+    }
+    .meta-item b { color: #1e3a8a; }
+    h2.section-title {
+      font-size: 13.5pt;
+      font-weight: 700;
+      color: #1e3a8a;
+      border-bottom: 1.5px solid #cbd5e1;
+      padding-bottom: 4px;
+      margin-top: 25px;
+      margin-bottom: 12px;
+      page-break-after: avoid;
+    }
+    h3.sub-title {
+      font-size: 11.5pt;
+      font-weight: 700;
+      color: #0284c7;
+      margin-top: 16px;
+      margin-bottom: 6px;
+      page-break-after: avoid;
+    }
+    p {
+      margin: 0 0 8px 0;
+      text-align: justify;
+    }
+    .callout {
+      background: #eff6ff;
+      border-left: 4px solid #3b82f6;
+      border-radius: 4px;
+      padding: 10px 14px;
+      margin: 12px 0;
+      font-size: 9.5pt;
+      page-break-inside: avoid;
+    }
+    .callout.danger {
+      background: #fef2f2;
+      border-left-color: #ef4444;
+    }
+    .callout-title {
+      font-weight: 700;
+      color: #1e3a8a;
+      margin-bottom: 4px;
+    }
+    .callout.danger .callout-title {
+      color: #991b1b;
+    }
+    table.data-tbl {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 9pt;
+      page-break-inside: avoid;
+    }
+    table.data-tbl th {
+      background: #1e3a8a;
+      color: #ffffff;
+      font-weight: 700;
+      padding: 6px 10px;
+      text-align: left;
+      border: 1px solid #1e3a8a;
+    }
+    table.data-tbl td {
+      padding: 6px 10px;
+      border: 1px solid #e2e8f0;
+      vertical-align: top;
+    }
+    table.data-tbl tr:nth-child(even) {
+      background: #f8fafc;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 8pt;
+      font-weight: 700;
+    }
+    .badge-blue { background: #dbeafe; color: #1e40af; }
+    .badge-green { background: #d1fae5; color: #065f46; }
+    .badge-amber { background: #fef3c7; color: #92400e; }
+    .badge-red { background: #fee2e2; color: #991b1b; }
+    .page-break {
+      page-break-before: always;
+    }
+    .sig-table {
+      width: 100%;
+      margin-top: 35px;
+      border-collapse: collapse;
+      page-break-inside: avoid;
+    }
+    .sig-table td {
+      width: 50%;
+      text-align: center;
+      vertical-align: top;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header-block">
+    <div class="org-name">CÔNG TY CỔ PHẦN NƯỚC SẠCH QUẢNG NINH (QUAWACO)<br>XÍ NGHIỆP NƯỚC HÒN GAI — BAN DỰ ÁN CHUYỂN ĐỔI SỐ</div>
+    <h1 class="doc-title">BẢN THUYẾT MINH CHI TIẾT GIẢI PHÁP PHẦN MỀM<br>QUẢN TRỊ DOANH NGHIỆP TOÀN DIỆN QAROMI ERP</h1>
+    <div class="doc-subtitle">Số hóa toàn diện: Bán hàng thương mại, Kho bãi đa điểm, Vật tư vỏ bình, Cước vận chuyển, Dịch vụ gia tăng DVGT và KPI 202 CBCNV</div>
+    
+    <div class="meta-box">
+      <div class="meta-item"><b>Đơn vị thụ hưởng:</b> Xí nghiệp Nước Hòn Gai — QUAWACO</div>
+      <div class="meta-item"><b>Mã hệ sinh thái:</b> QAROMI ERP (Chuẩn MiERP / Odoo)</div>
+      <div class="meta-item"><b>Phiên bản tài liệu:</b> 1.0.0 (Bản Trình Duyệt Chốt Phương Án)</div>
+      <div class="meta-item"><b>Kỳ ban hành:</b> Tháng 09 / 2026</div>
+    </div>
+  </div>
+
+  <!-- PHẦN I -->
+  <h2 class="section-title">PHẦN I: BỐI CẢNH HIỆN TRẠNG & TỔNG QUAN GIẢI PHÁP ERP</h2>
+  
+  <h3 class="sub-title">1. Hiện trạng quản lý thủ công & Các rủi ro nghiêm trọng trên Excel</h3>
+  <p>Xí nghiệp Nước Hòn Gai trực thuộc Công ty Cổ phần Nước sạch Quảng Ninh (QUAWACO) hiện đang quản lý mảng sản xuất kinh doanh nước ion kiềm QAROMI, nước tinh khiết RO và dịch vụ kỹ thuật nước gia tăng (DVGT) phân tán trên 3 file Excel chính: <i>Bán nước theo dõi giao hàng T9</i>, <i>THEO DÕI VỎ BÌNH T8.T9.2026</i>, và <i>THEO DÕI CHỈ TIÊU DVGT CBCNV</i> cùng file mẫu báo cáo tài chính <i>Nước thương mại.xlsx</i>.</p>
+  
+  <div class="callout danger">
+    <div class="callout-title">⚠️ BẰNG CHỨNG KIỂM TOÁN RỦI RO BẢNG TÍNH EXCEL CŨ:</div>
+    <div><b>1. 12 ô tính bị lỗi #REF! nghiêm trọng:</b> Tại Sheet TỒN của file Điều phối, có tới 12 ô tính (J6:O6, J7:O7) bị gãy tham chiếu công thức do nhân viên xóa cột, làm tê liệt việc tính toán tự động tổng lượng tồn kho.</div>
+    <div><b>2. Vay mượn nội bộ ghi tay:</b> Ghi chú tay chữ đỏ ('8/9 VAY KHO CÔNG TY 22 VỈ 500ML') và nợ vỏ đơn vị bạn (Bãi Cháy, Cẩm Phả) không có hạn trả, dễ thất thoát tài sản.</div>
+    <div><b>3. Tiền cọc vỏ bình lẫn vào doanh thu:</b> Tiền cọc 50.000đ/vỏ của khách lẻ không được hạch toán sổ quỹ ký cược riêng biệt, gây tranh chấp khi khách hàng hoàn vỏ trả cọc.</div>
+    <div><b>4. Tách rời mã khách hàng nước sạch:</b> Các ca DVGT có mã đồng hồ nước (HG095791...) nhưng không liên kết với CSDL khách hàng dùng nước sinh hoạt QUAWACO.</div>
+    <div><b>5. Phân chia cước vận chuyển thủ công:</b> Các đơn hàng có 2 nhân sự cùng giao bằng xe tải điện phải tự tính toán chia tiền công thủ công, dễ nhầm lẫn.</div>
+  </div>
+
+  <h3 class="sub-title">2. Mục tiêu chuyển đổi số & Kiến trúc 4 tầng giải pháp QAROMI ERP</h3>
+  <p>Hệ thống QAROMI ERP được xây dựng theo chuẩn kiến trúc Odoo / MiERP nhằm thay thế triệt để các bảng tính Excel phân tán, tạo lập một nền tảng dữ liệu tập trung duy nhất (Single Source of Truth), quản lý kho bằng bút toán kép (Double-entry), khép kín chu trình kinh doanh từ Báo giá ➔ Đơn bán ➔ Xuất kho ➔ Phân bổ cước ➔ Hóa đơn điện tử ➔ Thu tiền COD & Công nợ ➔ Quản lý vỏ mượn/trả ➔ Kế toán báo cáo.</p>
+
+  <table class="data-tbl">
+    <thead>
+      <tr>
+        <th style="width: 25%;">Phân tầng kiến trúc</th>
+        <th style="width: 75%;">Công nghệ & Năng lực đáp ứng</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>Tầng Giao Diện (UI)</b></td>
+        <td>Web App đa nền tảng tối ưu cho Desktop văn phòng; Mobile PWA linh hoạt cho nhân viên thị trường, thợ DVGT và lái xe tải điện.</td>
+      </tr>
+      <tr>
+        <td><b>Tầng Nghiệp Vụ (Core)</b></td>
+        <td>Odoo / MiERP Core Engine xử lý Bán hàng, Kho đa điểm, Bảo dưỡng FSM, Phân bổ cước chia đều, Sổ cái vỏ bình và KPI 202 nhân sự.</td>
+      </tr>
+      <tr>
+        <td><b>Tầng Tích Hợp (API)</b></td>
+        <td>Hệ thống RESTful APIs kết nối máy chủ Hóa đơn điện tử (VNPT/Viettel), CSDL danh bạ đồng hồ nước sinh hoạt QUAWACO.</td>
+      </tr>
+      <tr>
+        <td><b>Tầng Dữ Liệu (DB)</b></td>
+        <td>PostgreSQL Enterprise / SQLite nhúng, toàn vẹn khóa ngoại, mã hóa bảo mật dữ liệu và sao lưu tự động định kỳ.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- PHẦN II -->
+  <div class="page-break"></div>
+  <h2 class="section-title">PHẦN II: GIỚI THIỆU CHI TIẾT GIAO DIỆN VÀ HỆ THỐNG MENU PHẦN MỀM</h2>
+  <p>Giao diện phần mềm được quy hoạch thành <b>6 Nhóm Menu Đầu Mối Chính</b> tinh giản, hiện đại và tập trung 100% vào năng suất vận hành thực tế:</p>
+
+  <h3 class="sub-title">1. NHÓM MENU: TỔNG QUAN</h3>
+  <table class="data-tbl">
+    <thead>
+      <tr>
+        <th style="width: 20%;">Menu con</th>
+        <th style="width: 45%;">Dùng để làm gì & Dữ liệu cốt lõi</th>
+        <th style="width: 35%;">Người dùng nhận được gì</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>1.1. Bảng điều khiển</b><br><span class="badge badge-blue">Executive Dashboard</span></td>
+        <td>Bức tranh toàn cảnh về hoạt động SXKD trong kỳ kế toán: Doanh thu gồm VAT 8%, Doanh thu trước thuế, Số đơn hàng, Nợ tiền hàng, Nợ vỏ bình, Tồn kho các điểm (Kho Tăng Áp, Kho Huế, Xe tải điện).</td>
+        <td>Ban Giám đốc và Quản lý nắm bắt toàn diện tình hình xí nghiệp chỉ sau 5 giây; phát hiện nút thắt công nợ hoặc thiếu hụt tồn kho để chỉ đạo kịp thời.</td>
+      </tr>
+      <tr>
+        <td><b>1.2. Việc cần xử lý</b><br><span class="badge badge-amber">Operational Worklist</span></td>
+        <td>Cảnh báo tức thời các tác vụ khẩn: Đơn hàng mới lập chờ giao, Phiếu xuất kho dở dang, Tiền COD lái xe chưa nộp quỹ và Mặt hàng sắp hết tồn kho (&lt; 20 sản phẩm).</td>
+        <td>Nhân viên điều phối không bị sót việc; xe tải điện được nạp đủ hàng trước giờ xuất bến; hạn chế tối đa nguy cơ đứt gãy cung ứng.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3 class="sub-title">2. NHÓM MENU: QUẢN LÝ BÁN HÀNG</h3>
+  <table class="data-tbl">
+    <thead>
+      <tr>
+        <th style="width: 20%;">Menu con</th>
+        <th style="width: 45%;">Dùng để làm gì & Dữ liệu cốt lõi</th>
+        <th style="width: 35%;">Người dùng nhận được gì</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>2.1. Đơn bán & Hóa đơn</b><br><span class="badge badge-blue">Sales & E-Invoice</span></td>
+        <td>Quản lý vòng đời đơn bán hàng. Tích hợp trực tiếp <b>Hóa đơn điện tử (E-Invoice)</b>: Bộ lọc Đã xuất HĐ vs Chưa xuất HĐ, Hiển thị số HĐ (`HD/2026/09/...`) và ngày xuất; Nút <b>[ Xuất HĐ ]</b> 1-click tự động cấp số hóa đơn.</td>
+        <td>Kế toán kiểm soát 100% doanh thu đã xuất/chưa xuất hóa đơn phục vụ đối soát thuế GTGT 8%; nhân viên bán hàng tạo báo giá chỉ trong 30 giây.</td>
+      </tr>
+      <tr>
+        <td><b>2.2. Khách hàng & Đối tác</b><br><span class="badge badge-green">Customer 360°</span></td>
+        <td>Quản lý danh bạ hợp nhất 411 đối tác/khách hàng theo 5 nhóm: Cơ quan/HCSN, Doanh nghiệp, Nhà hàng/KS, Đại lý, Hộ gia đình. Modal <b>Hồ sơ 360°</b> xem toàn bộ lịch sử mua nước, nợ tiền hàng, nợ vỏ bình và ca DVGT.</td>
+        <td>Nhân viên kinh doanh tra cứu ngay độ uy tín và tình trạng nợ vỏ bình của khách trước khi duyệt xuất hàng mới; thêm khách hàng mới dễ dàng.</td>
+      </tr>
+      <tr>
+        <td><b>2.3. Doanh thu & Tiền COD</b><br><span class="badge badge-blue">Revenue Analytics</span></td>
+        <td>Gồm 2 Tab nghiệp vụ chuyên biệt:<br>
+        - <b>Tab 1 (Doanh thu theo Sản phẩm):</b> Bảng phân tích 6 sản phẩm chủ lực (Vỉ 500, Vỉ 350, Bình 19L kiềm/RO...) với giá chưa thuế, thuế VAT 8%, tổng tiền thanh toán, số lượng bán, hàng KM và tỷ trọng % doanh thu.<br>
+        - <b>Tab 2 (Doanh thu theo Đơn hàng):</b> Doanh số và nộp quỹ từng người bán (Huế, Hương, Phương...), nợ phải thu từng khách.</td>
+        <td>Kế toán có ngay số liệu hạch toán thuế GTGT 8% nộp NSNN; lãnh đạo biết chính xác sản phẩm nào sinh lời cao nhất (Vỉ 500ml chiếm 86.8% doanh thu).</td>
+      </tr>
+      <tr>
+        <td><b>2.4. Sản phẩm & Bảng giá</b><br><span class="badge badge-blue">Products & Pricing</span></td>
+        <td>Danh mục sản phẩm nước ion kiềm QAROMI, ĐVT quy đổi (Vỉ, Hộp, Bình 19L), đơn giá niêm yết, cờ theo dõi vỏ bình (`tracks_shell`), định mức tiền cọc vỏ (50.000đ/bình).</td>
+        <td>Chuẩn hóa giá theo kênh bán (Xí nghiệp, Công ty, Bãi Cháy, Miền Đông), ngăn chặn nhân viên bán nhầm giá quy định.</td>
+      </tr>
+      <tr>
+        <td><b>2.5. Chi phí vận chuyển</b><br><span class="badge badge-amber">Equal Fee Division</span></td>
+        <td>Quản lý thù lao giao nhận. Áp dụng chuẩn xác <b>Công thức chia đều cước vận chuyển</b>: Cước mỗi đơn hàng được chia đều cho số nhân viên cùng đi giao (Ví dụ: Đơn cước 50.000 đ có 2 nhân viên vận chuyển ➔ Mỗi người nhận đúng 25.000 đ). Bảng tổng hợp thù lao cả tháng.</td>
+        <td>Minh bạch 100% tiền công cho anh em giao hàng; kế toán không phải chia tay thủ công; phòng nhân sự xuất ngay bảng thù lao chi trả lương.</td>
+      </tr>
+      <tr>
+        <td><b>2.6. Dịch vụ gia tăng DVGT</b><br><span class="badge badge-green">Field Service (FSM)</span></td>
+        <td>Quản lý ca dịch vụ kỹ thuật (bảo dưỡng bình nóng lạnh, thay lõi lọc, sửa chữa kẹp chì). Liên kết <b>Mã đồng hồ nước sinh hoạt (HG095791...)</b>; Phân ca theo Time-slots (Trưa, Tối, Cuối tuần); Quản lý phụ tùng thay thế (BOM: Thanh Magie, phao, zoăng).</td>
+        <td>Thợ kỹ thuật đi làm đúng giờ hẹn; xí nghiệp kiểm soát được kho linh kiện phụ tùng, triệt tiêu thất thoát tiền vật tư thay thế.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="page-break"></div>
+  <h3 class="sub-title">3. NHÓM MENU: QUẢN LÝ NHÂN VIÊN</h3>
+  <table class="data-tbl">
+    <thead>
+      <tr>
+        <th style="width: 20%;">Menu con</th>
+        <th style="width: 45%;">Dùng để làm gì & Dữ liệu cốt lõi</th>
+        <th style="width: 35%;">Người dùng nhận được gì</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>3.1. Danh sách nhân viên</b><br><span class="badge badge-blue">Employee Directory</span></td>
+        <td>Quản lý hồ sơ 202 CBCNV toàn xí nghiệp theo Trạm (Hà Lầm, Cao Xanh, Hà Tu, Giếng Đáy, Bãi Cháy, Văn Phòng...), 39 chức vụ, số điện thoại, phân quyền truy cập.</td>
+        <td>Tra cứu thông tin nhân sự tức thì, phân quyền bảo mật chặt chẽ theo chức danh công tác.</td>
+      </tr>
+      <tr>
+        <td><b>3.2. KPI theo nhân viên</b><br><span class="badge badge-green">Individual KPI</span></td>
+        <td>Theo dõi chỉ tiêu doanh thu cá nhân năm 2026 (Chỉ tiêu giao cả năm 1.592.834.000 đ toàn xí nghiệp), Doanh số tích lũy lũy kế từng tháng, Tỷ lệ hoàn thành (%), Xếp hạng thi đua.</td>
+        <td>CBCNV tự kiểm tra tiến độ thi đua của mình mọi lúc mọi nơi; tạo động lực bán hàng; phòng tổ chức có căn cứ xét thưởng minh bạch.</td>
+      </tr>
+      <tr>
+        <td><b>3.3. KPI theo trạm / tổ</b><br><span class="badge badge-blue">Station Benchmark</span></td>
+        <td>So sánh sản lượng tiêu thụ thực tế so với kế hoạch của 8 trạm cấp nước và tổ tiếp thị; biểu đồ đóng góp của từng trạm cơ sở.</td>
+        <td>Trưởng trạm nắm rõ trạm mình đang đạt bao nhiêu % kế hoạch để đôn đốc đẩy mạnh sản lượng nước trên địa bàn phụ trách.</td>
+      </tr>
+      <tr>
+        <td><b>3.4. Lịch trực bốc xếp</b><br><span class="badge badge-amber">Loading Roster</span></td>
+        <td>Nhật ký 23 ca trực bốc xếp nước lên xe tải điện của Tổ Bảo Vệ, tự động ghi nhận phụ cấp 80.000đ/ca trực theo phiếu kho, thay thế hàm COUNTIFS thủ công.</td>
+        <td>Minh bạch tiền phụ cấp ca trực cho anh em bảo vệ; kế toán xuất ngay danh sách chi trả phụ cấp hàng tháng chỉ bằng 1 cú nhấp chuột.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3 class="sub-title">4. NHÓM MENU: QUẢN LÝ KHO BÃI</h3>
+  <table class="data-tbl">
+    <thead>
+      <tr>
+        <th style="width: 20%;">Menu con</th>
+        <th style="width: 45%;">Dùng để làm gì & Dữ liệu cốt lõi</th>
+        <th style="width: 35%;">Người dùng nhận được gì</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>4.1. Tồn kho theo vị trí</b><br><span class="badge badge-blue">Stock Quants</span></td>
+        <td>Kiểm soát tồn kho thời gian thực tại các điểm: Kho Tăng Áp, Kho Huế, Xe tải điện lưu động, Kho Văn Phòng, Kho Lại Lan, Kho Đá Trắng; Cảnh báo hàng dưới ngưỡng an toàn.</td>
+        <td>Thủ kho không mất thời gian đi đếm thủ công; nhân viên tiếp thị biết ngay kho nào còn nước để chốt đơn giao hàng.</td>
+      </tr>
+      <tr>
+        <td><b>4.2. Phiếu kho Nhập/Xuất</b><br><span class="badge badge-blue">Stock Pickings</span></td>
+        <td>Quản lý lệnh xuất giao hàng, lệnh nhập hàng nhà máy, phiếu điều chuyển xe tải điện. Quy trình phê duyệt chuẩn hóa: Dự thảo ➔ Sẵn sàng ➔ Hoàn thành.</td>
+        <td>Chấm dứt việc xuất hàng bằng miệng hoặc sổ tay dễ thất lạc; đầy đủ căn cứ người giao, người nhận và lái xe.</td>
+      </tr>
+      <tr>
+        <td><b>4.3. Dòng dịch chuyển kho</b><br><span class="badge badge-green">Stock Moves</span></td>
+        <td>Theo dõi vết (Audit Trail) của từng sản phẩm: Địa điểm nguồn ➔ Địa điểm đích (Bút toán kép); Ghi nhận số lượng hàng bán, hàng khuyến mại, ngày giờ và người thực hiện.</td>
+        <td>Bảo đảm toàn vẹn kho hàng 100%, triệt tiêu hoàn toàn nguy cơ gãy công thức #REF!, dễ dàng truy xuất khi có chênh lệch.</td>
+      </tr>
+      <tr>
+        <td><b>4.4. Sổ nợ vỏ bình & Cọc</b><br><span class="badge badge-red">Returnable Shells</span></td>
+        <td>Quản lý vật tư vỏ bình 19L (Úp/Vòi). Gồm 2 giao diện:<br>
+        - <b>Nhật ký Mượn - Trả chi tiết:</b> Mã phiếu, Khách hàng, Ngày mượn, Số mượn, Ngày trả, Số đã trả, Còn nợ lại và Tiền cọc. Nút <b>[ ✍️ Trả vỏ ]</b> nhập ngày thu hồi và hoàn trả tiền cọc.<br>
+        - <b>Sổ nợ vỏ tổng hợp (T8 & T9):</b> Theo dõi theo công thức: Nợ cũ + Lấy mới - Đã trả = Còn nợ cuối kỳ.</td>
+        <td>Bảo toàn tài sản xí nghiệp (hàng nghìn vỏ bình 19L trị giá hàng trăm triệu đồng); tránh thất thoát vỏ và giải quyết triệt để tranh chấp cọc vỏ khách hàng.</td>
+      </tr>
+      <tr>
+        <td><b>4.5. Tiếp ứng & Vay kho</b><br><span class="badge badge-amber">Interbranch Loans</span></td>
+        <td>Quản lý các chuyến xe tiếp ứng nước từ Nhà máy Nước Cẩm Phả về Kho Tăng Áp/Huế; Sổ theo dõi mượn vay nội bộ đơn vị bạn (Bãi Cháy, Cẩm Phả) có ngày hẹn trả và cảnh báo quá hạn.</td>
+        <td>Chủ động nguồn nước phục vụ thị trường; minh bạch các khoản nợ vay tài sản liên chi nhánh trong công ty QUAWACO.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="page-break"></div>
+  <h3 class="sub-title">5. NHÓM MENU: BÁO CÁO</h3>
+  <table class="data-tbl">
+    <thead>
+      <tr>
+        <th style="width: 20%;">Menu con</th>
+        <th style="width: 45%;">Dùng để làm gì & Dữ liệu cốt lõi</th>
+        <th style="width: 35%;">Người dùng nhận được gì</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>5.1. Báo cáo thương mại</b><br><span class="badge badge-blue">Commercial Report</span></td>
+        <td>Báo cáo kết quả kinh doanh thương mại nước QAROMI định kỳ. Khớp 100% biểu mẫu <i>Nước thương mại.xlsx</i>: Đơn giá trước thuế (chưa VAT 8%), Doanh thu thuần từng mặt hàng trong tháng (T8, T9) và lũy kế YTD; Đầy đủ chữ ký Lập biểu, Phụ trách KD, Lãnh đạo đơn vị.</td>
+        <td>Xuất báo cáo tài chính nội bộ tức thì chỉ bằng 1 cú nhấp chuột; số liệu chuẩn xác 100%, không mất hàng giờ đối chiếu công thức Excel.</td>
+      </tr>
+      <tr>
+        <td><b>5.2. Công nợ khách hàng</b><br><span class="badge badge-red">Accounts Receivable</span></td>
+        <td>Quản lý chi tiết các khoản phải thu tiền hàng của khách hàng cơ quan, doanh nghiệp, đại lý; Số tiền nợ đọng, Ngày mua gần nhất; Tổng nợ toàn xí nghiệp (84.605.000 đ).</td>
+        <td>Nhân viên kinh doanh có kế hoạch đôn đốc thu nợ kịp thời; giảm thiểu nợ xấu; tăng vòng quay tiền mặt cho xí nghiệp.</td>
+      </tr>
+      <tr>
+        <td><b>5.3. Báo cáo tổng hợp nợ vỏ</b><br><span class="badge badge-amber">Shell Asset Balance</span></td>
+        <td>Báo cáo đối soát tài sản vỏ bình và số dư tiền ký cọc: Số vỏ úp/vòi phân bổ tại từng kho, số vỏ đang cho mượn ngoài khách hàng và quỹ tiền cọc lưu giữ.</td>
+        <td>Phục vụ kiểm kê tài sản định kỳ của xí nghiệp; đối soát khớp 100% giữa thủ kho và kế toán tiền mặt.</td>
+      </tr>
+      <tr>
+        <td><b>5.4. Đối soát & Kiểm kê rủi ro</b><br><span class="badge badge-red">Audit & #REF! Breakdown</span></td>
+        <td>Báo cáo kiểm toán đối chứng Excel cũ vs ERP: Chứng minh chi tiết 12 ô tính bị gãy công thức `#REF!`; 7 điểm rủi ro vận hành được giải quyết; Ma trận so sánh toàn diện.</td>
+        <td>Cung cấp luận cứ thuyết phục đanh thép cho Ban Giám đốc và Hội đồng thẩm định khi phê duyệt đầu tư dự án.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3 class="sub-title">6. NHÓM MENU: CẤU HÌNH HỆ THỐNG</h3>
+  <table class="data-tbl">
+    <thead>
+      <tr>
+        <th style="width: 20%;">Menu con</th>
+        <th style="width: 45%;">Dùng để làm gì & Dữ liệu cốt lõi</th>
+        <th style="width: 35%;">Người dùng nhận được gì</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>6.1. Cấu hình Master Data</b><br><span class="badge badge-blue">Master Data</span></td>
+        <td>Quản trị danh mục dùng chung: Đơn vị tính (UoMs), 39 Chức danh công tác, 8 Trạm cấp nước cơ sở, Hệ thống kho bãi & Địa điểm, Danh mục kênh bán hàng.</td>
+        <td>Quản trị viên dễ dàng thêm sản phẩm, thêm trạm mới hoặc điều chỉnh đơn giá mà không cần can thiệp vào mã nguồn phần mềm.</td>
+      </tr>
+      <tr>
+        <td><b>6.2. Kiến trúc giải pháp</b><br><span class="badge badge-blue">System Blueprint</span></td>
+        <td>Tài liệu số hóa sơ đồ kiến trúc 4 tầng, Chu trình dữ liệu khép kín, Kế hoạch đào tạo và chuyển giao công nghệ.</td>
+        <td>Đội ngũ CNTT và Ban Lãnh đạo an tâm tuyệt đối về tính bảo mật, khả năng mở rộng và tính bền vững của hệ thống.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- PHẦN III -->
+  <h2 class="section-title">PHẦN III: KẾT LUẬN & ĐỀ XUẤT LỘ TRÌNH TRIỂN KHAI</h2>
+  <p>Giải pháp phần mềm <b>QAROMI ERP</b> giải quyết trọn vẹn và triệt để mọi bất cập của 3 file Excel hiện hữu: Chấm dứt hoàn toàn nguy cơ gãy công thức #REF!, bảo toàn tài sản hàng nghìn vỏ bình 19L, tự động hóa chia đều cước vận chuyển, chuẩn hóa dịch vụ gia tăng DVGT gắn với mã đồng hồ nước và minh bạch chỉ tiêu thi đua 202 nhân sự.</p>
+
+  <table class="data-tbl">
+    <thead>
+      <tr>
+        <th style="width: 20%;">Giai đoạn</th>
+        <th style="width: 25%;">Nội dung chính</th>
+        <th style="width: 55%;">Mục tiêu nghiệm thu</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>Giai đoạn 1</b><br>(Tuần 1 - 2)</td>
+        <td>Khởi tạo & Master Data</td>
+        <td>Cài đặt máy chủ, chuẩn hóa danh mục 411 khách hàng, sản phẩm, kho bãi và số dư đầu kỳ vỏ bình.</td>
+      </tr>
+      <tr>
+        <td><b>Giai đoạn 2</b><br>(Tuần 3 - 5)</td>
+        <td>Đào tạo người dùng</td>
+        <td>Tập huấn thao tác theo nhóm: Tiếp thị bán hàng, Kế toán hóa đơn, Thủ kho xuất nhập, Thợ DVGT và Lái xe.</td>
+      </tr>
+      <tr>
+        <td><b>Giai đoạn 3</b><br>(Tuần 6 - 7)</td>
+        <td>Vận hành song song</td>
+        <td>Chạy song song phần mềm với file Excel cũ trong 2 tuần để đối soát số liệu thực tế, hiệu chỉnh phát sinh.</td>
+      </tr>
+      <tr>
+        <td><b>Giai đoạn 4</b><br>(Tuần 8)</td>
+        <td>Nghiệm thu & Golive</td>
+        <td>Chính thức khóa file Excel cũ, chuyển đổi vận hành 100% trên phần mềm QAROMI ERP, bàn giao tài liệu.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Chữ ký -->
+  <table class="sig-table">
+    <tr>
+      <td>
+        <b>ĐẠI DIỆN TỔ TƯ VẤN GIẢI PHÁP ERP</b><br>
+        <i>(Ký và ghi rõ họ tên)</i><br><br><br><br><br>
+        <b>Lương Minh Hương</b><br>
+        Chuyên viên Phân tích Nghiệp vụ
+      </td>
+      <td>
+        <b>ĐẠI DIỆN XÍ NGHIỆP NƯỚC HÒN GAI</b><br>
+        <i>(Ký và đóng dấu xác nhận)</i><br><br><br><br><br>
+        <b>Vũ Thị Mai Huệ</b><br>
+        Giám đốc Xí nghiệp Nước Hòn Gai
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>
