@@ -1,20 +1,17 @@
 /**
  * ============================================================================
- * QAROMI ERP — FRONTEND APPLICATION JAVASCRIPT (v5 - MiERP Architecture)
- * Tương tác đầy đủ theo 3 Trụ Nâng Cấp:
- * 1. Chu Trình Vận Hành Mô Phỏng (Live Simulation Wizard)
- * 2. Trải nghiệm ERP chuẩn MiERP: App Switcher, Role Selector, Document Statusbar
- * 3. Bản Đồ Kiến Trúc Giải Pháp & Từ Điển Dữ Liệu (Blueprint & Data Dictionary)
+ * QAROMI ERP — HỆ THỐNG ĐIỀU HÀNH DOANH NGHIỆP THƯƠNG MẠI
+ * Phiên bản sản phẩm thương mại chuẩn Odoo / MiERP
  * ============================================================================
  */
 
 const state = {
   view: 'overview',
-  appFilter: 'all',
-  role: 'all',
   products: [],
   meta: null,
-  simState: null
+  selectedCommercialMonth: '08/2026',
+  employeeFilter: { q: '', station: 'all', position: 'all' },
+  customerFilter: { q: '', type: 'all', debtOnly: false, shellOnly: false }
 };
 
 // Utilities
@@ -65,109 +62,100 @@ if (backdrop) {
   });
 }
 
-// ══════════════════════════ MENU DEFINITION & APP MAPPING ══════════════════════════ //
+// ══════════════════════════ 6 ĐẦU MỐI MENU CHUẨN SẢN PHẨM ══════════════════════════ //
 const MENU = [
   {
-    group: 'CHU TRÌNH & ĐIỀU HÀNH',
-    app: 'all',
+    group: 'TỔNG QUAN',
     items: [
-      { id: 'simulation', name: '⚡ Chu trình mô phỏng', icon: '▶', highlight: true },
       { id: 'overview', name: 'Bảng điều khiển', icon: '📊' },
-      { id: 'worklist', name: 'Việc cần xử lý ngay', icon: '⚡' },
+      { id: 'worklist', name: 'Việc cần xử lý', icon: '🔔' },
     ]
   },
   {
-    group: 'PHÂN HỆ BÁN HÀNG & PHÂN PHỐI',
-    app: 'sales',
+    group: 'QUẢN LÝ BÁN HÀNG',
     items: [
-      { id: 'commercial', name: '📑 Báo cáo thương mại QAROMI', icon: '📑', highlight: true },
-      { id: 'orders', name: 'Đơn bán & Báo giá (SO)', icon: '🧾' },
-      { id: 'products', name: 'Danh mục & Bảng giá', icon: '📦' },
-      { id: 'cash', name: 'Tiền thu & Công nợ', icon: '💰' },
+      { id: 'orders', name: 'Đơn bán hàng & Báo giá', icon: '🧾' },
+      { id: 'customers', name: 'Khách hàng & Đối tác', icon: '🏢' },
+      { id: 'cash', name: 'Doanh thu & Thu tiền COD', icon: '💰' },
+      { id: 'products', name: 'Sản phẩm & Bảng giá', icon: '📦' },
+      { id: 'delivery', name: 'Chi phí vận chuyển', icon: '🚚' },
+      { id: 'dvgt', name: 'Dịch vụ gia tăng DVGT', icon: '🔧' },
     ]
   },
   {
-    group: 'PHÂN HỆ KHO VẬN & ĐỘI XE',
-    app: 'stock',
+    group: 'QUẢN LÝ NHÂN VIÊN',
     items: [
-      { id: 'pickings', name: 'Lệnh kho kép (Nhập/Xuất)', icon: '📋' },
+      { id: 'employees', name: 'Danh sách nhân viên', icon: '👥' },
+      { id: 'kpi', name: 'KPI theo nhân viên', icon: '🎯' },
+      { id: 'kpi_station', name: 'KPI theo trạm / tổ', icon: '🏢' },
+      { id: 'guards', name: 'Lịch trực bốc xếp', icon: '🛡️' },
+    ]
+  },
+  {
+    group: 'QUẢN LÝ KHO BÃI',
+    items: [
       { id: 'quants', name: 'Tồn kho theo vị trí', icon: '🏬' },
+      { id: 'pickings', name: 'Phiếu kho (Nhập/Xuất)', icon: '📋' },
       { id: 'moves', name: 'Dòng dịch chuyển kho', icon: '🔄' },
-      { id: 'interbranch', name: 'Tiếp ứng CP & Vay mượn', icon: '🚛' },
-      { id: 'delivery', name: 'Phí vận chuyển theo người', icon: '🚚' },
+      { id: 'shells', name: 'Sổ nợ vỏ bình & Cọc', icon: '🧴' },
+      { id: 'interbranch', name: 'Tiếp ứng & Vay kho', icon: '🚛' },
     ]
   },
   {
-    group: 'PHÂN HỆ SỔ NỢ VỎ BÌNH',
-    app: 'shell',
+    group: 'BÁO CÁO',
     items: [
-      { id: 'shells', name: 'Sổ nợ vỏ bình đa kỳ', icon: '🧴' },
+      { id: 'commercial', name: 'Báo cáo thương mại QAROMI', icon: '📑' },
+      { id: 'report_debt', name: 'Công nợ khách hàng', icon: '💳' },
+      { id: 'report_shells', name: 'Báo cáo nợ vỏ bình', icon: '🧴' },
+      { id: 'audit', name: 'Đối soát & Kiểm kê', icon: '⚠️' },
     ]
   },
   {
-    group: 'PHÂN HỆ DỊCH VỤ GIA TĂNG (DVGT)',
-    app: 'fsm',
+    group: 'CẤU HÌNH HỆ THỐNG',
     items: [
-      { id: 'dvgt', name: 'DVGT & Kỹ thuật mạng nước', icon: '🔧' },
-    ]
-  },
-  {
-    group: 'PHÂN HỆ NHÂN SỰ & THI ĐUA',
-    app: 'kpi',
-    items: [
-      { id: 'kpi', name: 'Thi đua Kế hoạch năm', icon: '🎯' },
-      { id: 'guards', name: 'Trực bảo vệ & Bốc xếp', icon: '🛡️' },
-    ]
-  },
-  {
-    group: 'KIẾN TRÚC & GIẢI PHÁP ERP',
-    app: 'blueprint',
-    items: [
-      { id: 'blueprint', name: '🏛️ Kiến trúc & Giải pháp', icon: '📐', highlight: true },
-      { id: 'audit', name: 'Kiểm toán Excel & Lỗi #REF!', icon: '⚠️' },
-      { id: 'relations', name: 'Bản đồ kiến trúc 5 trụ', icon: '🕸️' },
+      { id: 'config', name: 'Cấu hình Master Data', icon: '⚙️' },
+      { id: 'blueprint', name: 'Kiến trúc hệ thống', icon: '🏛️' },
     ]
   }
 ];
 
 const TITLES = {
-  simulation: ['⚡ Mô Phỏng Chu Trình Vận Hành Mẫu (Live Simulation)', 'Trải nghiệm trực quan quy trình khép kín: Báo giá ➔ Xuất kho ➔ Giao hàng & Vỏ ➔ Tự động cập nhật 4 sổ sách'],
-  blueprint: ['🏛️ Kiến Trúc Tổng Thể Hệ Thống QAROMI ERP (MiERP Pattern)', 'Sơ đồ luồng dữ liệu tương tác · 6 Phân hệ nghiệp vụ · Từ điển dữ liệu Data Dictionary'],
-  overview: ['Bảng Điều Khiển Điều Hành', 'Tổng hợp toàn diện doanh số, kho hàng, nợ vỏ và việc cần xử lý hôm nay'],
-  worklist: ['Việc Cần Xử Lý Ngay', 'Cảnh báo đơn chờ giao · tiền chưa thu · phiếu chờ xác nhận · kho dưới ngưỡng'],
-  products: ['Danh Mục Sản Phẩm & Bảng Giá', 'Quy cách nước tinh khiết RO, Kiềm 19L, chai đóng vỉ/hộp và quy định cọc vỏ'],
-  commercial: ['Báo Cáo Thương Mại Nước Ion Kiềm QAROMI', 'Biểu mẫu tiêu thụ nước thương mại gửi Công ty mẹ QUAWACO · Bóc tách từ file Nước thương mại.xlsx · Giá chưa thuế VAT 8% & Lũy kế YTD'],
-  orders: ['Quản Lý Đơn Bán Hàng (SO)', 'Báo giá ➔ Xác nhận đơn ➔ Tự sinh phiếu kho ➔ Áp dụng khuyến mãi 10+1'],
-  dvgt: ['Dịch Vụ Gia Tăng & Kỹ Thuật Tuyến Mạng Nước Sạch', 'Mã đồng hồ QUAWACO (HG095791) · Vật tư thay thế BNL (Thanh Magie) · Hẹn giờ Time-slot'],
-  pickings: ['Quản Lý Phiếu Kho (Stock Pickings)', 'Nhập từ Cẩm Phả · Xuất giao khách · Điều chuyển xe tải điện · Bút toán kép'],
-  quants: ['Tồn Kho Thời Gian Thực Theo Vị Trí', 'Kho Tăng Áp, Kho Huế, Kho Văn Phòng, Xe tải điện (chống tồn âm)'],
-  moves: ['Dòng Dịch Chuyển Kho (Double-entry Move)', 'Mọi biến động đều có đối ứng Nguồn ➔ Đích theo chuẩn Odoo/MiERP'],
-  interbranch: ['Tiếp Ứng Nhà Máy Cẩm Phả & Vay Mượn Kho Nội Bộ', 'Nhập tiếp ứng từ Cẩm Phả về Kho Huế/Tăng Áp · Sổ vay mượn hàng/vỏ với Đơn vị bạn (BC, QY, CP)'],
-  shells: ['Sổ Nợ Vỏ Bình & Tiền Cọc (Returnable Asset)', 'Nợ cũ + Lấy mới - Trả vỏ = Còn nợ (tách bình Úp/Vòi, quản lý tiền cọc 50k)'],
-  delivery: ['Phí Vận Chuyển Theo Người (Delivery Share)', 'Cước chuẩn 5.000đ/bình tự động chia đều cho nhóm người cùng đi giao'],
-  guards: ['Lịch Trực Tổ Bảo Vệ & Phụ Cấp Bốc Xếp', 'Lịch trực bốc xếp nước theo ngày cho 7 bảo vệ (Hoàng, Vượng, Hằng, Thùy, Thơm, Huy, Thu...)'],
-  cash: ['Tiền Thu Theo Nhân Viên & Công Nợ', 'Theo dõi tiền mặt COD shipper đang giữ và nợ đọng cơ quan, đại lý'],
-  kpi: ['Chỉ Tiêu & Thi Đua Kế Hoạch Năm 2026', 'Tiến độ hoàn thành kế hoạch 1.59 tỷ VNĐ của gần 200 CBCNV theo từng tháng'],
-  audit: ['Báo Cáo Kiểm Toán Rủi Ro Excel & Bằng Chứng Chuyển Đổi Số', 'Phát hiện 12 ô tính lỗi #REF! tại Sheet TỒN · Rủi ro thất thoát vật tư và giải pháp ERP thay thế'],
-  relations: ['Bản Đồ Quan Hệ 5 Trụ Kiến Trúc', 'Mối liên kết khép kín giữa Khách hàng ➔ Đơn bán ➔ Phiếu kho ➔ Vỏ bình ➔ Dòng tiền ➔ KPI'],
+  overview: ['Tổng quan', 'Bảng điều khiển'],
+  worklist: ['Tổng quan', 'Việc cần xử lý'],
+  orders: ['Quản lý bán hàng', 'Đơn bán hàng & Báo giá'],
+  customers: ['Quản lý bán hàng', 'Danh bạ Khách hàng & Đối tác (360°)'],
+  cash: ['Quản lý bán hàng', 'Doanh thu & Thu tiền COD'],
+  products: ['Quản lý bán hàng', 'Sản phẩm & Bảng giá'],
+  delivery: ['Quản lý bán hàng', 'Chi phí vận chuyển'],
+  dvgt: ['Quản lý bán hàng', 'Dịch vụ gia tăng DVGT'],
+  employees: ['Quản lý nhân viên', 'Danh sách nhân viên (202 CBCNV)'],
+  kpi: ['Quản lý nhân viên', 'KPI cá nhân'],
+  kpi_station: ['Quản lý nhân viên', 'KPI theo trạm / tổ'],
+  guards: ['Quản lý nhân viên', 'Lịch trực bốc xếp'],
+  quants: ['Quản lý kho bãi', 'Tồn kho theo vị trí'],
+  pickings: ['Quản lý kho bãi', 'Phiếu kho (Nhập / Xuất)'],
+  moves: ['Quản lý kho bãi', 'Dòng dịch chuyển kho'],
+  shells: ['Quản lý kho bãi', 'Sổ nợ vỏ bình & Tiền cọc'],
+  interbranch: ['Quản lý kho bãi', 'Tiếp ứng & Vay kho'],
+  commercial: ['Báo cáo', 'Báo cáo thương mại nước ion kiềm QAROMI'],
+  report_debt: ['Báo cáo', 'Báo cáo công nợ khách hàng'],
+  report_shells: ['Báo cáo', 'Báo cáo tổng hợp nợ vỏ bình'],
+  audit: ['Báo cáo', 'Báo cáo đối soát & Kiểm kê'],
+  config: ['Cấu hình', 'Cấu hình Master Data & Danh mục'],
+  blueprint: ['Cấu hình', 'Kiến trúc giải pháp hệ thống'],
 };
 
-// ══════════════════════════ NAVIGATION & APP SWITCHER ══════════════════════════ //
 function renderNav() {
   const container = document.getElementById('nav');
   if (!container) return;
   let html = '';
 
   for (const group of MENU) {
-    if (state.appFilter !== 'all' && group.app !== 'all' && group.app !== state.appFilter) {
-      continue;
-    }
     html += `<div class="nav-group-title">${group.group}</div>`;
     for (const item of group.items) {
       const active = state.view === item.id ? 'active' : '';
-      const style = item.highlight ? 'style="color:#60a5fa; font-weight:700;"' : '';
       html += `
-        <div class="nav-item ${active}" data-view="${item.id}" ${style}>
+        <div class="nav-item ${active}" data-view="${item.id}">
           <span class="nav-icon">${item.icon}</span>
           <span>${item.name}</span>
         </div>
@@ -181,101 +169,25 @@ function navigateTo(viewId) {
   state.view = viewId;
   location.hash = viewId;
   renderNav();
-  const [title, sub] = TITLES[viewId] || [viewId, ''];
+
+  const [parentName, pageTitle] = TITLES[viewId] || ['QAROMI', viewId];
   const titleEl = document.getElementById('page-title');
-  const subEl = document.getElementById('page-sub');
-  if (titleEl) titleEl.textContent = title;
-  if (subEl) subEl.textContent = sub;
+  const breadcrumbTitleEl = document.getElementById('breadcrumb-title');
+  const breadcrumbsEl = document.getElementById('top-breadcrumbs');
+
+  if (titleEl) titleEl.textContent = pageTitle;
+  if (breadcrumbsEl) {
+    breadcrumbsEl.innerHTML = `
+      <span class="breadcrumb-item">QAROMI</span>
+      <span class="breadcrumb-sep">/</span>
+      <span class="breadcrumb-item">${esc(parentName)}</span>
+      <span class="breadcrumb-sep">/</span>
+      <span class="breadcrumb-item active">${esc(pageTitle)}</span>
+    `;
+  }
   renderView();
 }
 
-// ══════════════════════════ ROLE PERSPECTIVE ══════════════════════════ //
-const ROLES_INFO = {
-  all: null,
-  dispatch: {
-    avatar: '👤',
-    title: 'Bàn làm việc: Điều Phối Viên Bán Hàng & DVGT (Nhung / Quang)',
-    desc: 'Theo dõi 7 đơn chờ duyệt · 4 ca DVGT hẹn hôm nay · Phân bổ chuyến xe tải điện & nhân lực bốc xếp.',
-    actions: [
-      { label: '🧾 Đơn chờ xử lý', view: 'orders' },
-      { label: '🔧 Lịch hẹn DVGT', view: 'dvgt' },
-      { label: '⚡ Chạy chu trình mẫu', view: 'simulation' }
-    ]
-  },
-  driver: {
-    avatar: '🚚',
-    title: 'Bàn làm việc: Lái Xe Giao Hàng & Thu Nợ Vỏ (Phương)',
-    desc: 'Kho lưu động xe tải điện · Nhận cước 5.000đ/bình (chia cùng bảo vệ) · Quyết toán vỏ rỗng & tiền mặt COD cuối ngày.',
-    actions: [
-      { label: '🚚 Chuyến xe & Thù lao', view: 'delivery' },
-      { label: '🧴 Sổ thu hồi vỏ rỗng', view: 'shells' },
-      { label: '💰 Tiền mặt cần nộp', view: 'cash' }
-    ]
-  },
-  stock: {
-    avatar: '🏭',
-    title: 'Bàn làm việc: Thủ Kho Tăng Áp & Kho Huế',
-    desc: 'Kiểm soát mức tồn an toàn 6 vị trí kho · Bút toán kép Nguồn ➔ Đích chống tồn âm · Tiếp ứng từ Cẩm Phả.',
-    actions: [
-      { label: '🏬 Tồn kho các điểm', view: 'quants' },
-      { label: '📋 Phiếu kho chờ xuất', view: 'pickings' },
-      { label: '🚛 Tiếp ứng Cẩm Phả', view: 'interbranch' }
-    ]
-  },
-  technician: {
-    avatar: '🔧',
-    title: 'Bàn làm việc: Kỹ Thuật Viên DVGT & Tuyến Mạng Nước Sạch',
-    desc: 'Tiếp nhận ca hẹn theo Time-slot · Khách hàng theo mã ĐH QUAWACO · Vật tư linh kiện (thanh Magie, phao, zoăng).',
-    actions: [
-      { label: '🔧 Ca DVGT cần làm', view: 'dvgt' },
-      { label: '📦 Phụ tùng trong kho', view: 'quants' },
-      { label: '🎯 Thi đua cá nhân', view: 'kpi' }
-    ]
-  },
-  director: {
-    avatar: '👑',
-    title: 'Bàn làm việc: Ban Giám Đốc Xí Nghiệp Nước Hòn Gai',
-    desc: 'Giám sát mục tiêu 1.592.834.000 đ của 202 CBCNV · Doanh thu theo Kênh Xí nghiệp / Đơn vị bạn · Báo cáo kiểm toán.',
-    actions: [
-      { label: '📊 Bảng điều khiển toàn diện', view: 'overview' },
-      { label: '🎯 Tiến độ chỉ tiêu 2026', view: 'kpi' },
-      { label: '🏛️ Kiến trúc giải pháp', view: 'blueprint' }
-    ]
-  }
-};
-
-function renderRoleBanner() {
-  const banner = document.getElementById('role-banner');
-  if (!banner) return;
-  const info = ROLES_INFO[state.role];
-  if (!info) {
-    banner.classList.add('hidden');
-    banner.innerHTML = '';
-    return;
-  }
-
-  banner.classList.remove('hidden');
-  banner.innerHTML = `
-    <div class="role-banner-content">
-      <div class="role-avatar">${info.avatar}</div>
-      <div>
-        <div class="role-info-title">${esc(info.title)}</div>
-        <div class="role-info-desc">${esc(info.desc)}</div>
-      </div>
-    </div>
-    <div class="role-actions">
-      ${info.actions.map(a => `
-        <button class="role-action-btn" data-view="${a.view}">${esc(a.label)}</button>
-      `).join('')}
-    </div>
-  `;
-
-  banner.querySelectorAll('.role-action-btn').forEach(btn => {
-    btn.addEventListener('click', () => navigateTo(btn.dataset.view));
-  });
-}
-
-// ══════════════════════════ EVENT LISTENERS SETUP ══════════════════════════ //
 function setupGlobalEvents() {
   window.addEventListener('hashchange', () => {
     const hash = location.hash.slice(1);
@@ -290,43 +202,6 @@ function setupGlobalEvents() {
     });
   }
 
-  // App Switcher Grid
-  const appGrid = document.getElementById('app-switcher-grid');
-  if (appGrid) {
-    appGrid.addEventListener('click', e => {
-      const chip = e.target.closest('[data-app]');
-      if (!chip) return;
-      appGrid.querySelectorAll('.app-chip').forEach(c => c.classList.remove('active'));
-      chip.classList.add('active');
-      state.appFilter = chip.dataset.app;
-      renderNav();
-
-      // Quick jump if current view doesn't match app
-      if (state.appFilter === 'sales' && !['orders', 'products', 'cash'].includes(state.view)) navigateTo('orders');
-      else if (state.appFilter === 'stock' && !['pickings', 'quants', 'moves', 'interbranch', 'delivery'].includes(state.view)) navigateTo('quants');
-      else if (state.appFilter === 'shell') navigateTo('shells');
-      else if (state.appFilter === 'fsm') navigateTo('dvgt');
-      else if (state.appFilter === 'kpi' && !['kpi', 'guards', 'cash'].includes(state.view)) navigateTo('kpi');
-      else if (state.appFilter === 'blueprint' && !['blueprint', 'audit', 'relations'].includes(state.view)) navigateTo('blueprint');
-    });
-  }
-
-  // Role Selector
-  const roleSelect = document.getElementById('role-select');
-  if (roleSelect) {
-    roleSelect.addEventListener('change', e => {
-      state.role = e.target.value;
-      renderRoleBanner();
-    });
-  }
-
-  // Simulation CTA Buttons
-  const topSimBtn = document.getElementById('top-sim-btn');
-  if (topSimBtn) topSimBtn.addEventListener('click', () => navigateTo('simulation'));
-
-  const sideSimBtn = document.getElementById('sidebar-sim-btn');
-  if (sideSimBtn) sideSimBtn.addEventListener('click', () => navigateTo('simulation'));
-
   const btnOrder = document.getElementById('btn-quick-order');
   if (btnOrder) btnOrder.addEventListener('click', () => openCreateOrderModal());
 
@@ -334,14 +209,13 @@ function setupGlobalEvents() {
   if (btnDvgt) btnDvgt.addEventListener('click', () => openCreateDvgtModal());
 }
 
-// ══════════════════════════ BADGE & STATUSBAR HELPERS ══════════════════════════ //
 function renderBadge(status) {
   const m = {
-    draft: ['Dự thảo / Báo giá', 'badge-draft'],
-    sale: ['Đã duyệt đơn', 'badge-sale'],
+    draft: ['Dự thảo', 'badge-draft'],
+    sale: ['Đã duyệt', 'badge-sale'],
     done: ['Hoàn thành', 'badge-done'],
-    confirmed: ['Sẵn sàng xuất', 'badge-purple'],
-    assigned: ['Đang thực hiện', 'badge-warning'],
+    confirmed: ['Sẵn sàng', 'badge-purple'],
+    assigned: ['Đang xử lý', 'badge-warning'],
     completed: ['Đã có phiếu', 'badge-done'],
     cancelled: ['Đã hủy', 'badge-danger'],
   };
@@ -351,10 +225,10 @@ function renderBadge(status) {
 
 function renderDocStatusbar(currentStatus) {
   const steps = [
-    { key: 'draft', label: '1. Báo giá (Draft)' },
-    { key: 'sale', label: '2. Đơn bán (Sale)' },
-    { key: 'delivery', label: '3. Xuất kho (Delivery)' },
-    { key: 'done', label: '4. Hoàn tất (Done)' },
+    { key: 'draft', label: '1. Dự thảo' },
+    { key: 'sale', label: '2. Đơn bán' },
+    { key: 'delivery', label: '3. Xuất kho' },
+    { key: 'done', label: '4. Hoàn tất' },
   ];
 
   let currentIndex = 0;
@@ -374,621 +248,118 @@ function renderDocStatusbar(currentStatus) {
   `;
 }
 
-// ══════════════════════════ RENDER VIEWS DISPATCHER ══════════════════════════ //
+// ══════════════════════════ VIEW DISPATCHER ══════════════════════════ //
 async function renderView() {
   const container = document.getElementById('view-container');
   if (!container) return;
-  container.innerHTML = `<div style="text-align:center; padding:40px; color:#64748b;">Đang tải dữ liệu...</div>`;
+  container.innerHTML = `<div style="text-align:center; padding:40px; color:#64748b;">Đang tải...</div>`;
 
   try {
     switch (state.view) {
-      case 'simulation': await renderSimulation(container); break;
-      case 'blueprint': await renderBlueprint(container); break;
-      case 'commercial': await renderCommercial(container); break;
+      // 1. TỔNG QUAN
       case 'overview': await renderOverview(container); break;
       case 'worklist': await renderWorklist(container); break;
-      case 'products': await renderProducts(container); break;
+
+      // 2. BÁN HÀNG
       case 'orders': await renderOrders(container); break;
+      case 'customers': await renderCustomers(container); break;
+      case 'cash': await renderCash(container); break;
+      case 'products': await renderProducts(container); break;
+      case 'delivery': await renderDelivery(container); break;
       case 'dvgt': await renderDvgt(container); break;
-      case 'pickings': await renderPickings(container); break;
+
+      // 3. NHÂN SỰ
+      case 'employees': await renderEmployees(container); break;
+      case 'kpi': await renderKpi(container); break;
+      case 'kpi_station': await renderKpiStation(container); break;
+      case 'guards': await renderGuards(container); break;
+
+      // 4. KHO BÃI
       case 'quants': await renderQuants(container); break;
+      case 'pickings': await renderPickings(container); break;
       case 'moves': await renderMoves(container); break;
       case 'shells': await renderShells(container); break;
-      case 'delivery': await renderDelivery(container); break;
-      case 'cash': await renderCash(container); break;
-      case 'kpi': await renderKpi(container); break;
       case 'interbranch': await renderInterbranch(container); break;
-      case 'guards': await renderGuards(container); break;
+
+      // 5. BÁO CÁO
+      case 'commercial': await renderCommercial(container); break;
+      case 'report_debt': await renderReportDebt(container); break;
+      case 'report_shells': await renderReportShells(container); break;
       case 'audit': await renderAudit(container); break;
-      case 'relations': await renderRelations(container); break;
+
+      // 6. CẤU HÌNH
+      case 'config': await renderConfig(container); break;
+      case 'blueprint': await renderBlueprint(container); break;
+
       default: await renderOverview(container); break;
     }
   } catch (err) {
-    container.innerHTML = `<div style="padding:20px; color:#dc2626;">Lỗi tải màn hình: ${err.message}</div>`;
+    container.innerHTML = `<div style="padding:20px; color:#dc2626;">Lỗi tải dữ liệu: ${err.message}</div>`;
   }
 }
 
-// ══════════════════════════ 1. LIVE SIMULATION WIZARD ══════════════════════════ //
-async function renderSimulation(el) {
-  const sim = await api('/api/simulation/state');
-  state.simState = sim;
-
-  // Also query live data for inspection panels if simulation has started
-  let simOrder = null;
-  let simPicking = null;
-  let simShell = null;
-  let simKpi = null;
-
-  if (sim.step >= 1) {
-    try {
-      const orders = await api('/api/orders');
-      simOrder = orders.find(o => o.name === 'SO/2026/09/SIM-01');
-    } catch (e) {}
-  }
-  if (sim.step >= 2) {
-    try {
-      const pickings = await api('/api/pickings');
-      simPicking = pickings.find(p => p.name === 'WH/OUT/SIM-01');
-    } catch (e) {}
-  }
-  if (sim.step >= 3) {
-    try {
-      const shells = await api('/api/shells');
-      simShell = shells.ledgers.find(l => l.customer.includes('Tuấn Anh'));
-      const kpis = await api('/api/kpi');
-      simKpi = kpis.employees.find(e => e.name.includes('Lương Minh Hương'));
-    } catch (e) {}
-  }
-
-  el.innerHTML = `
-    <!-- Hero Banner -->
-    <div class="sim-hero-banner">
-      <div>
-        <div class="sim-hero-title">⚡ CHU TRÌNH VẬN HÀNH MÔ PHỎNG THỰC TẾ (END-TO-END WORKFLOW)</div>
-        <div class="sim-hero-subtitle">
-          Khám phá cách QAROMI ERP tự động hóa chu trình khép kín thay thế toàn bộ bảng tính Excel rời rạc:
-          Từ lúc Tiếp thị nhận đơn ➔ Điều phối xe nạp kho ➔ Giao hàng & thu vỏ ➔ Tự động cập nhật đồng thời 4 Sổ sách.
-        </div>
-      </div>
-      <div>
-        <button class="btn btn-secondary btn-sm" id="btn-sim-reset" style="background:rgba(255,255,255,0.1); color:#fff; border:1px solid rgba(255,255,255,0.25);">
-          ↺ Đặt lại từ đầu (Reset)
-        </button>
-      </div>
-    </div>
-
-    <!-- Stepper 4 Steps -->
-    <div class="sim-stepper-grid">
-      <!-- Step 1 -->
-      <div class="sim-step-card ${sim.step === 0 ? 'active' : (sim.step >= 1 ? 'completed' : '')}">
-        <div class="sim-step-header">
-          <div class="sim-step-number">${sim.step >= 1 ? '✓' : '1'}</div>
-          <span class="sim-step-badge ${sim.step >= 1 ? 'badge-done' : (sim.step === 0 ? 'badge-primary' : 'badge-draft')}">
-            ${sim.step >= 1 ? 'Đã hoàn tất' : (sim.step === 0 ? 'Chờ kích hoạt' : 'Đã xong')}
-          </span>
-        </div>
-        <div class="sim-step-title">Bước 1: Tiếp nhận Đơn & KM</div>
-        <div class="sim-step-desc">
-          Tổ Tiếp thị nhận đơn Nhà hàng Tuấn Anh: 20 bình Kiềm 19L + 2 bình KM (10+1) = 1.040.000đ. Hệ thống sinh báo giá SO/2026/09/SIM-01.
-        </div>
-        <div>
-          ${sim.step === 0 ? `
-            <button class="sim-step-btn btn-run" data-step="1">▶ 1. Tạo Báo Giá Đơn Hàng</button>
-          ` : `
-            <button class="sim-step-btn btn-done">✓ Đã sinh báo giá</button>
-          `}
-        </div>
-      </div>
-
-      <!-- Step 2 -->
-      <div class="sim-step-card ${sim.step === 1 ? 'active' : (sim.step >= 2 ? 'completed' : '')}">
-        <div class="sim-step-header">
-          <div class="sim-step-number">${sim.step >= 2 ? '✓' : '2'}</div>
-          <span class="sim-step-badge ${sim.step >= 2 ? 'badge-done' : (sim.step === 1 ? 'badge-primary' : 'badge-draft')}">
-            ${sim.step >= 2 ? 'Đã hoàn tất' : (sim.step === 1 ? 'Chờ kích hoạt' : 'Chưa đến')}
-          </span>
-        </div>
-        <div class="sim-step-title">Bước 2: Lệnh Điều Xe & Kho</div>
-        <div class="sim-step-desc">
-          Xác nhận đơn: Tự sinh phiếu xuất WH/OUT/SIM-01 (Kho Tăng Áp ➔ Xe tải điện). Tự động phân bổ cước 110.000đ (55k tài xế Phương + 55k bảo vệ Hoàng bốc xếp).
-        </div>
-        <div>
-          ${sim.step === 1 ? `
-            <button class="sim-step-btn btn-run" data-step="2">▶ 2. Xác Nhận & Điều Xe</button>
-          ` : (sim.step >= 2 ? `
-            <button class="sim-step-btn btn-done">✓ Đã xuất nạp xe điện</button>
-          ` : `
-            <button class="sim-step-btn btn-disabled">Chờ Bước 1</button>
-          `)}
-        </div>
-      </div>
-
-      <!-- Step 3 -->
-      <div class="sim-step-card ${sim.step === 2 ? 'active' : (sim.step >= 3 ? 'completed' : '')}">
-        <div class="sim-step-header">
-          <div class="sim-step-number">${sim.step >= 3 ? '✓' : '3'}</div>
-          <span class="sim-step-badge ${sim.step >= 3 ? 'badge-done' : (sim.step === 2 ? 'badge-primary' : 'badge-draft')}">
-            ${sim.step >= 3 ? 'Đã hoàn tất' : (sim.step === 2 ? 'Chờ kích hoạt' : 'Chưa đến')}
-          </span>
-        </div>
-        <div class="sim-step-title">Bước 3: Giao Hàng & Thu Vỏ</div>
-        <div class="sim-step-desc">
-          Xe điện giao 22 bình tại Bến Đoan. Thu hồi 20 vỏ úp rỗng mang về (khách nợ 2 vỏ). Thu đủ 1.040.000đ tiền mặt COD nộp về thủ quỹ.
-        </div>
-        <div>
-          ${sim.step === 2 ? `
-            <button class="sim-step-btn btn-run" data-step="3">▶ 3. Giao Hàng & Thu Vỏ</button>
-          ` : (sim.step >= 3 ? `
-            <button class="sim-step-btn btn-done">✓ Giao hàng thành công</button>
-          ` : `
-            <button class="sim-step-btn btn-disabled">Chờ Bước 2</button>
-          `)}
-        </div>
-      </div>
-
-      <!-- Step 4 -->
-      <div class="sim-step-card ${sim.step === 3 ? 'active' : (sim.step >= 4 ? 'completed' : '')}">
-        <div class="sim-step-header">
-          <div class="sim-step-number">${sim.step >= 4 ? '✓' : '4'}</div>
-          <span class="sim-step-badge ${sim.step >= 4 ? 'badge-done' : (sim.step === 3 ? 'badge-primary' : 'badge-draft')}">
-            ${sim.step >= 4 ? 'Đã hoàn tất' : (sim.step === 3 ? 'Chờ kích hoạt' : 'Chưa đến')}
-          </span>
-        </div>
-        <div class="sim-step-title">Bước 4: Bút Toán Tự Động 4 Sổ</div>
-        <div class="sim-step-desc">
-          Tất cả 4 phòng ban: Kho (giảm tồn) · Vỏ bình (ghi nợ 2 vỏ) · Quỹ tiền (đã thu) · Thi đua KPI (+1.040.000đ cho chị Hương) được cập nhật đồng thời!
-        </div>
-        <div>
-          ${sim.step === 3 ? `
-            <button class="sim-step-btn btn-run" data-step="4" style="background:#16a34a;">★ Hoàn Tất Chu Trình</button>
-          ` : (sim.step >= 4 ? `
-            <button class="sim-step-btn btn-done">★ Toàn bộ 4 sổ đã khớp</button>
-          ` : `
-            <button class="sim-step-btn btn-disabled">Chờ Bước 3</button>
-          `)}
-        </div>
-      </div>
-    </div>
-
-    <!-- Live Multi-Ledger Database Inspection Panel -->
-    <div class="card-box" style="margin-bottom:20px;">
-      <div class="card-box-header">
-        <span class="card-box-title">🔍 Bảng Kiểm Chứng Trực Tiếp 4 Sổ Sách (Live Multi-Ledger Inspection)</span>
-        <span class="badge badge-sale">Dữ liệu biến động tức thì trên SQLite Database</span>
-      </div>
-      <div class="card-box-body">
-        <div class="sim-ledger-grid">
-          <!-- Ledger 1: Bán hàng -->
-          <div class="ledger-card">
-            <div class="ledger-card-header">
-              <span class="ledger-card-title">🧾 1. Sổ Bán Hàng & Đơn Hàng</span>
-              ${simOrder ? renderBadge(simOrder.state) : '<span class="badge badge-draft">Chưa phát sinh</span>'}
-            </div>
-            ${simOrder ? `
-              <div class="ledger-row"><span class="ledger-row-label">Mã đơn:</span><span class="ledger-row-val font-bold text-primary">${simOrder.name}</span></div>
-              <div class="ledger-row"><span class="ledger-row-label">Khách hàng:</span><span class="ledger-row-val">${esc(simOrder.partner_name)}</span></div>
-              <div class="ledger-row"><span class="ledger-row-label">Người bán (KPI):</span><span class="ledger-row-val">${esc(simOrder.seller)}</span></div>
-              <div class="ledger-row"><span class="ledger-row-label">Quy cách & KM:</span><span class="ledger-row-val">20 bình + 2 bình tặng (10+1)</span></div>
-              <div class="ledger-row"><span class="ledger-row-label">Tổng thanh toán:</span><span class="ledger-row-val text-success font-bold">${fmt(simOrder.amount_total)} đ</span></div>
-              <div class="ledger-row"><span class="ledger-row-label">Tiền mặt đã thu:</span><span class="ledger-row-val font-bold ${simOrder.paid_amount > 0 ? 'text-success' : 'text-danger'}">${fmt(simOrder.paid_amount)} đ</span></div>
-            ` : `
-              <div style="color:#94a3b8; font-size:12px; padding:20px 0; text-align:center;">Chưa chạy Bước 1. Bấm "Tạo Báo Giá Đơn Hàng" để xem dữ liệu.</div>
-            `}
-          </div>
-
-          <!-- Ledger 2: Kho vận & Đội xe -->
-          <div class="ledger-card">
-            <div class="ledger-card-header">
-              <span class="ledger-card-title">📦 2. Sổ Kho Kép & Đội Xe</span>
-              ${simPicking ? renderBadge(simPicking.state) : '<span class="badge badge-draft">Chưa phát sinh</span>'}
-            </div>
-            ${simPicking ? `
-              <div class="ledger-row"><span class="ledger-row-label">Mã lệnh kho:</span><span class="ledger-row-val font-bold">${simPicking.name}</span></div>
-              <div class="ledger-row"><span class="ledger-row-label">Nguồn ➔ Đích:</span><span class="ledger-row-val font-bold">${esc(simPicking.src_name)} ➔ ${esc(simPicking.dest_name)}</span></div>
-              <div class="ledger-row"><span class="ledger-row-label">Tổng cước 5.000đ/bình:</span><span class="ledger-row-val font-bold text-primary">${fmt(simPicking.carrier_fee)} đ</span></div>
-              <div class="ledger-row"><span class="ledger-row-label">Phân bổ Lái xe (Phương):</span><span class="ledger-row-val text-success font-bold">55.000 đ</span></div>
-              <div class="ledger-row"><span class="ledger-row-label">Phân bổ Bảo vệ (Hoàng):</span><span class="ledger-row-val text-success font-bold">55.000 đ</span></div>
-              <div class="ledger-row"><span class="ledger-row-label">Trạng thái tồn xe điện:</span><span class="ledger-row-val ${sim.step >= 3 ? 'text-success font-bold' : 'text-primary'}">${sim.step >= 3 ? 'Đã xuất kho khách (-22 bình)' : 'Đang nạp trên xe (+22 bình)'}</span></div>
-            ` : `
-              <div style="color:#94a3b8; font-size:12px; padding:20px 0; text-align:center;">Chưa chạy Bước 2. Bấm "Xác Nhận & Điều Xe" để xem lệnh kho.</div>
-            `}
-          </div>
-
-          <!-- Ledger 3: Vỏ bình -->
-          <div class="ledger-card">
-            <div class="ledger-card-header">
-              <span class="ledger-card-title">🧴 3. Sổ Nợ Vỏ Bình Đa Kỳ</span>
-              ${simShell ? '<span class="badge badge-done">Đã đối trừ</span>' : '<span class="badge badge-draft">Chưa phát sinh</span>'}
-            </div>
-            ${simShell ? `
-              <div class="ledger-row"><span class="ledger-row-label">Khách hàng giữ vỏ:</span><span class="ledger-row-val font-bold">${esc(simShell.customer)}</span></div>
-              <div class="ledger-row"><span class="ledger-row-label">Số vỏ giao mới:</span><span class="ledger-row-val font-bold text-primary">${simShell.in_up} vỏ bình Úp</span></div>
-              <div class="ledger-row"><span class="ledger-row-label">Số vỏ rỗng đã thu hồi:</span><span class="ledger-row-val font-bold text-success">${simShell.returned_up} vỏ bình Úp</span></div>
-              <div class="ledger-row"><span class="ledger-row-label">Số nợ tồn lại cuối kỳ:</span><span class="ledger-row-val font-bold text-danger">${simShell.closing_up} vỏ bình Úp</span></div>
-              <div class="ledger-row"><span class="ledger-row-label">Công thức tự động:</span><span class="ledger-row-val">Cuối kỳ (2) = 0 + 22 - 20</span></div>
-              <div class="ledger-row"><span class="ledger-row-label">Ghi chú vận hành:</span><span class="ledger-row-val">${esc(simShell.note)}</span></div>
-            ` : `
-              <div style="color:#94a3b8; font-size:12px; padding:20px 0; text-align:center;">Chưa chạy Bước 3. Bấm "Giao Hàng & Thu Vỏ" để xem sổ nợ vỏ.</div>
-            `}
-          </div>
-
-          <!-- Ledger 4: Quỹ tiền & Thi đua KPI -->
-          <div class="ledger-card">
-            <div class="ledger-card-header">
-              <span class="ledger-card-title">🎯 4. Quỹ Tiền COD & Thi Đua KPI 2026</span>
-              ${sim.step >= 3 ? '<span class="badge badge-done">Đã ghi nhận</span>' : '<span class="badge badge-draft">Chưa phát sinh</span>'}
-            </div>
-            ${sim.step >= 3 ? `
-              <div class="ledger-row"><span class="ledger-row-label">Tiền mặt COD thu được:</span><span class="ledger-row-val font-bold text-success">1.040.000 đ (Lái xe nộp)</span></div>
-              <div class="ledger-row"><span class="ledger-row-label">Nhân sự thụ hưởng KPI:</span><span class="ledger-row-val font-bold">${simKpi ? esc(simKpi.name) : 'Lương Minh Hương'}</span></div>
-              <div class="ledger-row"><span class="ledger-row-label">Đơn vị công tác:</span><span class="ledger-row-val">Tổ Tiếp thị — Xí nghiệp Nước Hòn Gai</span></div>
-              <div class="ledger-row"><span class="ledger-row-label">Doanh số ghi nhận mới:</span><span class="ledger-row-val font-bold text-success">+ 1.040.000 đ</span></div>
-              <div class="ledger-row"><span class="ledger-row-label">Tổng lũy kế hiện tại:</span><span class="ledger-row-val font-bold text-primary">${simKpi ? fmt(simKpi.total) : '24.168.000'} đ</span></div>
-              <div class="ledger-row"><span class="ledger-row-label">Đánh giá thi đua:</span><span class="ledger-row-val text-success font-bold">Vượt 306% chỉ tiêu năm!</span></div>
-            ` : `
-              <div style="color:#94a3b8; font-size:12px; padding:20px 0; text-align:center;">Chưa giao hàng. Sau Bước 3 hệ thống sẽ ghi nhận tiền COD và cộng dồn KPI thi đua.</div>
-            `}
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Simulation Timeline / History -->
-    <div class="card-box">
-      <div class="card-box-header">
-        <span class="card-box-title">📜 Nhật Ký Chu Trình Vận Hành (Execution Log)</span>
-        <span style="font-size:12px; color:#64748b;">Ghi nhận ${sim.history.length} sự kiện thực thi</span>
-      </div>
-      <div class="card-box-body">
-        ${sim.history.length === 0 ? `
-          <div style="color:#94a3b8; font-size:12px; text-align:center; padding:20px 0;">
-            Chưa có thao tác nào. Bấm <b>"▶ 1. Tạo Báo Giá Đơn Hàng"</b> ở góc trên bên trái để bắt đầu mô phỏng trực quan!
-          </div>
-        ` : `
-          <div style="display:flex; flex-direction:column; gap:12px;">
-            ${sim.history.map(h => `
-              <div style="display:flex; gap:14px; align-items:flex-start; padding:10px 14px; background:#f8fafc; border-radius:8px; border-left:3px solid #2563eb;">
-                <span class="badge badge-sale" style="margin-top:2px;">${esc(h.time)}</span>
-                <div>
-                  <div style="font-size:13px; font-weight:700; color:#1e293b;">Bước ${h.step}: ${esc(h.title)}</div>
-                  <div style="font-size:12px; color:#64748b; margin-top:2px;">${esc(h.detail)}</div>
-                </div>
-              </div>
-            `).join('')}
-          </div>
-        `}
-      </div>
-    </div>
-  `;
-
-  // Bind Buttons
-  el.querySelectorAll('[data-step]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const target_step = Number(btn.dataset.step);
-      btn.disabled = true;
-      btn.textContent = 'Đang thực thi...';
-      try {
-        await api('/api/simulation/step', {
-          method: 'POST',
-          body: JSON.stringify({ target_step })
-        });
-        showToast('Đã thực hiện thành công Bước ' + target_step + '!');
-        renderSimulation(el);
-      } catch (e) {
-        btn.disabled = false;
-      }
-    });
-  });
-
-  const btnReset = el.querySelector('#btn-sim-reset');
-  if (btnReset) {
-    btnReset.addEventListener('click', async () => {
-      if (!confirm('Bạn có chắc muốn đặt lại toàn bộ trạng thái chu trình mô phỏng về ban đầu?')) return;
-      await api('/api/simulation/reset', { method: 'POST' });
-      showToast('Đã reset chu trình mô phỏng thành công!');
-      renderSimulation(el);
-    });
-  }
-}
-
-// ══════════════════════════ 2. SOLUTION BLUEPRINT VIEW ══════════════════════════ //
-async function renderBlueprint(el) {
-  const bp = await api('/api/blueprint');
-
-  el.innerHTML = `
-    <!-- Hero Banner -->
-    <div class="sim-hero-banner" style="background: linear-gradient(135deg, #312e81, #1e1b4b);">
-      <div>
-        <div class="sim-hero-title">🏛️ ${esc(bp.title)}</div>
-        <div class="sim-hero-subtitle">${esc(bp.description)}</div>
-      </div>
-      <div>
-        <button class="btn btn-simulation btn-sm" id="bp-btn-run-sim">
-          ⚡ Chạy thử chu trình ngay
-        </button>
-      </div>
-    </div>
-
-    <!-- Interactive Data Flow Diagram -->
-    <div class="bp-flow-wrap">
-      <div class="bp-flow-title">1. Sơ Đồ Luồng Dữ Liệu Khép Kín (End-to-End Data Flow Diagram)</div>
-      <div class="bp-flow-sub">Mô hình liên kết các chứng từ và dữ liệu giữa các bộ phận, loại bỏ hoàn toàn việc gõ tay nhập lại dữ liệu</div>
-      <div class="bp-nodes-container">
-        <div class="bp-node">
-          <div class="bp-node-icon">👥</div>
-          <div class="bp-node-title">1. Khách Hàng / Tiếp Thị</div>
-          <div class="bp-node-desc">Đại lý, cơ quan, CBCNV vận động</div>
-        </div>
-        <div class="bp-arrow">➔</div>
-        <div class="bp-node" style="border-color:#3b82f6; background:#eff6ff;">
-          <div class="bp-node-icon">🧾</div>
-          <div class="bp-node-title">2. Đơn Bán (SO)</div>
-          <div class="bp-node-desc">Báo giá, KM 10+1, Kênh XN/CTY</div>
-        </div>
-        <div class="bp-arrow">➔</div>
-        <div class="bp-node" style="border-color:#8b5cf6; background:#f5f3ff;">
-          <div class="bp-node-icon">📋</div>
-          <div class="bp-node-title">3. Lệnh Kho Kép</div>
-          <div class="bp-node-desc">Kho Tăng Áp ➔ Xe tải điện</div>
-        </div>
-        <div class="bp-arrow">➔</div>
-        <div class="bp-node" style="border-color:#f59e0b; background:#fffbeb;">
-          <div class="bp-node-icon">🚚</div>
-          <div class="bp-node-title">4. Đội Xe & Bảo Vệ</div>
-          <div class="bp-node-desc">Chia cước 5k/bình tài xế + phụ xe</div>
-        </div>
-        <div class="bp-arrow">➔</div>
-        <div class="bp-node" style="border-color:#10b981; background:#f0fdf4;">
-          <div class="bp-node-icon">🧴</div>
-          <div class="bp-node-title">5. Giao Hàng & Thu Vỏ</div>
-          <div class="bp-node-desc">Giao nước, thu vỏ rỗng mang về</div>
-        </div>
-        <div class="bp-arrow">➔</div>
-        <div class="bp-node" style="border-color:#ec4899; background:#fdf2f8;">
-          <div class="bp-node-icon">📊</div>
-          <div class="bp-node-title">6. Hạch Toán 4 Sổ</div>
-          <div class="bp-node-desc">Sổ Kho · Sổ Vỏ · Sổ Quỹ · Sổ KPI</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 6 Architecture Modules -->
-    <div style="font-size:16px; font-weight:700; color:#1e293b; margin-bottom:12px;">
-      2. Danh Mục 6 Phân Hệ Nghiệp Vụ Chuẩn Hóa (MiERP Modular Architecture)
-    </div>
-    <div class="bp-modules-grid">
-      ${bp.modules.map(m => `
-        <div class="bp-module-card">
-          <div class="bp-module-title">${esc(m.name)}</div>
-          <div class="bp-module-ref">${esc(m.mierp_ref)}</div>
-          <div class="bp-module-desc">${esc(m.purpose)}</div>
-          <div style="font-size:11px; font-weight:600; color:#64748b; margin-bottom:4px;">Thực thể dữ liệu (Entities):</div>
-          <div class="bp-module-tags">
-            ${m.entities.map(e => `<span class="bp-tag font-bold">${esc(e)}</span>`).join('')}
-          </div>
-          <div style="font-size:11px; color:#64748b; margin-top:10px;">
-            <b>Đối tượng sử dụng:</b> ${m.target_users.join(', ')}
-          </div>
-        </div>
-      `).join('')}
-    </div>
-
-    <!-- Interactive Data Dictionary -->
-    <div class="card-box" style="margin-bottom:24px;">
-      <div class="card-box-header">
-        <span class="card-box-title">3. Từ Điển Dữ Liệu Chi Tiết (Data Dictionary & Excel Field Mapping)</span>
-        <span class="badge badge-purple">Nguồn gốc chuẩn hóa từ 3 bảng tính Excel vận hành</span>
-      </div>
-      <div class="card-box-body">
-        <div style="font-size:12px; color:#64748b; margin-bottom:16px;">
-          Bảng từ điển định nghĩa toàn bộ trường dữ liệu cốt lõi, quy cách lưu trữ, ràng buộc nghiệp vụ và đối chiếu với nguồn dữ liệu cũ trên Excel:
-        </div>
-        ${bp.data_dictionary.map(dict => `
-          <div style="margin-bottom:24px; border:1px solid #e2e8f0; border-radius:8px; overflow:hidden;">
-            <div style="background:#f8fafc; padding:12px 16px; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center;">
-              <div>
-                <span style="font-weight:700; color:#1e293b; font-size:13px;">Bảng ${esc(dict.entity)}: ${esc(dict.title)}</span>
-              </div>
-              <span class="badge badge-sale">Nguồn: ${esc(dict.excel_source)}</span>
-            </div>
-            <div class="table-responsive">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>Tên trường (Field)</th>
-                    <th>Kiểu dữ liệu</th>
-                    <th>Ràng buộc</th>
-                    <th>Ý nghĩa nghiệp vụ & Giải pháp ERP</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${dict.fields.map(f => `
-                    <tr>
-                      <td class="font-bold font-mono text-primary">${esc(f.name)}</td>
-                      <td><span class="badge badge-draft">${esc(f.type)}</span></td>
-                      <td>${f.req.includes('Bắt buộc') ? '<span class="badge badge-danger">Bắt buộc</span>' : '<span class="badge badge-purple">' + esc(f.req) + '</span>'}</td>
-                      <td>${esc(f.desc)}</td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-
-    <!-- Comparative Table: Excel vs QAROMI ERP -->
-    <div class="card-box">
-      <div class="card-box-header">
-        <span class="card-box-title">4. So Sánh Bài Toán Vận Hành: Excel Cũ vs QAROMI ERP Hiện Đại</span>
-        <span class="badge badge-done">Khắc phục 100% rủi ro đã kiểm toán</span>
-      </div>
-      <div class="card-box-body">
-        <div class="table-responsive">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Vấn đề nghiệp vụ trên Excel cũ</th>
-                <th>Hậu quả vận hành thực tế</th>
-                <th>Giải pháp kiến trúc trong QAROMI ERP</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td class="font-bold text-danger">12 ô công thức #REF! tại Sheet TỒN</td>
-                <td>Số tồn kho biến dạng, mất cân đối số liệu kho Huế và Tăng Áp</td>
-                <td class="text-success font-bold">Cơ sở dữ liệu quan hệ chuẩn, khóa ngoại Foreign Key, không bao giờ bị đứt gãy công thức</td>
-              </tr>
-              <tr>
-                <td class="font-bold text-danger">Xe tải điện bị tồn âm (xuất trước khi nạp)</td>
-                <td>Không biết trên xe đang chở bao nhiêu bình nước, rủi ro thất thoát</td>
-                <td class="text-success font-bold">Mô hình Kho lưu động (Transit Location) với phiếu xuất kho kép Nguồn ➔ Đích bắt buộc</td>
-              </tr>
-              <tr>
-                <td class="font-bold text-danger">Sổ nợ vỏ bình âm do gộp chung Úp & Vòi</td>
-                <td>Khách trả vỏ vòi nhưng trừ vào vỏ úp, kế toán và đại lý tranh cãi</td>
-                <td class="text-success font-bold">Tách bạch 2 dòng tài sản riêng biệt (Úp / Vòi) và quản lý chặt quỹ ký cược cọc vỏ 50.000đ</td>
-              </tr>
-              <tr>
-                <td class="font-bold text-danger">Phân bổ cước 5k và trực bảo vệ ghi sổ tay</td>
-                <td>Cuối tháng kế toán mất nhiều ngày đối soát chuyến giao và chia tiền</td>
-                <td class="text-success font-bold">Tự động tính cước 5.000đ/bình và chia đều cho lái xe + bảo vệ ngay trên lệnh điều xe</td>
-              </tr>
-              <tr>
-                <td class="font-bold text-danger">Chỉ tiêu thi đua 1.59 tỷ cộng dồn thủ công</td>
-                <td>Không có động lực thi đua tức thời, số liệu báo cáo chậm trễ nhiều ngày</td>
-                <td class="text-success font-bold">Cộng dồn doanh số thời gian thực vào bảng thi đua 202 CBCNV ngay khi đơn hàng hoàn thành</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  `;
-
-  const btnRun = el.querySelector('#bp-btn-run-sim');
-  if (btnRun) btnRun.addEventListener('click', () => navigateTo('simulation'));
-}
-
-// 1. Overview View
+// ══════════════════════════ 1. BẢNG ĐIỀU KHIỂN (CLEAN PRODUCT DASHBOARD) ══════════════════════════ //
 async function renderOverview(el) {
   const data = await api('/api/overview');
   const m = data.metrics;
-
-  document.getElementById('top-kpi-bar').style.width = `${Math.min(100, m.kpi_progress)}%`;
+  const orders = await api('/api/orders');
+  const recentOrders = orders.slice(0, 8);
 
   el.innerHTML = `
-    <!-- High Priority Audit Alert Banner -->
-    <div class="audit-alert-banner">
-      <div class="audit-alert-left">
-        <span class="audit-alert-icon">🚨</span>
-        <div>
-          <div class="audit-alert-title">
-            CẢNH BÁO KIỂM TOÁN DỮ LIỆU EXCEL GỐC
-            <span class="ref-badge">${m.excel_ref_errors || 12} Ô TÍNH HỎNG #REF!</span>
-          </div>
-          <div class="audit-alert-desc">
-            Phát hiện công thức hỏng <code>=SUMIFS(XUẤT!$W:$W,...,TỒN!#REF!)</code> tại Sheet <b>TỒN</b> trong file Excel khách hàng. QAROMI ERP đã khắc phục 100% tính toàn vẹn dữ liệu bằng CSDL quan hệ!
-          </div>
-        </div>
+    <!-- 4 Clean Metric Cards -->
+    <div class="metrics-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom:24px;">
+      <div class="metric-card">
+        <div class="metric-label">Doanh thu tháng 9/2026</div>
+        <div class="metric-value text-primary">${fmt(m.total_revenue)} <span style="font-size:14px; font-weight:normal;">đ</span></div>
+        <div class="metric-trend text-success">↑ 77 đơn hàng đã hoàn tất</div>
       </div>
-      <button class="audit-alert-btn" onclick="navigateTo('audit')">Xem Chi Tiết Kiểm Toán ➔</button>
-    </div>
-
-    <!-- Metrics Grid -->
-    <div class="metrics-grid">
-      <div class="metric-card highlight">
-        <div class="metric-header">
-          <span class="metric-title">Doanh số Tháng 9</span>
-          <span class="metric-icon">💵</span>
-        </div>
-        <div class="metric-value">${fmt(m.total_revenue)} đ</div>
-        <div class="metric-sub">${m.total_orders} đơn giao · Thu: ${fmt(m.total_paid)}đ</div>
+      <div class="metric-card">
+        <div class="metric-label">Sản lượng tiêu thụ</div>
+        <div class="metric-value">${fmt(m.delivered_bottles)} <span style="font-size:14px; font-weight:normal; color:#64748b;">bình & vỉ</span></div>
+        <div class="metric-trend">2.724 bình lũy kế xuất kho</div>
       </div>
-
-      <div class="metric-card warning">
-        <div class="metric-header">
-          <span class="metric-title">Nợ vỏ bình thị trường</span>
-          <span class="metric-icon">🧴</span>
-        </div>
-        <div class="metric-value">${fmt(m.debt_up + m.debt_voi)} bình</div>
-        <div class="metric-sub">Úp: ${fmt(m.debt_up)} | Vòi: ${fmt(m.debt_voi)} (Cọc: ${fmt(m.total_deposit)}đ)</div>
+      <div class="metric-card">
+        <div class="metric-label">Công nợ phải thu</div>
+        <div class="metric-value text-danger">${fmt(m.pending_debt)} <span style="font-size:14px; font-weight:normal;">đ</span></div>
+        <div class="metric-trend text-danger">38 khách hàng còn nợ đọng</div>
       </div>
-
-      <div class="metric-card success">
-        <div class="metric-header">
-          <span class="metric-title">Tiến độ Kế hoạch năm</span>
-          <span class="metric-icon">🎯</span>
-        </div>
-        <div class="metric-value">${m.kpi_progress}%</div>
-        <div class="metric-sub">Đạt: ${fmt(m.kpi_achieved)} / ${fmt(m.kpi_target)} đ</div>
-      </div>
-
-      <div class="metric-card purple">
-        <div class="metric-header">
-          <span class="metric-title">DVGT & Vật tư phụ tùng</span>
-          <span class="metric-icon">🔧</span>
-        </div>
-        <div class="metric-value">${m.dvgt_completed} ca xong</div>
-        <div class="metric-sub">Vật tư: ${fmt(m.dvgt_parts_fee)}đ | Công: ${fmt(m.dvgt_labor_fee)}đ</div>
+      <div class="metric-card">
+        <div class="metric-label">Nợ vỏ bình tại khách</div>
+        <div class="metric-value text-warning">${fmt(m.pending_shells)} <span style="font-size:14px; font-weight:normal; color:#64748b;">vỏ</span></div>
+        <div class="metric-trend">1.420 vỏ Úp · 422 vỏ Vòi</div>
       </div>
     </div>
 
-    <!-- Second Operational Metrics Row -->
-    <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:16px; margin-bottom:24px;">
-      <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:14px; display:flex; align-items:center; justify-content:space-between;">
-        <div>
-          <div style="font-size:11px; color:#64748b; font-weight:600; text-transform:uppercase;">Nguồn Tiếp Ứng Cẩm Phả</div>
-          <div style="font-size:20px; font-weight:700; color:#0f172a; margin:3px 0;">${fmt(m.interbranch_replenished || 180)} vỉ</div>
-          <div style="font-size:11.5px; color:#2563eb; cursor:pointer;" onclick="navigateTo('interbranch')">Xem điều chuyển liên chi nhánh ➔</div>
-        </div>
-        <span style="font-size:28px;">🚛</span>
-      </div>
-
-      <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:14px; display:flex; align-items:center; justify-content:space-between;">
-        <div>
-          <div style="font-size:11px; color:#64748b; font-weight:600; text-transform:uppercase;">Vay Mượn Hàng/Vỏ Nội Bộ</div>
-          <div style="font-size:20px; font-weight:700; color:#d97706; margin:3px 0;">${fmt(m.interbranch_loaned || 92)} đơn vị</div>
-          <div style="font-size:11.5px; color:#d97706; cursor:pointer;" onclick="navigateTo('interbranch')">Đối soát đơn vị bạn (BC, QY, CP) ➔</div>
-        </div>
-        <span style="font-size:28px;">🔄</span>
-      </div>
-
-      <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:14px; display:flex; align-items:center; justify-content:space-between;">
-        <div>
-          <div style="font-size:11px; color:#64748b; font-weight:600; text-transform:uppercase;">Trực Bảo Vệ Bốc Xếp</div>
-          <div style="font-size:20px; font-weight:700; color:#16a34a; margin:3px 0;">${m.guard_shifts || 23} ca trực</div>
-          <div style="font-size:11.5px; color:#16a34a; cursor:pointer;" onclick="navigateTo('guards')">Thù lao: ${fmt(m.guard_allowance || 1840000)}đ ➔</div>
-        </div>
-        <span style="font-size:28px;">🛡️</span>
-      </div>
-    </div>
-
-    <!-- Main Content Row -->
+    <!-- Main Grid: Recent Orders & Stock Overview -->
     <div style="display:grid; grid-template-columns: 2fr 1fr; gap:20px;">
-      <!-- Stock status -->
+      <!-- Left: Recent Sales Orders -->
       <div class="card-box">
         <div class="card-box-header">
-          <span class="card-box-title">🏬 Tồn kho thời gian thực tại các điểm</span>
-          <button class="btn btn-secondary btn-sm" onclick="navigateTo('quants')">Chi tiết kho ➔</button>
+          <span class="card-box-title">🧾 Đơn Bán Hàng Gần Đây</span>
+          <button class="btn btn-secondary btn-sm" onclick="navigateTo('orders')">Xem tất cả đơn ➔</button>
         </div>
-        <div class="card-box-body" style="padding:0;">
+        <div class="card-box-body">
           <div class="table-responsive">
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>Vị trí kho</th>
-                  <th>Mặt hàng</th>
-                  <th class="text-right">Tồn hiện tại</th>
+                  <th>Mã đơn</th>
+                  <th>Ngày</th>
+                  <th>Khách hàng</th>
+                  <th>Người bán</th>
+                  <th class="text-right">Tổng tiền</th>
+                  <th>Trạng thái</th>
                 </tr>
               </thead>
               <tbody>
-                ${data.stocks.slice(0, 10).map(s => `
+                ${recentOrders.map(o => `
                   <tr>
-                    <td class="font-semibold">${esc(s.warehouse)}</td>
-                    <td>${esc(s.name)}</td>
-                    <td class="text-right font-bold ${s.quantity < 20 ? 'text-danger' : 'text-primary'}">${fmt(s.quantity)}</td>
+                    <td class="font-bold text-primary">${esc(o.name)}</td>
+                    <td style="font-size:12px; color:#64748b;">${esc(o.date)}</td>
+                    <td class="font-bold" style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(o.partner_name)}</td>
+                    <td style="font-size:12px;">${esc(o.seller)}</td>
+                    <td class="text-right font-bold">${fmt(o.amount_total)} đ</td>
+                    <td>${renderBadge(o.state)}</td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -997,113 +368,758 @@ async function renderOverview(el) {
         </div>
       </div>
 
-      <!-- Quick Shortcuts -->
-      <div class="card-box">
-        <div class="card-box-header">
-          <span class="card-box-title">⚡ Thao tác nhanh</span>
+      <!-- Right: Stock & Action Summary -->
+      <div style="display:flex; flex-direction:column; gap:20px;">
+        <!-- Stock Balance Card -->
+        <div class="card-box">
+          <div class="card-box-header">
+            <span class="card-box-title">🏬 Tồn Kho Theo Điểm</span>
+            <button class="btn btn-secondary btn-sm" onclick="navigateTo('quants')">Chi tiết ➔</button>
+          </div>
+          <div class="card-box-body" style="padding:14px 16px;">
+            <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid #f1f5f9;">
+              <span style="font-weight:600;">Kho Tăng Áp:</span>
+              <span class="font-bold text-primary">548 bình/vỉ</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid #f1f5f9;">
+              <span style="font-weight:600;">Kho Huế:</span>
+              <span class="font-bold text-primary">426 bình/vỉ</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid #f1f5f9;">
+              <span style="font-weight:600;">Xe tải điện (Lưu động):</span>
+              <span class="font-bold text-success">330 bình/vỉ</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; padding:8px 0;">
+              <span style="font-weight:600;">Kho Văn Phòng:</span>
+              <span class="font-bold">498 bình/vỉ</span>
+            </div>
+          </div>
         </div>
-        <div class="card-box-body" style="display:flex; flex-direction:column; gap:10px;">
-          <button class="btn btn-primary" style="justify-content:center;" onclick="openCreateOrderModal()">＋ Lập Báo Giá / Đơn Mới</button>
-          <button class="btn btn-secondary" style="justify-content:center;" onclick="openCreateDvgtModal()">＋ Đăng Ký Ca DVGT / Thay Hộp ĐH</button>
-          <button class="btn btn-secondary" style="justify-content:center;" onclick="navigateTo('interbranch')">🚛 Tiếp Ứng Cẩm Phả & Vay Kho</button>
-          <button class="btn btn-secondary" style="justify-content:center;" onclick="navigateTo('guards')">🛡️ Lịch Trực Tổ Bảo Vệ</button>
-          <button class="btn btn-secondary" style="justify-content:center;" onclick="navigateTo('audit')">⚠️ Kiểm Toán Lỗi Excel (#REF!)</button>
+
+        <!-- Quick Access Card -->
+        <div class="card-box">
+          <div class="card-box-header">
+            <span class="card-box-title">⚡ Thao Tác Nhanh</span>
+          </div>
+          <div class="card-box-body" style="display:flex; flex-direction:column; gap:8px;">
+            <button class="btn btn-primary" style="width:100%; justify-content:center;" onclick="openCreateOrderModal()">＋ Lập báo giá đơn hàng</button>
+            <button class="btn btn-secondary" style="width:100%; justify-content:center;" onclick="openCreateDvgtModal()">＋ Đăng ký ca dịch vụ DVGT</button>
+            <button class="btn btn-secondary" style="width:100%; justify-content:center;" onclick="navigateTo('commercial')">📑 Xem Báo cáo thương mại QAROMI</button>
+          </div>
         </div>
       </div>
     </div>
   `;
 }
 
-// 2. Worklist View
+// ══════════════════════════ 2. VIỆC CẦN XỬ LÝ ══════════════════════════ //
 async function renderWorklist(el) {
   const data = await api('/api/worklist');
+
   el.innerHTML = `
-    <div class="card-box">
-      <div class="card-box-header">
-        <span class="card-box-title">⚡ Đơn hàng cần xử lý giao (${data.pendingOrders.length})</span>
+    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:16px; margin-bottom:20px;">
+      <div class="metric-card">
+        <div class="metric-label">Đơn hàng chờ giao</div>
+        <div class="metric-value text-primary">${data.pendingOrders.length}</div>
+        <div class="metric-trend">Cần điều xe tải điện nạp kho</div>
       </div>
-      <div class="card-box-body" style="padding:0;">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Mã đơn</th>
-              <th>Ngày</th>
-              <th>Khách hàng</th>
-              <th>Kênh</th>
-              <th>Người bán</th>
-              <th class="text-right">Tổng tiền</th>
-              <th>Trạng thái</th>
-              <th>Tác vụ</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${data.pendingOrders.map(o => `
-              <tr>
-                <td class="font-bold text-primary">${esc(o.name)}</td>
-                <td>${esc(o.date)}</td>
-                <td class="font-semibold">${esc(o.customer_name)}</td>
-                <td><span class="badge ${o.channel_code === 'XN' ? 'badge-sale' : 'badge-draft'}">${esc(o.channel_name)}</span></td>
-                <td>${esc(o.seller)}</td>
-                <td class="text-right font-bold">${fmt(o.amount_total)} đ</td>
-                <td>${renderBadge(o.state)}</td>
-                <td><button class="btn btn-secondary btn-sm" onclick="openOrderDetailModal(${o.id})">Xem đơn</button></td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
+      <div class="metric-card">
+        <div class="metric-label">Đơn hàng chưa thu tiền</div>
+        <div class="metric-value text-danger">${data.unpaidOrders.length}</div>
+        <div class="metric-trend text-danger">Theo dõi lái xe nộp COD</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Phiếu kho chờ xuất</div>
+        <div class="metric-value text-warning">${data.confirmedPickings.length}</div>
+        <div class="metric-trend">Thủ kho xác nhận xuất hàng</div>
       </div>
     </div>
 
-    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
-      <div class="card-box">
-        <div class="card-box-header">
-          <span class="card-box-title">💰 Tiền chưa thu (${data.uncollectedCash.length})</span>
-        </div>
-        <div class="card-box-body" style="padding:0;">
+    <div class="card-box" style="margin-bottom:20px;">
+      <div class="card-box-header">
+        <span class="card-box-title">🧾 Đơn Bán Chờ Giao Hàng (${data.pendingOrders.length})</span>
+      </div>
+      <div class="card-box-body">
+        <div class="table-responsive">
           <table class="data-table">
             <thead>
               <tr>
+                <th>Mã đơn</th>
+                <th>Ngày</th>
                 <th>Khách hàng</th>
                 <th>Người bán</th>
-                <th class="text-right">Còn phải thu</th>
-                <th>Ghi chú</th>
+                <th class="text-right">Tổng tiền</th>
+                <th>Thao tác</th>
               </tr>
             </thead>
             <tbody>
-              ${data.uncollectedCash.map(c => `
+              ${data.pendingOrders.map(o => `
                 <tr>
-                  <td class="font-semibold">${esc(c.customer_name)}</td>
-                  <td>${esc(c.seller)}</td>
-                  <td class="text-right font-bold text-danger">${fmt(c.debt_amount)} đ</td>
-                  <td class="text-muted" style="font-size:11px;">${esc(c.collection_note || 'Chưa thanh toán')}</td>
+                  <td class="font-bold text-primary">${esc(o.name)}</td>
+                  <td>${esc(o.date)}</td>
+                  <td class="font-bold">${esc(o.partner_name)}</td>
+                  <td>${esc(o.seller)}</td>
+                  <td class="text-right font-bold">${fmt(o.amount_total)} đ</td>
+                  <td>
+                    <button class="btn btn-primary btn-sm" onclick="confirmOrder(${o.id})">Xác nhận & Điều xe</button>
+                  </td>
                 </tr>
               `).join('')}
             </tbody>
           </table>
         </div>
       </div>
+    </div>
+  `;
+}
 
-      <div class="card-box">
-        <div class="card-box-header">
-          <span class="card-box-title">⚠️ Cảnh báo hàng dưới ngưỡng tồn</span>
+// ══════════════════════════ 3. BÁO CÁO THƯƠNG MẠI (CLEAN COMMERCIAL REPORT) ══════════════════════════ //
+async function renderCommercial(el) {
+  const currentMonth = state.selectedCommercialMonth || '08/2026';
+  const data = await api('/api/reports/commercial?month=' + encodeURIComponent(currentMonth));
+  const m = data.meta;
+  const s = data.summary;
+  const items = data.items;
+
+  el.innerHTML = `
+    <!-- Clean Toolbar -->
+    <div class="report-toolbar">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <label style="font-size:12px; font-weight:700; color:#1e293b;">📅 Kỳ báo cáo:</label>
+        <select id="commercial-month-select" class="role-select" style="background:#f8fafc; border:1px solid #cbd5e1; padding:6px 12px; border-radius:6px; font-weight:700;">
+          <option value="08/2026" ${m.selectedMonth === '08/2026' ? 'selected' : ''}>Tháng 08/2026</option>
+          <option value="09/2026" ${m.selectedMonth === '09/2026' ? 'selected' : ''}>Tháng 09/2026</option>
+        </select>
+        <span class="badge badge-sale">${m.period}</span>
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button class="btn btn-secondary btn-sm" id="btn-print-commercial" style="display:flex; align-items:center; gap:6px;">
+          <span>🖨️</span>
+          <span>In Biểu Mẫu / PDF</span>
+        </button>
+        <button class="btn btn-primary btn-sm" id="btn-export-commercial" style="display:flex; align-items:center; gap:6px;">
+          <span>📥</span>
+          <span>Xuất Dữ Liệu Excel</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Official Administrative Printable Document -->
+    <div class="report-paper" id="printable-report">
+      <!-- Document Header -->
+      <div class="report-header-grid">
+        <div class="report-header-left">
+          <div class="company-name">${esc(m.company)}</div>
+          <div class="unit-name">${esc(m.branch)}</div>
         </div>
-        <div class="card-box-body" style="padding:0;">
+        <div class="report-header-right">
+          <div class="republic">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</div>
+          <div class="motto">Độc lập - Tự do - Hạnh phúc</div>
+        </div>
+      </div>
+
+      <!-- Title Block -->
+      <div class="report-title-block">
+        <div class="report-main-title">${esc(m.title)}</div>
+        <div class="report-sub-title">${esc(m.period)}</div>
+      </div>
+
+      <div class="report-currency">Đơn vị tính: VNĐ (Đơn giá chưa bao gồm thuế GTGT 8%)</div>
+
+      <!-- 15-Column Data Table Matching Excel Exactly -->
+      <table class="report-table">
+        <thead>
+          <tr>
+            <th rowspan="3" style="width:130px;">Đơn vị</th>
+            <th colspan="2">Vỉ 24 chai 350ml</th>
+            <th colspan="2">Hộp 24 chai 350ml</th>
+            <th colspan="2">Vỉ 24 chai 500ml</th>
+            <th colspan="2">Hộp 24 chai 500ml</th>
+            <th colspan="2">Bình 5 gal ion kiềm</th>
+            <th colspan="2">Bình 5 gal tinh khiết</th>
+            <th colspan="2" style="background:#e2e8f0;">Tổng cộng</th>
+          </tr>
+          <tr>
+            <th colspan="2" style="font-size:10px; color:#475569;">${fmt(items[0].price_untaxed)} đ</th>
+            <th colspan="2" style="font-size:10px; color:#475569;">${fmt(items[1].price_untaxed)} đ</th>
+            <th colspan="2" style="font-size:10px; color:#475569;">${fmt(items[2].price_untaxed)} đ</th>
+            <th colspan="2" style="font-size:10px; color:#475569;">${fmt(items[3].price_untaxed)} đ</th>
+            <th colspan="2" style="font-size:10px; color:#475569;">${fmt(items[4].price_untaxed)} đ</th>
+            <th colspan="2" style="font-size:10px; color:#475569;">${fmt(items[5].price_untaxed)} đ</th>
+            <th colspan="2" style="background:#e2e8f0;"></th>
+          </tr>
+          <tr>
+            <th>SL</th><th>DT</th>
+            <th>SL</th><th>DT</th>
+            <th>SL</th><th>DT</th>
+            <th>SL</th><th>DT</th>
+            <th>SL</th><th>DT</th>
+            <th>SL</th><th>DT</th>
+            <th style="background:#e2e8f0;">SL</th><th style="background:#e2e8f0;">DT</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- I. Thực hiện tháng -->
+          <tr class="row-header-group">
+            <td colspan="15">I. Thực hiện tháng</td>
+          </tr>
+          <tr class="row-total">
+            <td>Tổng</td>
+            ${items.map(it => `
+              <td class="text-right font-bold">${fmt(it.month_qty)}</td>
+              <td class="text-right font-bold">${fmt(it.month_rev)}</td>
+            `).join('')}
+            <td class="text-right font-bold text-primary" style="background:#e2e8f0;">${fmt(s.month_qty)}</td>
+            <td class="text-right font-bold text-primary" style="background:#e2e8f0;">${fmt(s.month_rev)}</td>
+          </tr>
+          <tr>
+            <td>XNN Hồng Gai</td>
+            ${items.map(it => `
+              <td class="text-right">${fmt(it.month_qty)}</td>
+              <td class="text-right">${fmt(it.month_rev)}</td>
+            `).join('')}
+            <td class="text-right font-bold" style="background:#f8fafc;">${fmt(s.month_qty)}</td>
+            <td class="text-right font-bold" style="background:#f8fafc;">${fmt(s.month_rev)}</td>
+          </tr>
+
+          <!-- II. Lũy kế -->
+          <tr class="row-header-group">
+            <td colspan="15">II. Lũy kế năm tài chính (YTD)</td>
+          </tr>
+          <tr class="row-total" style="background:#eff6ff;">
+            <td style="color:#1e3a8a;">Tổng lũy kế</td>
+            ${items.map(it => `
+              <td class="text-right font-bold" style="color:#1e3a8a;">${fmt(it.ytd_qty)}</td>
+              <td class="text-right font-bold" style="color:#1e3a8a;">${fmt(it.ytd_rev)}</td>
+            `).join('')}
+            <td class="text-right font-bold text-success" style="background:#dbeafe; font-size:12px;">${fmt(s.ytd_qty)}</td>
+            <td class="text-right font-bold text-success" style="background:#dbeafe; font-size:12px;">${fmt(s.ytd_rev)}</td>
+          </tr>
+          <tr>
+            <td>XNN Hồng Gai</td>
+            ${items.map(it => `
+              <td class="text-right">${fmt(it.ytd_qty)}</td>
+              <td class="text-right">${fmt(it.ytd_rev)}</td>
+            `).join('')}
+            <td class="text-right font-bold" style="background:#f8fafc;">${fmt(s.ytd_qty)}</td>
+            <td class="text-right font-bold" style="background:#f8fafc;">${fmt(s.ytd_rev)}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- 3 Administrative Signature Blocks -->
+      <div class="report-sign-grid">
+        <div>
+          <div class="report-sign-title">${esc(m.signatories.creator.title)}</div>
+          <div class="report-sign-name">${esc(m.signatories.creator.name)}</div>
+        </div>
+        <div>
+          <div class="report-sign-title">${esc(m.signatories.business.title)}</div>
+          <div class="report-sign-name">${esc(m.signatories.business.name)}</div>
+        </div>
+        <div>
+          <div class="report-sign-title">${esc(m.signatories.leader.title)}</div>
+          <div class="report-sign-name">${esc(m.signatories.leader.name)}</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Event handlers
+  const monthSelect = el.querySelector('#commercial-month-select');
+  if (monthSelect) {
+    monthSelect.addEventListener('change', e => {
+      state.selectedCommercialMonth = e.target.value;
+      renderCommercial(el);
+    });
+  }
+
+  const btnPrint = el.querySelector('#btn-print-commercial');
+  if (btnPrint) {
+    btnPrint.addEventListener('click', () => window.print());
+  }
+
+  const btnExport = el.querySelector('#btn-export-commercial');
+  if (btnExport) {
+    btnExport.addEventListener('click', () => {
+      window.open('/api/reports/commercial?month=' + encodeURIComponent(currentMonth), '_blank');
+    });
+  }
+}
+
+// ══════════════════════════ 4. CẤU HÌNH MASTER DATA ══════════════════════════ //
+async function renderConfig(el) {
+  const cfg = await api('/api/config');
+
+  el.innerHTML = `
+    <div class="card-box" style="margin-bottom:20px;">
+      <div class="card-box-header">
+        <span class="card-box-title">⚙️ Cấu Hình Master Data & Thiết Lập Hệ Thống</span>
+      </div>
+      <div class="card-box-body">
+        <div class="config-nav-tabs">
+          <button class="config-nav-tab active" data-tab="uom">📏 1. Đơn vị tính</button>
+          <button class="config-nav-tab" data-tab="positions">👔 2. Chức danh / Chức vụ</button>
+          <button class="config-nav-tab" data-tab="stations">🏢 3. Đơn vị / Trạm</button>
+          <button class="config-nav-tab" data-tab="locations">📍 4. Địa điểm kho & Kênh bán</button>
+        </div>
+
+        <!-- Tab 1: UoMs -->
+        <div class="config-panel active" id="tab-uom">
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Mã ĐVT</th>
+                  <th>Tên đơn vị tính</th>
+                  <th>Nhóm danh mục</th>
+                  <th class="text-right">Hệ số quy đổi</th>
+                  <th>Quy cách</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${cfg.uoms.map(u => `
+                  <tr>
+                    <td class="font-bold font-mono text-primary">${esc(u.code)}</td>
+                    <td class="font-bold">${esc(u.name)}</td>
+                    <td><span class="badge badge-draft">${esc(u.category)}</span></td>
+                    <td class="text-right font-bold">${u.factor}</td>
+                    <td>${esc(u.note)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Tab 2: Positions -->
+        <div class="config-panel" id="tab-positions">
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Chức danh / Chức vụ</th>
+                  <th class="text-right">Số nhân sự</th>
+                  <th>Nhiệm vụ chính</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${cfg.positions.map(p => `
+                  <tr>
+                    <td class="font-bold">${esc(p.name || 'Khác')}</td>
+                    <td class="text-right font-bold text-primary">${p.headcount} người</td>
+                    <td>${esc(p.description)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Tab 3: Stations -->
+        <div class="config-panel" id="tab-stations">
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Trạm / Tổ công tác</th>
+                  <th class="text-right">Quân số</th>
+                  <th class="text-right">Doanh số đạt được</th>
+                  <th class="text-right">Chỉ tiêu năm</th>
+                  <th class="text-right">Tiến độ</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${cfg.stations.map(s => `
+                  <tr>
+                    <td class="font-bold text-primary">${esc(s.name)}</td>
+                    <td class="text-right font-bold">${s.headcount} CBCNV</td>
+                    <td class="text-right font-bold text-success">${fmt(s.current_revenue)} đ</td>
+                    <td class="text-right">${fmt(s.target_revenue)} đ</td>
+                    <td class="text-right font-bold ${s.progress_percent >= 30 ? 'text-success' : 'text-primary'}">${s.progress_percent}%</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Tab 4: Locations & Channels -->
+        <div class="config-panel" id="tab-locations">
+          <div style="font-weight:700; margin-bottom:8px;">1. Địa điểm kho bãi (Stock Locations):</div>
+          <div class="table-responsive" style="margin-bottom:20px;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Mã kho</th>
+                  <th>Tên địa điểm kho</th>
+                  <th>Phân loại</th>
+                  <th>Địa chỉ</th>
+                  <th>Phụ trách</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${cfg.locations.map(l => `
+                  <tr>
+                    <td class="font-bold font-mono">${esc(l.code)}</td>
+                    <td class="font-bold">${esc(l.name)}</td>
+                    <td><span class="badge badge-sale">${esc(l.usage)}</span></td>
+                    <td>${esc(l.address)}</td>
+                    <td>${esc(l.manager)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+
+          <div style="font-weight:700; margin-bottom:8px;">2. Kênh phân phối doanh thu (Channels):</div>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Mã kênh</th>
+                  <th>Tên kênh tiêu thụ</th>
+                  <th>Tính vào KPI thi đua?</th>
+                  <th>Ghi chú</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${cfg.channels.map(c => `
+                  <tr>
+                    <td class="font-bold font-mono">${esc(c.code)}</td>
+                    <td class="font-bold">${esc(c.name)}</td>
+                    <td>${c.counts_for_kpi ? '<span class="badge badge-done">✓ Có tính KPI</span>' : '<span class="badge badge-draft">Không tính KPI</span>'}</td>
+                    <td>${esc(c.desc)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  el.querySelectorAll('.config-nav-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      el.querySelectorAll('.config-nav-tab').forEach(b => b.classList.remove('active'));
+      el.querySelectorAll('.config-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      const target = el.querySelector('#tab-' + btn.dataset.tab);
+      if (target) target.classList.add('active');
+    });
+  });
+}
+
+// ══════════════════════════ 5. DANH SÁCH NHÂN VIÊN ══════════════════════════ //
+async function renderEmployees(el) {
+  const query = state.employeeFilter.q || '';
+  const st = state.employeeFilter.station || 'all';
+  const pos = state.employeeFilter.position || 'all';
+
+  let url = '/api/employees?';
+  if (query) url += 'q=' + encodeURIComponent(query) + '&';
+  if (st !== 'all') url += 'station=' + encodeURIComponent(st) + '&';
+  if (pos !== 'all') url += 'position=' + encodeURIComponent(pos) + '&';
+
+  const data = await api(url);
+  const cfg = await api('/api/config');
+
+  el.innerHTML = `
+    <div class="metrics-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom:20px;">
+      <div class="metric-card">
+        <div class="metric-label">Tổng số CBCNV</div>
+        <div class="metric-value">${data.total} <span style="font-size:14px; font-weight:normal;">người</span></div>
+        <div class="metric-trend">202 nhân sự toàn đơn vị</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Chỉ tiêu kế hoạch năm</div>
+        <div class="metric-value text-primary">${fmt(data.target_annual)} <span style="font-size:13px;">đ</span></div>
+        <div class="metric-trend">7.885.316 đ/người</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Tổng doanh số đạt được</div>
+        <div class="metric-value text-success">${fmt(data.total_revenue)} <span style="font-size:13px;">đ</span></div>
+        <div class="metric-trend text-success">Cộng dồn tự động</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Kết quả lọc</div>
+        <div class="metric-value">${data.filtered_count} <span style="font-size:14px; font-weight:normal;">CBCNV</span></div>
+        <div class="metric-trend">Hiển thị trên bảng</div>
+      </div>
+    </div>
+
+    <!-- Search & Filter Bar -->
+    <div class="filter-search-bar">
+      <div class="search-input-wrap">
+        <span class="search-input-icon">🔍</span>
+        <input type="text" id="emp-search-input" placeholder="Tìm kiếm theo tên nhân viên, chức vụ, trạm..." value="${esc(query)}" />
+      </div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <label style="font-size:12px; font-weight:700; color:#475569;">Trạm:</label>
+        <select id="emp-station-filter" class="role-select" style="background:#f8fafc; border:1px solid #cbd5e1; padding:6px 10px; border-radius:6px;">
+          <option value="all">-- Tất cả trạm --</option>
+          ${cfg.stations.map(s => `
+            <option value="${esc(s.name)}" ${st === s.name ? 'selected' : ''}>${esc(s.name)} (${s.headcount})</option>
+          `).join('')}
+        </select>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <label style="font-size:12px; font-weight:700; color:#475569;">Chức vụ:</label>
+        <select id="emp-pos-filter" class="role-select" style="background:#f8fafc; border:1px solid #cbd5e1; padding:6px 10px; border-radius:6px; max-width:180px;">
+          <option value="all">-- Tất cả chức vụ --</option>
+          ${cfg.positions.map(p => `
+            <option value="${esc(p.name)}" ${pos === p.name ? 'selected' : ''}>${esc(p.name || 'Khác')} (${p.headcount})</option>
+          `).join('')}
+        </select>
+      </div>
+      <button class="btn btn-secondary btn-sm" id="emp-reset-btn">↺ Đặt lại</button>
+    </div>
+
+    <!-- Table -->
+    <div class="card-box">
+      <div class="card-box-header">
+        <span class="card-box-title">Danh Bạ Nhân Sự & Chỉ Tiêu Thi Đua</span>
+      </div>
+      <div class="card-box-body">
+        <div class="table-responsive">
           <table class="data-table">
             <thead>
               <tr>
-                <th>Mặt hàng</th>
-                <th>Kho</th>
-                <th class="text-right">Tồn hiện tại</th>
-                <th>Cảnh báo</th>
+                <th style="width:40px;">STT</th>
+                <th>Họ và tên</th>
+                <th>Chức vụ</th>
+                <th>Trạm / Tổ</th>
+                <th class="text-right">Doanh số</th>
+                <th class="text-right">% Kế hoạch</th>
+                <th>Đánh giá</th>
               </tr>
             </thead>
             <tbody>
-              ${data.lowStocks.map(s => `
+              ${data.employees.map((e, idx) => {
+                const target = 7885316.83;
+                const pct = Math.round((e.total / target) * 100);
+                return `
+                  <tr>
+                    <td>${idx + 1}</td>
+                    <td class="font-bold text-primary">${esc(e.name)}</td>
+                    <td><span class="badge badge-draft">${esc(e.position || 'Chưa cập nhật')}</span></td>
+                    <td>${esc(e.station)}</td>
+                    <td class="text-right font-bold">${fmt(e.total)} đ</td>
+                    <td class="text-right font-bold ${pct >= 100 ? 'text-success' : (pct >= 50 ? 'text-primary' : 'text-warning')}">${pct}%</td>
+                    <td>${pct >= 100 ? '<span class="badge badge-done">Vượt chỉ tiêu</span>' : (pct >= 50 ? '<span class="badge badge-sale">Đạt tiến độ</span>' : '<span class="badge badge-draft">Đang thi đua</span>')}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+
+  let timer;
+  const inp = el.querySelector('#emp-search-input');
+  if (inp) {
+    inp.addEventListener('input', e => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        state.employeeFilter.q = e.target.value.trim();
+        renderEmployees(el);
+      }, 300);
+    });
+  }
+
+  const sFilter = el.querySelector('#emp-station-filter');
+  if (sFilter) {
+    sFilter.addEventListener('change', e => {
+      state.employeeFilter.station = e.target.value;
+      renderEmployees(el);
+    });
+  }
+
+  const pFilter = el.querySelector('#emp-pos-filter');
+  if (pFilter) {
+    pFilter.addEventListener('change', e => {
+      state.employeeFilter.position = e.target.value;
+      renderEmployees(el);
+    });
+  }
+
+  const rBtn = el.querySelector('#emp-reset-btn');
+  if (rBtn) {
+    rBtn.addEventListener('click', () => {
+      state.employeeFilter = { q: '', station: 'all', position: 'all' };
+      renderEmployees(el);
+    });
+  }
+}
+
+// ══════════════════════════ 6. KPI THEO TRẠM ══════════════════════════ //
+async function renderKpiStation(el) {
+  const data = await api('/api/kpi');
+
+  el.innerHTML = `
+    <div class="card-box">
+      <div class="card-box-header">
+        <span class="card-box-title">Tiến Độ Kế Hoạch Năm Theo Trạm / Tổ</span>
+        <span class="badge badge-sale">Kế hoạch năm: 1.592.834.000 đ</span>
+      </div>
+      <div class="card-box-body">
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:18px;">
+          ${data.byStation.map(s => {
+            const target = s.headcount * 7885316.83;
+            const pct = Math.min(100, Math.round((s.total_revenue / target) * 100));
+            return `
+              <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:10px; padding:18px; box-shadow:var(--shadow-sm);">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+                  <div>
+                    <div style="font-size:15px; font-weight:800; color:#1e293b;">${esc(s.station)}</div>
+                    <div style="font-size:11px; color:#64748b;">Quân số: <b>${s.headcount}</b> người</div>
+                  </div>
+                  <span class="badge ${pct >= 30 ? 'badge-done' : 'badge-draft'}">${pct}% KH</span>
+                </div>
+                <div style="font-size:20px; font-weight:800; color:#2563eb; margin:6px 0;">${fmt(s.total_revenue)} đ</div>
+                <div style="font-size:11px; color:#64748b; margin-bottom:8px;">Chỉ tiêu giao: ${fmt(target)} đ</div>
+                <div style="background:#f1f5f9; border-radius:6px; height:8px; overflow:hidden;">
+                  <div style="background:linear-gradient(90deg, #3b82f6, #10b981); height:100%; width:${pct}%;"></div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ══════════════════════════ 7. CÔNG NỢ KHÁCH HÀNG ══════════════════════════ //
+async function renderReportDebt(el) {
+  const data = await api('/api/reports/debt');
+  const sum = data.summary;
+
+  el.innerHTML = `
+    <div class="metrics-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom:20px;">
+      <div class="metric-card">
+        <div class="metric-label">Tổng nợ phải thu</div>
+        <div class="metric-value text-danger">${fmt(sum.total_debt)} <span style="font-size:14px;">đ</span></div>
+        <div class="metric-trend text-danger">Chưa thanh toán</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Số khách hàng còn nợ</div>
+        <div class="metric-value font-bold">${sum.total_debtors} <span style="font-size:14px; font-weight:normal;">khách</span></div>
+        <div class="metric-trend">Bao gồm cơ quan & đại lý</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Chính sách thu nợ</div>
+        <div class="metric-value text-primary">COD & Chuyển khoản</div>
+        <div class="metric-trend">Tự động trừ khi thu tiền</div>
+      </div>
+    </div>
+
+    <div class="card-box">
+      <div class="card-box-header">
+        <span class="card-box-title">Danh Sách Công Nợ Khách Hàng</span>
+      </div>
+      <div class="card-box-body">
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Khách hàng / Cơ quan</th>
+                <th>Phân loại</th>
+                <th>Địa chỉ nhận hàng</th>
+                <th class="text-right">Số đơn</th>
+                <th class="text-right">Tổng mua</th>
+                <th class="text-right">Đã thanh toán</th>
+                <th class="text-right">Còn nợ</th>
+                <th>Ngày đặt gần nhất</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${data.customers.map(c => `
                 <tr>
-                  <td class="font-semibold">${esc(s.name)}</td>
-                  <td>${esc(s.warehouse)}</td>
-                  <td class="text-right font-bold text-danger">${fmt(s.quantity)}</td>
-                  <td><span class="badge badge-danger">Cần bổ sung ngay</span></td>
+                  <td class="font-bold">${esc(c.customer_name)}</td>
+                  <td><span class="badge ${c.customer_type.includes('Cơ quan') ? 'badge-purple' : 'badge-draft'}">${esc(c.customer_type)}</span></td>
+                  <td style="font-size:11px; max-width:280px;">${esc(c.address || c.phone || 'Chưa cập nhật')}</td>
+                  <td class="text-right font-bold">${c.order_count}</td>
+                  <td class="text-right">${fmt(c.total_purchased)} đ</td>
+                  <td class="text-right text-success font-bold">${fmt(c.total_paid)} đ</td>
+                  <td class="text-right text-danger font-bold">${fmt(c.debt_amount)} đ</td>
+                  <td><span class="badge badge-draft">${esc(c.last_order_date)}</span></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ══════════════════════════ 8. BÁO CÁO NỢ VỎ BÌNH ══════════════════════════ //
+async function renderReportShells(el) {
+  const data = await api('/api/shells');
+  const sum = data.summary;
+
+  el.innerHTML = `
+    <div class="metrics-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom:20px;">
+      <div class="metric-card">
+        <div class="metric-label">Tổng nợ vỏ cuối kỳ</div>
+        <div class="metric-value text-danger">${fmt(sum.clo_up + sum.clo_voi)} <span style="font-size:13px;">vỏ</span></div>
+        <div class="metric-trend text-danger">${fmt(sum.clo_up)} vỏ Úp · ${fmt(sum.clo_voi)} vỏ Vòi</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Vỏ xuất mới trong kỳ</div>
+        <div class="metric-value text-primary">${fmt(sum.in_up + sum.in_voi)} <span style="font-size:13px;">vỏ</span></div>
+        <div class="metric-trend text-primary">Tự sinh từ phiếu xuất kho</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Vỏ rỗng đã thu hồi</div>
+        <div class="metric-value text-success">${fmt(sum.ret_up + sum.ret_voi)} <span style="font-size:13px;">vỏ</span></div>
+        <div class="metric-trend text-success">${fmt(sum.ret_up)} vỏ Úp · ${fmt(sum.ret_voi)} vỏ Vòi</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Quỹ cọc vỏ khách lẻ</div>
+        <div class="metric-value font-bold">${fmt(sum.total_deposit)} <span style="font-size:13px;">đ</span></div>
+        <div class="metric-trend">50.000 đ/vỏ</div>
+      </div>
+    </div>
+
+    <div class="card-box">
+      <div class="card-box-header">
+        <span class="card-box-title">Bảng Cân Đối Vỏ Bình Đa Điểm</span>
+      </div>
+      <div class="card-box-body">
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Khách hàng / Đại lý</th>
+                <th class="text-right">Đầu kỳ Úp</th>
+                <th class="text-right">Đầu kỳ Vòi</th>
+                <th class="text-right text-primary">Xuất Úp</th>
+                <th class="text-right text-primary">Xuất Vòi</th>
+                <th class="text-right text-success">Đã trả Úp</th>
+                <th class="text-right text-success">Đã trả Vòi</th>
+                <th class="text-right text-danger font-bold">Cuối kỳ Úp</th>
+                <th class="text-right text-danger font-bold">Cuối kỳ Vòi</th>
+                <th class="text-right">Tiền cọc</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${data.ledgers.map(l => `
+                <tr>
+                  <td class="font-bold">${esc(l.customer)}</td>
+                  <td class="text-right">${l.opening_up}</td>
+                  <td class="text-right">${l.opening_voi}</td>
+                  <td class="text-right text-primary">${l.in_up}</td>
+                  <td class="text-right text-primary">${l.in_voi}</td>
+                  <td class="text-right text-success font-bold">${l.returned_up}</td>
+                  <td class="text-right text-success font-bold">${l.returned_voi}</td>
+                  <td class="text-right text-danger font-bold">${l.closing_up}</td>
+                  <td class="text-right text-danger font-bold">${l.closing_voi}</td>
+                  <td class="text-right">${fmt(l.deposit)} đ</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -1160,6 +1176,475 @@ async function renderProducts(el) {
     </div>
   `;
 }
+
+
+// ══════════════════════════ KHÁCH HÀNG & ĐỐI TÁC (360° CUSTOMER MANAGEMENT) ══════════════════════════ //
+async function renderCustomers(el) {
+  const f = state.customerFilter || { q: '', type: 'all', debtOnly: false, shellOnly: false };
+  const query = new URLSearchParams({
+    q: f.q || '',
+    type: f.type || 'all',
+    debt_only: f.debtOnly ? 'true' : 'false',
+    shell_only: f.shellOnly ? 'true' : 'false'
+  }).toString();
+
+  const data = await api('/api/customers?' + query);
+  const s = data.summary;
+
+  const typeLabels = [
+    { id: 'all', label: 'Tất cả đối tác' },
+    { id: 'Cơ quan / HCSN', label: 'Cơ quan / HCSN' },
+    { id: 'Doanh nghiệp', label: 'Doanh nghiệp' },
+    { id: 'Nhà hàng / Khách sạn', label: 'Nhà hàng / KS' },
+    { id: 'Đại lý / Điểm phân phối', label: 'Đại lý / Điểm PP' },
+    { id: 'Hộ gia đình / Cá nhân', label: 'Hộ gia đình / Cá nhân' },
+  ];
+
+  el.innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px;">
+      <div>
+        <h2 style="font-size:20px; font-weight:700; color:#0f172a; margin:0 0 4px 0;">Danh bạ Khách hàng & Đối tác</h2>
+        <div style="font-size:13px; color:#64748b;">Hồ sơ 360° khách hàng: Đơn mua nước, Sổ nợ vỏ bình, Công nợ và Lịch sử dịch vụ DVGT</div>
+      </div>
+      <div>
+        <button class="btn btn-primary" onclick="openNewCustomerModal()">＋ Thêm khách hàng mới</button>
+      </div>
+    </div>
+
+    <!-- 4 Clean Product Stat Cards -->
+    <div class="metrics-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom:20px;">
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">TỔNG ĐỐI TÁC / KHÁCH HÀNG</span>
+          <span class="metric-icon">👥</span>
+        </div>
+        <div class="metric-value">${fmt(s.total_customers)}</div>
+        <div class="metric-sub">Hợp nhất từ Đơn hàng, Sổ vỏ & DVGT</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">CƠ QUAN & DOANH NGHIỆP</span>
+          <span class="metric-icon">🏢</span>
+        </div>
+        <div class="metric-value">${fmt(s.corporate_count)}</div>
+        <div class="metric-sub">Sở ban ngành, Than, Ngân hàng, KS</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">KHÁCH CÒN NỢ TIỀN NƯỚC</span>
+          <span class="metric-icon">💳</span>
+        </div>
+        <div class="metric-value text-danger">${fmt(s.debtor_count)}</div>
+        <div class="metric-sub">Tổng nợ: <b class="text-danger">${fmt(s.total_debt)} đ</b></div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">KHÁCH ĐANG NỢ VỎ BÌNH</span>
+          <span class="metric-icon">🧴</span>
+        </div>
+        <div class="metric-value" style="color:#d97706;">${fmt(s.shell_holders_count)}</div>
+        <div class="metric-sub">Đang giữ: <b>${fmt(s.total_shells)} vỏ</b> • Cọc: ${fmt(s.total_deposit)} đ</div>
+      </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="card-box" style="margin-bottom:16px; padding:12px 16px;">
+      <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between;">
+        <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+          <input type="text" id="cust-search-input" class="form-control" style="width:260px; height:34px;" 
+                 placeholder="🔍 Tìm theo tên, SĐT, địa chỉ..." value="${esc(f.q)}" />
+          <div style="display:flex; gap:4px;">
+            ${typeLabels.map(t => `
+              <button class="btn btn-sm ${f.type === t.id ? 'btn-primary' : 'btn-secondary'}" 
+                      onclick="window.filterCustomerType('${t.id}')">${t.label}</button>
+            `).join('')}
+          </div>
+        </div>
+
+        <div style="display:flex; gap:14px; align-items:center; font-size:13px; color:#475569;">
+          <label style="display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none;">
+            <input type="checkbox" ${f.debtOnly ? 'checked' : ''} onchange="window.toggleCustomerDebtOnly(this.checked)">
+            <span>Chỉ khách có nợ tiền</span>
+          </label>
+          <label style="display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none;">
+            <input type="checkbox" ${f.shellOnly ? 'checked' : ''} onchange="window.toggleCustomerShellOnly(this.checked)">
+            <span>Chỉ khách nợ vỏ</span>
+          </label>
+          <span style="color:#cbd5e1;">|</span>
+          <span>Hiển thị: <b>${data.filtered_count}</b> / ${s.total_customers} khách</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Data Table -->
+    <div class="card-box">
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width:70px;">Mã KH</th>
+              <th>Tên Khách hàng / Đơn vị</th>
+              <th style="width:140px;">Phân loại</th>
+              <th>Liên hệ & Địa chỉ</th>
+              <th class="text-center" style="width:90px;">Đơn mua</th>
+              <th class="text-right" style="width:110px;">Doanh số</th>
+              <th class="text-right" style="width:110px;">Nợ tiền hàng</th>
+              <th class="text-center" style="width:120px;">Nợ vỏ (Úp/Vòi)</th>
+              <th class="text-right" style="width:100px;">Tiền cọc</th>
+              <th class="text-center" style="width:100px;">Hồ sơ 360°</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${data.customers.length === 0 ? `
+              <tr><td colspan="10" style="text-align:center; padding:32px; color:#94a3b8;">Không tìm thấy khách hàng nào theo bộ lọc hiện tại</td></tr>
+            ` : data.customers.map(c => {
+              const typeBadgeMap = {
+                'Cơ quan / HCSN': 'badge-purple',
+                'Doanh nghiệp': 'badge-primary',
+                'Nhà hàng / Khách sạn': 'badge-warning',
+                'Đại lý / Điểm phân phối': 'badge-done',
+                'Hộ gia đình / Cá nhân': 'badge-draft'
+              };
+              const badgeClass = typeBadgeMap[c.customer_type] || 'badge-draft';
+              const hasDebt = c.debt_amount > 0;
+              const hasShells = (c.shell_up > 0 || c.shell_voi > 0);
+
+              return `
+                <tr>
+                  <td class="text-muted" style="font-family:monospace; font-size:12px;">#KH${String(c.id).padStart(3, '0')}</td>
+                  <td>
+                    <div class="font-bold" style="color:#0f172a; cursor:pointer;" onclick="window.openCustomer360Modal(${c.id})">${esc(c.name)}</div>
+                    ${c.notes ? `<div style="font-size:11px; color:#64748b;">${esc(c.notes)}</div>` : ''}
+                  </td>
+                  <td><span class="badge ${badgeClass}">${esc(c.customer_type)}</span></td>
+                  <td>
+                    ${c.phone ? `<div style="font-size:12px; font-weight:600; color:#1e293b;">📞 ${esc(c.phone)}</div>` : ''}
+                    <div style="font-size:12px; color:#64748b; max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${esc(c.address)}">${esc(c.address || '—')}</div>
+                  </td>
+                  <td class="text-center">
+                    <span class="badge ${c.order_count > 0 ? 'badge-done' : 'badge-draft'}">${c.order_count} đơn</span>
+                  </td>
+                  <td class="text-right font-semibold">${c.total_spent > 0 ? fmt(c.total_spent) + ' đ' : '—'}</td>
+                  <td class="text-right">
+                    ${hasDebt ? `<span class="font-bold text-danger">${fmt(c.debt_amount)} đ</span>` : `<span class="text-muted">—</span>`}
+                  </td>
+                  <td class="text-center">
+                    ${hasShells ? `
+                      <span class="badge badge-warning" title="Úp: ${c.shell_up} | Vòi: ${c.shell_voi}">
+                        ${c.shell_up} úp / ${c.shell_voi} vòi
+                      </span>
+                    ` : '<span class="text-muted">—</span>'}
+                  </td>
+                  <td class="text-right">
+                    ${c.shell_deposit > 0 ? `<span class="font-semibold" style="color:#059669;">${fmt(c.shell_deposit)} đ</span>` : '<span class="text-muted">—</span>'}
+                  </td>
+                  <td class="text-center">
+                    <button class="btn btn-secondary btn-sm" onclick="window.openCustomer360Modal(${c.id})">🔍 Xem 360°</button>
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  // Search input handler with debounce
+  const sInput = document.getElementById('cust-search-input');
+  if (sInput) {
+    let timer;
+    sInput.addEventListener('input', e => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        state.customerFilter.q = e.target.value.trim();
+        renderCustomers(el);
+      }, 300);
+    });
+  }
+}
+
+window.filterCustomerType = function(type) {
+  state.customerFilter.type = type;
+  renderCustomers(document.getElementById('view-container'));
+};
+
+window.toggleCustomerDebtOnly = function(val) {
+  state.customerFilter.debtOnly = val;
+  renderCustomers(document.getElementById('view-container'));
+};
+
+window.toggleCustomerShellOnly = function(val) {
+  state.customerFilter.shellOnly = val;
+  renderCustomers(document.getElementById('view-container'));
+};
+
+window.openCustomer360Modal = async function(id) {
+  try {
+    const data = await api('/api/customers/' + id);
+    const p = data.partner;
+    const fin = data.financial_summary;
+    const orders = data.orders || [];
+    const shells = data.shells || [];
+    const dvgt = data.dvgt || [];
+
+    const html = `
+      <div style="width:820px; max-width:92vw;">
+        <!-- Modal Header -->
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; border-bottom:1px solid #e2e8f0; padding-bottom:12px;">
+          <div>
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+              <h3 style="margin:0; font-size:18px; font-weight:700; color:#0f172a;">${esc(p.name)}</h3>
+              <span class="badge badge-purple">${esc(p.customer_type)}</span>
+              <span class="badge badge-draft">#KH${String(p.id).padStart(3, '0')}</span>
+            </div>
+            <div style="font-size:12px; color:#64748b; display:flex; gap:16px;">
+              ${p.phone ? `<span>📞 <b>${esc(p.phone)}</b></span>` : ''}
+              <span>📍 ${esc(p.address || 'Chưa cập nhật địa chỉ')}</span>
+            </div>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="closeModal()">✕ Đóng</button>
+        </div>
+
+        <!-- 4 Quick Financial Cards -->
+        <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:10px; margin-bottom:18px;">
+          <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px 12px;">
+            <div style="font-size:11px; color:#64748b; font-weight:600;">DOANH SỐ MUA</div>
+            <div style="font-size:16px; font-weight:700; color:#0f172a;">${fmt(fin.total_spent)} đ</div>
+            <div style="font-size:11px; color:#64748b;">${orders.length} đơn hàng</div>
+          </div>
+          <div style="background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:10px 12px;">
+            <div style="font-size:11px; color:#991b1b; font-weight:600;">NỢ TIỀN NƯỚC</div>
+            <div style="font-size:16px; font-weight:700; color:#dc2626;">${fmt(fin.debt_amount)} đ</div>
+            <div style="font-size:11px; color:#991b1b;">Đã trả: ${fmt(fin.total_paid)} đ</div>
+          </div>
+          <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:10px 12px;">
+            <div style="font-size:11px; color:#92400e; font-weight:600;">NỢ VỎ BÌNH 19L</div>
+            <div style="font-size:16px; font-weight:700; color:#b45309;">${fin.shell_up + fin.shell_voi} vỏ</div>
+            <div style="font-size:11px; color:#92400e;">${fin.shell_up} úp • ${fin.shell_voi} vòi</div>
+          </div>
+          <div style="background:#ecfdf5; border:1px solid #a7f3d0; border-radius:8px; padding:10px 12px;">
+            <div style="font-size:11px; color:#065f46; font-weight:600;">TIỀN CỌC VỎ</div>
+            <div style="font-size:16px; font-weight:700; color:#059669;">${fmt(fin.shell_deposit)} đ</div>
+            <div style="font-size:11px; color:#065f46;">Đang lưu quỹ XN</div>
+          </div>
+        </div>
+
+        <!-- 3 Tabs Navigation -->
+        <div style="display:flex; gap:6px; margin-bottom:14px; border-bottom:1px solid #e2e8f0; padding-bottom:8px;">
+          <button class="btn btn-sm btn-primary" id="cust-tab-btn-orders" onclick="window.switchCust360Tab('orders')">📦 Đơn bán hàng (${orders.length})</button>
+          <button class="btn btn-sm btn-secondary" id="cust-tab-btn-shells" onclick="window.switchCust360Tab('shells')">🧴 Sổ nợ vỏ bình (${shells.length})</button>
+          <button class="btn btn-sm btn-secondary" id="cust-tab-btn-dvgt" onclick="window.switchCust360Tab('dvgt')">🔧 Dịch vụ DVGT (${dvgt.length})</button>
+        </div>
+
+        <!-- Tab 1: Orders -->
+        <div id="cust-tab-orders" style="max-height:280px; overflow-y:auto;">
+          ${orders.length === 0 ? '<div style="text-align:center; padding:24px; color:#94a3b8;">Chưa có đơn hàng nào</div>' : `
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Mã đơn</th>
+                  <th>Ngày</th>
+                  <th>Kênh bán</th>
+                  <th>Người bán</th>
+                  <th class="text-right">Tổng tiền</th>
+                  <th class="text-right">Đã thu</th>
+                  <th>Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${orders.map(o => `
+                  <tr>
+                    <td class="font-bold text-primary">${esc(o.name)}</td>
+                    <td style="font-size:12px;">${esc(o.date)}</td>
+                    <td>${esc(o.channel_name || o.channel_code)}</td>
+                    <td style="font-size:12px;">${esc(o.seller)}</td>
+                    <td class="text-right font-bold">${fmt(o.amount_total)} đ</td>
+                    <td class="text-right font-semibold" style="color:#059669;">${fmt(o.paid_amount)} đ</td>
+                    <td>${renderBadge(o.state)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          `}
+        </div>
+
+        <!-- Tab 2: Shells -->
+        <div id="cust-tab-shells" style="display:none; max-height:280px; overflow-y:auto;">
+          ${shells.length === 0 ? '<div style="text-align:center; padding:24px; color:#94a3b8;">Không có ghi nhận mượn nợ vỏ bình</div>' : `
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Kỳ đối soát</th>
+                  <th>Người theo dõi / NV</th>
+                  <th class="text-center">Tồn Úp</th>
+                  <th class="text-center">Tồn Vòi</th>
+                  <th class="text-center">Xuất/Trả Úp</th>
+                  <th class="text-center">Xuất/Trả Vòi</th>
+                  <th class="text-right">Tiền cọc</th>
+                  <th>Ghi chú</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${shells.map(s => `
+                  <tr>
+                    <td class="font-bold">${esc(s.period)}</td>
+                    <td style="font-size:12px;">${esc(s.subject)}</td>
+                    <td class="text-center font-bold text-warning">${s.closing_up}</td>
+                    <td class="text-center font-bold text-warning">${s.closing_voi}</td>
+                    <td class="text-center" style="font-size:12px;">+${s.in_up} / -${s.returned_up}</td>
+                    <td class="text-center" style="font-size:12px;">+${s.in_voi} / -${s.returned_voi}</td>
+                    <td class="text-right font-semibold">${fmt(s.deposit)} đ</td>
+                    <td style="font-size:12px; color:#64748b;">${esc(s.note || '—')}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          `}
+        </div>
+
+        <!-- Tab 3: DVGT -->
+        <div id="cust-tab-dvgt" style="display:none; max-height:280px; overflow-y:auto;">
+          ${dvgt.length === 0 ? '<div style="text-align:center; padding:24px; color:#94a3b8;">Khách hàng chưa sử dụng dịch vụ kỹ thuật DVGT</div>' : `
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Ngày</th>
+                  <th>Dịch vụ yêu cầu</th>
+                  <th>Mã ĐH nước</th>
+                  <th>Người giới thiệu</th>
+                  <th class="text-right">Doanh thu</th>
+                  <th>Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${dvgt.map(d => `
+                  <tr>
+                    <td style="font-size:12px;">${esc(d.date)}</td>
+                    <td class="font-bold">${esc(d.service)}</td>
+                    <td>${d.water_meter_code ? `<span class="badge badge-purple">${esc(d.water_meter_code)}</span>` : '—'}</td>
+                    <td style="font-size:12px;">${esc(d.referrer)}</td>
+                    <td class="text-right font-bold">${fmt(d.revenue)} đ</td>
+                    <td>${renderBadge(d.state)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          `}
+        </div>
+      </div>
+    `;
+
+    openModal(html);
+  } catch (err) {
+    showToast('Lỗi tải hồ sơ khách hàng: ' + err.message);
+  }
+};
+
+window.switchCust360Tab = function(tabId) {
+  const tabs = ['orders', 'shells', 'dvgt'];
+  for (const t of tabs) {
+    const el = document.getElementById('cust-tab-' + t);
+    const btn = document.getElementById('cust-tab-btn-' + t);
+    if (el) el.style.display = (t === tabId ? 'block' : 'none');
+    if (btn) {
+      if (t === tabId) {
+        btn.classList.remove('btn-secondary');
+        btn.classList.add('btn-primary');
+      } else {
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-secondary');
+      }
+    }
+  }
+};
+
+window.openNewCustomerModal = function() {
+  const html = `
+    <div style="width:520px; max-width:92vw;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">
+        <h3 style="margin:0; font-size:17px; font-weight:700; color:#0f172a;">＋ Thêm Khách Hàng / Đối Tác Mới</h3>
+        <button class="btn btn-secondary btn-sm" onclick="closeModal()">✕</button>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <div>
+          <label style="display:block; font-size:12px; font-weight:600; color:#334155; margin-bottom:4px;">Tên khách hàng / Tên cơ quan *</label>
+          <input type="text" id="new-cust-name" class="form-control" placeholder="Ví dụ: Công ty Cổ phần Nước đá, Nhà hàng Thủy Tạ..." required />
+        </div>
+
+        <div>
+          <label style="display:block; font-size:12px; font-weight:600; color:#334155; margin-bottom:4px;">Phân loại đối tác</label>
+          <select id="new-cust-type" class="form-control">
+            <option value="Cơ quan / HCSN">Cơ quan / Hành chính sự nghiệp</option>
+            <option value="Doanh nghiệp">Doanh nghiệp / Công ty</option>
+            <option value="Nhà hàng / Khách sạn">Nhà hàng / Khách sạn / Karaoke</option>
+            <option value="Đại lý / Điểm phân phối">Đại lý / Điểm phân phối / Chung cư</option>
+            <option value="Hộ gia đình / Cá nhân" selected>Hộ gia đình / Khách hàng cá nhân</option>
+          </select>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+          <div>
+            <label style="display:block; font-size:12px; font-weight:600; color:#334155; margin-bottom:4px;">Số điện thoại</label>
+            <input type="text" id="new-cust-phone" class="form-control" placeholder="0988..." />
+          </div>
+          <div>
+            <label style="display:block; font-size:12px; font-weight:600; color:#334155; margin-bottom:4px;">Mã ĐH nước (nếu có)</label>
+            <input type="text" id="new-cust-meter" class="form-control" placeholder="HG09xxxx" />
+          </div>
+        </div>
+
+        <div>
+          <label style="display:block; font-size:12px; font-weight:600; color:#334155; margin-bottom:4px;">Địa chỉ giao hàng / Khu vực</label>
+          <input type="text" id="new-cust-address" class="form-control" placeholder="Số nhà, đường phố, phường (Cao Xanh, Bãi Cháy...)" />
+        </div>
+
+        <div>
+          <label style="display:block; font-size:12px; font-weight:600; color:#334155; margin-bottom:4px;">Ghi chú giao dịch</label>
+          <textarea id="new-cust-notes" class="form-control" rows="2" placeholder="Ghi chú về thói quen đặt hàng, vỏ bình, khung giờ giao..."></textarea>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
+          <button class="btn btn-secondary" onclick="closeModal()">Hủy</button>
+          <button class="btn btn-primary" onclick="window.submitNewCustomer()">Lưu khách hàng</button>
+        </div>
+      </div>
+    </div>
+  `;
+  openModal(html);
+};
+
+window.submitNewCustomer = async function() {
+  const name = document.getElementById('new-cust-name').value.trim();
+  const customer_type = document.getElementById('new-cust-type').value;
+  const phone = document.getElementById('new-cust-phone').value.trim();
+  const address = document.getElementById('new-cust-address').value.trim();
+  const notes = document.getElementById('new-cust-notes').value.trim();
+
+  if (!name) {
+    alert('Vui lòng nhập tên khách hàng / cơ quan!');
+    return;
+  }
+
+  try {
+    const res = await api('/api/customers', {
+      method: 'POST',
+      body: JSON.stringify({ name, customer_type, phone, address, notes })
+    });
+    closeModal();
+    showToast('Đã thêm khách hàng thành công: ' + name);
+    if (state.view === 'customers') {
+      renderCustomers(document.getElementById('view-container'));
+    }
+  } catch (err) {
+    alert('Lỗi: ' + err.message);
+  }
+};
+
 
 // 4. Sales Orders View
 async function renderOrders(el) {
@@ -2154,13 +2639,20 @@ async function renderRelations(el) {
 }
 
 // Init
+
 function initApp() {
   setupGlobalEvents();
   const hash = location.hash.slice(1);
   renderNav();
-  renderRoleBanner();
   navigateTo(hash && TITLES[hash] ? hash : 'overview');
 }
+
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
+}
+
 
 if (document.readyState === 'loading') {
   window.addEventListener('DOMContentLoaded', initApp);

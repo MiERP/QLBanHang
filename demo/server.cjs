@@ -545,7 +545,7 @@ function initDb(seed) {
     CREATE TABLE warehouse(code TEXT PRIMARY KEY, name TEXT, stock_location_id INT);
     CREATE TABLE route(id INTEGER PRIMARY KEY, name TEXT, rule TEXT);
     CREATE TABLE channel(code TEXT PRIMARY KEY, name TEXT, counts_for_kpi INT);
-    CREATE TABLE partner(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, phone TEXT, address TEXT, is_company INT DEFAULT 0);
+    CREATE TABLE partner(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, phone TEXT, address TEXT, customer_type TEXT DEFAULT 'Hộ gia đình / Cá nhân', is_company INT DEFAULT 0, notes TEXT);
     CREATE TABLE carrier(id INTEGER PRIMARY KEY, name TEXT, rate_per_unit REAL DEFAULT 5000);
     
     CREATE TABLE sale_order(
@@ -736,14 +736,44 @@ function initDb(seed) {
   for (const c of CHANNELS) I('channel', 'code,name,counts_for_kpi').run(c.code, c.name, c.counts_for_kpi);
   I('carrier', 'id,name,rate_per_unit').run(1, 'Giao hàng xe tải điện xí nghiệp', 5000);
 
+  function classifyCustomer(name) {
+    if (!name) return 'Hộ gia đình / Cá nhân';
+    const s = name.toLowerCase();
+    if (s.includes('ubnd') || s.includes('sở ') || s.includes('ban ') || s.includes('chi cục') || 
+        s.includes('trường') || s.includes('văn phòng') || s.includes('viện ') || s.includes('phòng ') || 
+        s.includes('cục ') || s.includes('đảng') || s.includes('hội đồng') || s.includes('kho bạc')) {
+      return 'Cơ quan / HCSN';
+    }
+    if (s.includes('công ty') || s.includes('cp ') || s.includes('tnhh') || s.includes('tập đoàn') || 
+        s.includes('xí nghiệp') || s.includes('ngân hàng') || s.includes('mỏ') || s.includes('than ') || 
+        s.includes('cảng') || s.includes('luxury') || s.includes('hanet')) {
+      return 'Doanh nghiệp';
+    }
+    if (s.includes('nhà hàng') || s.includes('quán') || s.includes('karaoke') || s.includes('khách sạn') || 
+        s.includes('cafe') || s.includes('hotel') || s.includes('bò sính') || s.includes('bánh')) {
+      return 'Nhà hàng / Khách sạn';
+    }
+    if (s.includes('chung cư') || s.includes('đại lý') || s.includes('trạm ') || s.includes('bãi muối') || 
+        s.includes('tổ ') || s.includes('điểm ')) {
+      return 'Đại lý / Điểm phân phối';
+    }
+    return 'Hộ gia đình / Cá nhân';
+  }
+
   const partnerMap = new Map();
-  function getOrCreatePartner(name, phone, address) {
-    if (!name) name = 'Khách hàng lẻ';
-    let id = partnerMap.get(name);
+  function getOrCreatePartner(name, phone, address, defaultType) {
+    if (!name || !name.trim()) name = 'Khách hàng lẻ';
+    name = name.trim();
+    const key = name.toLowerCase();
+    let id = partnerMap.get(key);
     if (!id) {
-      const info = I('partner', 'name,phone,address').run(name, phone || '', address || '');
+      const type = defaultType || classifyCustomer(name);
+      const isCo = (type === 'Cơ quan / HCSN' || type === 'Doanh nghiệp') ? 1 : 0;
+      const info = I('partner', 'name,phone,address,customer_type,is_company,notes').run(name, phone || '', address || '', type, isCo, '');
       id = info.lastInsertRowid;
-      partnerMap.set(name, id);
+      partnerMap.set(key, id);
+    } else if (phone || address) {
+      db.prepare("UPDATE partner SET phone = CASE WHEN (phone IS NULL OR phone = '') THEN ? ELSE phone END, address = CASE WHEN (address IS NULL OR address = '') THEN ? ELSE address END WHERE id = ?").run(phone || '', address || '', id);
     }
     return id;
   }
@@ -818,6 +848,44 @@ function initDb(seed) {
     }
 
     orderIdx++;
+  }
+
+  // Populate Shell Customers & DVGT Customers into Partner Directory
+  for (const s of seed.shells) {
+    if (s.customer && s.customer.trim()) {
+      getOrCreatePartner(s.customer.trim(), s.phone || '', s.subject || '', classifyCustomer(s.customer));
+    }
+  }
+
+  for (const d of seed.dvgt) {
+    if (d.customer && d.customer.trim()) {
+      getOrCreatePartner(d.customer.trim(), d.phone || '', d.description || '', classifyCustomer(d.customer));
+    }
+  }
+
+  const COMMERCIAL_CLIENTS = [
+    { name: 'Văn Phòng Tỉnh Ủy Quảng Ninh', type: 'Cơ quan / HCSN', address: 'Hạ Long, Quảng Ninh' },
+    { name: 'Văn Phòng Hội Đồng Nhân Dân & UBND Tỉnh', type: 'Cơ quan / HCSN', address: 'Nguyễn Văn Cừ, Hồng Hải, Hạ Long' },
+    { name: 'Ban Quản Lý Vịnh Hạ Long', type: 'Cơ quan / HCSN', address: 'Đường Lê Thánh Tông, Hạ Long' },
+    { name: 'Chi Cục Thủy Lợi & PCTT Quảng Ninh', type: 'Cơ quan / HCSN', address: 'TP. Hạ Long' },
+    { name: 'Sở Dân Tộc và Tôn Giáo Quảng Ninh', type: 'Cơ quan / HCSN', address: 'Khu liên cơ quan số 2, Hạ Long' },
+    { name: 'Trường Chính Trị Nguyễn Văn Cừ', type: 'Cơ quan / HCSN', address: 'Bãi Cháy, Hạ Long' },
+    { name: 'Viện Kiểm Sát Nhân Dân Tỉnh Quảng Ninh', type: 'Cơ quan / HCSN', address: 'Cao Xanh, Hạ Long' },
+    { name: 'Kho Bạc Nhà Nước Tỉnh Quảng Ninh', type: 'Cơ quan / HCSN', address: 'Hồng Hà, Hạ Long' },
+    { name: 'Công Ty Than Mạo Khê - TKV', type: 'Doanh nghiệp', address: 'Đông Triều, Quảng Ninh' },
+    { name: 'Công Ty CP Than Hòn Gai - TKV', type: 'Doanh nghiệp', address: 'Hà Lầm, Hạ Long' },
+    { name: 'Công Ty Công Nghiệp Hóa Chất Mỏ Quảng Ninh', type: 'Doanh nghiệp', address: 'Hạ Long' },
+    { name: 'Công Ty Cổ Phần Du Lịch Luxury Hạ Long', type: 'Doanh nghiệp', address: 'Tuần Châu, Hạ Long' },
+    { name: 'Công Ty Công Nghệ Hanet', type: 'Doanh nghiệp', address: 'Cột 5, Hạ Long' },
+    { name: 'Ngân Hàng SHB Chi Nhánh Quảng Ninh', type: 'Doanh nghiệp', address: 'Cột 8, Hồng Hà, Hạ Long' },
+    { name: 'Hệ Thống Nhà Hàng Minh Tuấn 3', type: 'Nhà hàng / Khách sạn', address: 'Khu đô thị Bãi Muối, Hạ Long' },
+    { name: 'Nhà Hàng Karaoke Diamond Luxury', type: 'Nhà hàng / Khách sạn', address: 'Cao Xanh, Hạ Long' },
+    { name: 'Quán Bò Sính Cao Thắng', type: 'Nhà hàng / Khách sạn', address: 'Cao Thắng, Hạ Long' },
+    { name: 'Ban Quản Trị Chung Cư RuBy Tower', type: 'Đại lý / Điểm phân phối', address: 'Cao Xanh, Hạ Long' },
+    { name: 'Ban Quản Trị Chung Cư Cẩm Bình', type: 'Đại lý / Điểm phân phối', address: 'Cẩm Bình, Cẩm Phả' }
+  ];
+  for (const c of COMMERCIAL_CLIENTS) {
+    getOrCreatePartner(c.name, '', c.address, c.type);
   }
 
   // Populate Shell Ledgers
@@ -1524,6 +1592,143 @@ async function startServer() {
   });
 
 
+  // ══════════════════════════ 19. CONFIGURATION & MASTER DATA APIS ══════════════════════════ //
+  app.get('/api/config', (req, res) => {
+    // 1. UoMs
+    const uoms = [
+      { id: 1, name: 'Chai', code: 'CHAI', category: 'CHAI', factor: 1, note: 'Đơn vị cơ sở đóng chai nhỏ (350ml, 500ml)' },
+      { id: 2, name: 'Vỉ', code: 'VI', category: 'CHAI', factor: 6, note: 'Quy cách 1 Vỉ = 6 Chai (Màng co nhiệt)' },
+      { id: 3, name: 'Hộp', code: 'HOP', category: 'CHAI', factor: 24, note: 'Quy cách 1 Hộp / Thùng carton = 24 Chai = 4 Vỉ' },
+      { id: 4, name: 'Bình', code: 'BINH', category: 'BINH', factor: 1, note: 'Bình 5 Gallon (19 Lít) có cọc vỏ 50.000đ' },
+      { id: 5, name: 'Cái / Bộ', code: 'PART', category: 'PART', factor: 1, note: 'Linh kiện vật tư DVGT (Thanh Magie, Phao, Hộp ĐH)' },
+    ];
+
+    // 2. Positions (Extracted from 202 CBCNV)
+    const positions = db.prepare(`
+      SELECT position as name, COUNT(*) as headcount,
+             CASE
+               WHEN position LIKE '%QLĐH%' OR position LIKE '%quản lý%' THEN 'Vận hành mạng lưới cấp nước & giám sát đồng hồ'
+               WHEN position LIKE '%Lái xe%' THEN 'Vận chuyển hàng & giao nước bằng xe tải điện'
+               WHEN position LIKE '%Thủ kho%' THEN 'Quản lý xuất nhập tồn tại các kho điểm'
+               WHEN position LIKE '%Bảo vệ%' THEN 'Bảo vệ an ninh & bốc xếp nước theo ca'
+               WHEN position LIKE '%Tiếp thị%' THEN 'Tìm kiếm khách hàng, phát triển thị trường nước ion kiềm'
+               WHEN position LIKE '%SCC%' OR position LIKE '%sửa chữa%' THEN 'Kỹ thuật viên sửa chữa cơ điện & DVGT hiện trường'
+               WHEN position LIKE '%Tổ trưởng%' OR position LIKE '%Trưởng%' THEN 'Cán bộ phụ trách quản lý điều hành tổ đội'
+               ELSE 'Nhân sự tham gia thi đua vận động tiêu thụ nước'
+             END as description
+      FROM kpi_employee
+      GROUP BY position
+      ORDER BY headcount DESC
+    `).all();
+
+    // 3. Stations (Units / Departments)
+    const stations = db.prepare(`
+      SELECT station as name, COUNT(*) as headcount,
+             SUM(total) as current_revenue,
+             ROUND(COUNT(*) * 7885316.83, 0) as target_revenue,
+             ROUND(SUM(total) / (COUNT(*) * 7885316.83) * 100, 1) as progress_percent
+      FROM kpi_employee
+      GROUP BY station
+      ORDER BY current_revenue DESC
+    `).all();
+
+    // 4. Locations
+    const locations = [
+      { code: 'TANGAP', name: 'Kho Tăng Áp', usage: 'internal', address: 'Trạm Tăng Áp Hòn Gai', manager: 'Thủ kho Tăng Áp' },
+      { code: 'HUE', name: 'Kho Huế', usage: 'internal', address: 'Kho Trung tâm đường Nguyễn Văn Cừ', manager: 'Thủ kho Huế' },
+      { code: 'LAILAN', name: 'Kho Lại Lan', usage: 'internal', address: 'Khu vực Lại Lan', manager: 'Thủ kho phụ trách' },
+      { code: 'VP', name: 'Kho Văn Phòng', usage: 'internal', address: 'Trụ sở Xí nghiệp Nước Hòn Gai', manager: 'Bộ phận Văn phòng' },
+      { code: 'DATRANG', name: 'Kho Đá Trắng', usage: 'internal', address: 'Khu vực Đá Trắng', manager: 'Trạm Đá Trắng' },
+      { code: 'XEDIEN', name: 'Xe tải điện (Kho lưu động)', usage: 'transit', address: 'Xe tải điện BKS 14C-xxx', manager: 'Lái xe Phương' },
+      { code: 'NCC_CP', name: 'Nhà máy Nước Cẩm Phả', usage: 'supplier', address: 'TP. Cẩm Phả, Quảng Ninh', manager: 'Đơn vị sản xuất tiếp ứng' },
+      { code: 'BC_BRANCH', name: 'Chi nhánh Bãi Cháy', usage: 'supplier', address: 'Khu vực Bãi Cháy', manager: 'Đơn vị bạn liên kết' },
+      { code: 'QY_BRANCH', name: 'Trạm Quảng Yên', usage: 'supplier', address: 'Khu vực Quảng Yên', manager: 'Đơn vị bạn liên kết' },
+      { code: 'CTY_ME', name: 'Kho Công ty mẹ QUAWACO', usage: 'supplier', address: 'Công ty CP Nước sạch QN', manager: 'Kho tổng công ty' },
+      { code: 'CUSTOMER', name: 'Địa điểm Khách hàng', usage: 'customer', address: 'Địa chỉ nhận nước của khách', manager: 'Khách hàng' },
+      { code: 'INVENTORY', name: 'Kiểm kê & Hao hụt kho', usage: 'inventory', address: 'Tài khoản điều chỉnh kho', manager: 'Kế toán kho' },
+    ];
+
+    // 5. Channels
+    const channels = [
+      { code: 'XN', name: 'Kênh Xí nghiệp Nước Hòn Gai', counts_for_kpi: 1, desc: 'Doanh số trực tiếp tính vào thi đua của CBCNV' },
+      { code: 'CTY', name: 'Kênh Công ty mẹ QUAWACO', counts_for_kpi: 0, desc: 'Doanh số điều chuyển nội bộ công ty mẹ' },
+      { code: 'BC', name: 'Kênh Chi nhánh Bãi Cháy', counts_for_kpi: 0, desc: 'Xuất hàng / Vay mượn với Bãi Cháy' },
+      { code: 'MD', name: 'Kênh Khu vực Miền Đông', counts_for_kpi: 0, desc: 'Phục vụ các trạm khu vực Miền Đông' },
+      { code: 'DV', name: 'Kênh Trạm Diễn Vọng', counts_for_kpi: 0, desc: 'Phục vụ khu vực Diễn Vọng' },
+      { code: 'QY', name: 'Kênh Trạm Quảng Yên', counts_for_kpi: 0, desc: 'Xuất hàng / Vay mượn với Quảng Yên' },
+      { code: 'NB', name: 'Kênh Sử dụng nội bộ', counts_for_kpi: 0, desc: 'Nước phục vụ hội nghị, hội họp xí nghiệp' },
+    ];
+
+    res.json({ uoms, positions, stations, locations, channels });
+  });
+
+  // 20. EMPLOYEES DIRECTORY API (Full 202 CBCNV with search & filter)
+  app.get('/api/employees', (req, res) => {
+    const { q, station, position } = req.query;
+    let sql = 'SELECT * FROM kpi_employee WHERE 1=1';
+    const params = [];
+
+    if (q) {
+      sql += ' AND (name LIKE ? OR position LIKE ? OR station LIKE ?)';
+      const queryParam = '%' + q + '%';
+      params.push(queryParam, queryParam, queryParam);
+    }
+    if (station && station !== 'all') {
+      sql += ' AND station = ?';
+      params.push(station);
+    }
+    if (position && position !== 'all') {
+      sql += ' AND position = ?';
+      params.push(position);
+    }
+
+    sql += ' ORDER BY total DESC';
+
+    const employees = db.prepare(sql).all(...params);
+    const totalCount = db.prepare('SELECT COUNT(*) as c FROM kpi_employee').get().c;
+    const totalRevenue = db.prepare('SELECT SUM(total) as s FROM kpi_employee').get().s;
+
+    res.json({
+      total: totalCount,
+      filtered_count: employees.length,
+      total_revenue: totalRevenue,
+      target_annual: 1592834000,
+      employees
+    });
+  });
+
+  // 21. CUSTOMER RECEIVABLES / DEBT REPORT API
+  app.get('/api/reports/debt', (req, res) => {
+    const customers = db.prepare(`
+      SELECT p.id, p.name as customer_name, p.phone, p.address,
+             COUNT(o.id) as order_count,
+             SUM(o.amount_total) as total_purchased,
+             SUM(o.paid_amount) as total_paid,
+             SUM(o.amount_total - o.paid_amount) as debt_amount,
+             MAX(o.date) as last_order_date,
+             CASE
+               WHEN p.name LIKE '%Công ty%' OR p.name LIKE '%UBND%' OR p.name LIKE '%Trường%' OR p.name LIKE '%Chi nhánh%' OR p.name LIKE '%Xí nghiệp%' THEN 'Cơ quan / Doanh nghiệp'
+               ELSE 'Đại lý / Khách hàng cá nhân'
+             END as customer_type
+      FROM partner p
+      JOIN sale_order o ON p.id = o.partner_id
+      GROUP BY p.id
+      HAVING debt_amount > 0
+      ORDER BY debt_amount DESC
+    `).all();
+
+    const summary = db.prepare(`
+      SELECT COUNT(DISTINCT p.id) as total_debtors,
+             SUM(o.amount_total - o.paid_amount) as total_debt
+      FROM partner p
+      JOIN sale_order o ON p.id = o.partner_id
+      WHERE (o.amount_total - o.paid_amount) > 0
+    `).get();
+
+    res.json({ summary, customers });
+  });
+
+
   // ══════════════════════════ 18. COMMERCIAL REPORT API (Nước thương mại.xlsx) ══════════════════════════ //
   app.get('/api/reports/commercial', (req, res) => {
     const selectedMonth = req.query.month || '08/2026';
@@ -1653,6 +1858,206 @@ async function startServer() {
     });
   });
 
+
+  // ══════════════════════════ 22. CUSTOMERS / PARTNERS MANAGEMENT API ══════════════════════════ //
+  app.get('/api/customers', (req, res) => {
+    const { q, type, debt_only, shell_only } = req.query;
+
+    let sql = `
+      SELECT 
+        p.id, p.name, p.phone, p.address, p.customer_type, p.is_company, p.notes,
+        COALESCE(ord.order_count, 0) as order_count,
+        COALESCE(ord.total_spent, 0) as total_spent,
+        COALESCE(ord.debt_amount, 0) as debt_amount,
+        ord.last_order_date,
+        COALESCE(sh.closing_up, 0) as shell_up,
+        COALESCE(sh.closing_voi, 0) as shell_voi,
+        COALESCE(sh.deposit, 0) as shell_deposit,
+        COALESCE(dv.dvgt_count, 0) as dvgt_count,
+        dv.last_dvgt_date
+      FROM partner p
+      LEFT JOIN (
+        SELECT partner_id,
+               COUNT(id) as order_count,
+               SUM(amount_total) as total_spent,
+               SUM(amount_total - paid_amount) as debt_amount,
+               MAX(date) as last_order_date
+        FROM sale_order
+        GROUP BY partner_id
+      ) ord ON ord.partner_id = p.id
+      LEFT JOIN (
+        SELECT customer,
+               SUM(closing_up) as closing_up,
+               SUM(closing_voi) as closing_voi,
+               SUM(deposit) as deposit
+        FROM shell_ledger
+        WHERE period = 'T9'
+        GROUP BY customer
+      ) sh ON lower(sh.customer) = lower(p.name)
+      LEFT JOIN (
+        SELECT customer,
+               COUNT(id) as dvgt_count,
+               MAX(date) as last_dvgt_date
+        FROM dvgt
+        GROUP BY customer
+      ) dv ON lower(dv.customer) = lower(p.name)
+      WHERE 1=1
+    `;
+
+    const params = [];
+    if (q) {
+      sql += ` AND (p.name LIKE ? OR p.phone LIKE ? OR p.address LIKE ?)`;
+      const search = `%${q}%`;
+      params.push(search, search, search);
+    }
+    if (type && type !== 'all') {
+      sql += ` AND p.customer_type = ?`;
+      params.push(type);
+    }
+    if (debt_only === 'true' || debt_only === '1') {
+      sql += ` AND ord.debt_amount > 0`;
+    }
+    if (shell_only === 'true' || shell_only === '1') {
+      sql += ` AND (sh.closing_up > 0 OR sh.closing_voi > 0)`;
+    }
+
+    sql += ` ORDER BY COALESCE(ord.total_spent, 0) DESC, COALESCE(sh.closing_up, 0) + COALESCE(sh.closing_voi, 0) DESC, p.id ASC`;
+
+    const customers = db.prepare(sql).all(...params);
+
+    const totalCount = db.prepare('SELECT COUNT(*) as c FROM partner').get().c;
+    const corporateCount = db.prepare("SELECT COUNT(*) as c FROM partner WHERE customer_type IN ('Cơ quan / HCSN', 'Doanh nghiệp')").get().c;
+
+    let totalDebt = 0;
+    let debtorCount = 0;
+    let totalShells = 0;
+    let shellHoldersCount = 0;
+    let totalDeposit = 0;
+
+    const allPartners = db.prepare(`
+      SELECT 
+        COALESCE(ord.debt_amount, 0) as debt_amount,
+        COALESCE(sh.closing_up, 0) + COALESCE(sh.closing_voi, 0) as total_shell,
+        COALESCE(sh.deposit, 0) as deposit
+      FROM partner p
+      LEFT JOIN (
+        SELECT partner_id, SUM(amount_total - paid_amount) as debt_amount
+        FROM sale_order GROUP BY partner_id
+      ) ord ON ord.partner_id = p.id
+      LEFT JOIN (
+        SELECT customer, SUM(closing_up) as closing_up, SUM(closing_voi) as closing_voi, SUM(deposit) as deposit
+        FROM shell_ledger WHERE period = 'T9' GROUP BY customer
+      ) sh ON lower(sh.customer) = lower(p.name)
+    `).all();
+
+    for (const r of allPartners) {
+      if (r.debt_amount > 0) {
+        debtorCount++;
+        totalDebt += r.debt_amount;
+      }
+      if (r.total_shell > 0) {
+        shellHoldersCount++;
+        totalShells += r.total_shell;
+      }
+      totalDeposit += r.deposit;
+    }
+
+    res.json({
+      summary: {
+        total_customers: totalCount,
+        corporate_count: corporateCount,
+        debtor_count: debtorCount,
+        total_debt: totalDebt,
+        shell_holders_count: shellHoldersCount,
+        total_shells: totalShells,
+        total_deposit: totalDeposit
+      },
+      filtered_count: customers.length,
+      customers
+    });
+  });
+
+  app.get('/api/customers/:id', (req, res) => {
+    const id = Number(req.params.id);
+    const partner = db.prepare('SELECT * FROM partner WHERE id = ?').get(id);
+    if (!partner) return res.status(404).json({ error: 'Không tìm thấy khách hàng' });
+
+    const orders = db.prepare(`
+      SELECT o.*, ch.name as channel_name
+      FROM sale_order o
+      LEFT JOIN channel ch ON o.channel_code = ch.code
+      WHERE o.partner_id = ?
+      ORDER BY o.date DESC, o.id DESC
+    `).all(id);
+
+    const shells = db.prepare(`
+      SELECT * FROM shell_ledger 
+      WHERE lower(customer) = lower(?)
+      ORDER BY period DESC
+    `).all(partner.name);
+
+    const dvgtList = db.prepare(`
+      SELECT * FROM dvgt 
+      WHERE lower(customer) = lower(?)
+      ORDER BY date DESC
+    `).all(partner.name);
+
+    let totalSpent = 0;
+    let totalPaid = 0;
+    for (const o of orders) {
+      totalSpent += o.amount_total;
+      totalPaid += o.paid_amount;
+    }
+
+    let shellUp = 0;
+    let shellVoi = 0;
+    let shellDeposit = 0;
+    for (const s of shells) {
+      if (s.period === 'T9') {
+        shellUp += s.closing_up || 0;
+        shellVoi += s.closing_voi || 0;
+        shellDeposit += s.deposit || 0;
+      }
+    }
+
+    res.json({
+      partner,
+      financial_summary: {
+        total_spent: totalSpent,
+        total_paid: totalPaid,
+        debt_amount: totalSpent - totalPaid,
+        shell_up: shellUp,
+        shell_voi: shellVoi,
+        shell_deposit: shellDeposit
+      },
+      orders,
+      shells,
+      dvgt: dvgtList
+    });
+  });
+
+  app.post('/api/customers', (req, res) => {
+    const { name, phone, address, customer_type, notes } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Tên khách hàng là bắt buộc' });
+    }
+    const cleanName = name.trim();
+    const type = customer_type || 'Hộ gia đình / Cá nhân';
+    const isCo = (type === 'Cơ quan / HCSN' || type === 'Doanh nghiệp') ? 1 : 0;
+
+    const exist = db.prepare('SELECT id FROM partner WHERE lower(name) = lower(?)').get(cleanName);
+    if (exist) {
+      return res.status(400).json({ error: 'Khách hàng này đã tồn tại trong danh bạ hệ thống' });
+    }
+
+    const ins = db.prepare(`
+      INSERT INTO partner(name, phone, address, customer_type, is_company, notes)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(cleanName, phone ? phone.trim() : '', address ? address.trim() : '', type, isCo, notes ? notes.trim() : '');
+
+    const newCust = db.prepare('SELECT * FROM partner WHERE id = ?').get(ins.lastInsertRowid);
+    res.json({ ok: true, customer: newCust });
+  });
 
   // ══════════════════════════ 16. SIMULATION APIS ══════════════════════════ //
   let simState = {

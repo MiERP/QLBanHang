@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>QAROMI ERP — Hệ Thống Điều Hành Nước Uống & DVGT</title>
-  <link rel="stylesheet" href="./styles.css?v=6" />
+  <title>QAROMI ERP — Hệ Thống Điều Hành Doanh Nghiệp</title>
+  <link rel="stylesheet" href="./styles.css?v=10" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
   <div id="app">
-    <!-- Sidebar Navigation -->
+    <!-- Clean Product Sidebar -->
     <aside class="sidebar">
       <div class="brand">
         <div class="brand-logo">Q</div>
@@ -21,103 +21,49 @@
         </div>
       </div>
 
-      <!-- MiERP App Switcher Section -->
-      <div class="app-switcher-section">
-        <div class="app-switcher-title">❖ PHÂN HỆ ỨNG DỤNG (APPS)</div>
-        <div class="app-grid" id="app-switcher-grid">
-          <button class="app-chip active" data-app="all" title="Tất cả các menu">
-            <span class="app-chip-icon">🏢</span>
-            <span class="app-chip-name">Tất cả</span>
-          </button>
-          <button class="app-chip" data-app="sales" title="Bán hàng & Phân phối">
-            <span class="app-chip-icon">💼</span>
-            <span class="app-chip-name">Bán hàng</span>
-          </button>
-          <button class="app-chip" data-app="stock" title="Kho bãi & Đội xe">
-            <span class="app-chip-icon">📦</span>
-            <span class="app-chip-name">Kho & Xe</span>
-          </button>
-          <button class="app-chip" data-app="shell" title="Quản lý nợ vỏ bình">
-            <span class="app-chip-icon">🔄</span>
-            <span class="app-chip-name">Vỏ bình</span>
-          </button>
-          <button class="app-chip" data-app="fsm" title="Dịch vụ gia tăng nước">
-            <span class="app-chip-icon">🔧</span>
-            <span class="app-chip-name">DVGT</span>
-          </button>
-          <button class="app-chip" data-app="kpi" title="Chỉ tiêu kế hoạch năm">
-            <span class="app-chip-icon">🎯</span>
-            <span class="app-chip-name">Thi đua</span>
-          </button>
-          <button class="app-chip highlight-chip" data-app="blueprint" title="Kiến trúc giải pháp MiERP">
-            <span class="app-chip-icon">🏛️</span>
-            <span class="app-chip-name">Giải pháp</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Live Simulation CTA in Sidebar -->
-      <div class="sidebar-sim-cta" id="sidebar-sim-btn">
-        <div class="sim-cta-badge">⚡ LIVE WORKFLOW</div>
-        <div class="sim-cta-title">Mô Phỏng Chu Trình Mẫu</div>
-        <div class="sim-cta-desc">Chạy thử 4 bước: Báo giá ➔ Kho ➔ Giao ➔ 4 Sổ sách</div>
-      </div>
-
+      <!-- Navigation Menu: 6 Clean Modules -->
       <nav id="nav" class="nav-menu"></nav>
 
       <div class="sidebar-footer">
         <div class="footer-period">
           <span class="icon">📅</span>
           <div>
-            <div class="period-label">Kỳ điều hành</div>
-            <div class="period-value">Tháng 9 / 2026 (Hòn Gai)</div>
+            <div class="period-label">Kỳ kế toán</div>
+            <div class="period-value">Tháng 9 / 2026</div>
           </div>
         </div>
-        <div class="footer-note">Kiến trúc kế thừa & chuẩn hóa từ MiERP</div>
+        <div class="footer-note">Phiên bản 1.0.0 • QUAWACO</div>
       </div>
     </aside>
 
     <!-- Main Content Area -->
     <main class="main-content">
-      <!-- Top Bar -->
+      <!-- Clean Product Topbar -->
       <header class="topbar">
         <div class="topbar-left">
+          <div class="breadcrumbs" id="top-breadcrumbs">
+            <span class="breadcrumb-item">QAROMI</span>
+            <span class="breadcrumb-sep">/</span>
+            <span class="breadcrumb-item active" id="breadcrumb-title">Bảng điều khiển</span>
+          </div>
           <h1 id="page-title">Bảng điều khiển</h1>
-          <p id="page-sub" class="page-subtitle">Nhìn toàn diện tình hình vận hành, kho bãi, nợ vỏ và chỉ tiêu</p>
         </div>
         <div class="topbar-right">
-          <!-- Top Live Simulation Button -->
-          <button class="btn btn-simulation" id="top-sim-btn">
-            <span class="pulse-dot"></span>
-            <span>⚡ Chạy Thử Chu Trình Mẫu</span>
-          </button>
-
-          <!-- Top Role Selector Dropdown -->
-          <div class="role-selector-wrap">
-            <label class="role-label" for="role-select">Góc nhìn vai trò:</label>
-            <select id="role-select" class="role-select">
-              <option value="all">🌐 Toàn quyền hệ thống</option>
-              <option value="dispatch">👤 Điều phối viên (Nhung / Quang)</option>
-              <option value="driver">🚚 Lái xe giao hàng (Phương)</option>
-              <option value="stock">🏭 Thủ kho (Kho Tăng Áp / Huế)</option>
-              <option value="technician">🔧 Thợ kỹ thuật DVGT (SCC)</option>
-              <option value="director">👑 Ban Giám Đốc Xí nghiệp</option>
-            </select>
-          </div>
-
-          <div class="kpi-mini-widget" id="top-kpi-widget">
-            <span class="kpi-tag">Kế hoạch 2026: 1.59 tỷ</span>
-            <div class="kpi-bar-wrap">
-              <div class="kpi-bar" id="top-kpi-bar" style="width: 65%;"></div>
-            </div>
+          <div class="top-period-pill">
+            <span class="pill-dot"></span>
+            <span>Tháng 09/2026</span>
           </div>
           <button class="btn btn-primary btn-sm" id="btn-quick-order">＋ Báo giá mới</button>
           <button class="btn btn-secondary btn-sm" id="btn-quick-dvgt">＋ Đăng ký DVGT</button>
+          <div class="user-profile-pill">
+            <div class="user-avatar">H</div>
+            <div class="user-details">
+              <span class="user-name">Lương Minh Hương</span>
+              <span class="user-role">Tổ Tiếp thị</span>
+            </div>
+          </div>
         </div>
       </header>
-
-      <!-- Role Perspective Banner (Dynamic based on selected role) -->
-      <div id="role-banner" class="role-perspective-banner hidden"></div>
 
       <!-- Dynamic View Container -->
       <section id="view-container" class="view-container"></section>
@@ -132,6 +78,6 @@
     <div class="modal-dialog" id="modal-box"></div>
   </div>
 
-  <script src="./app.js?v=6"></script>
+  <script src="./app.js?v=10"></script>
 </body>
 </html>
