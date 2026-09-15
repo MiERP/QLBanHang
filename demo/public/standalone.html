@@ -29347,6 +29347,1094 @@ window.issueOrderInvoice = async function(id, name) {
   }
 };
 
+window.filterOrdersTable = function() {
+  const q = document.getElementById('order-search').value.toLowerCase();
+  const ch = document.getElementById('order-channel-filter').value;
+  const rows = document.querySelectorAll('.order-row');
+  rows.forEach(r => {
+    const matchesQ = !q || r.dataset.search.includes(q);
+    const matchesCh = !ch || r.dataset.channel === ch;
+    r.style.display = (matchesQ && matchesCh) ? '' : 'none';
+  });
+};
+
+// Open Order Detail Modal
+window.openOrderDetailModal = async function(id) {
+  const { order, lines, pickings } = await api(`/api/orders/${id}`);
+  
+  openModal(`
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Chi tiết đơn hàng ${esc(order.name)}</div>
+        <div style="font-size:12px; color:#64748b;">Khách hàng: <b>${esc(order.customer_name)}</b> — Ngày: ${esc(order.date)}</div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:16px; font-size:12px; background:#f8fafc; padding:12px; border-radius:8px;">
+        <div><b>Kênh doanh thu:</b> ${esc(order.channel_name)}</div>
+        <div><b>Kho xuất hàng:</b> ${esc(order.warehouse_name)}</div>
+        <div><b>Người bán (CBCNV):</b> ${esc(order.seller)}</div>
+        <div><b>Trạng thái:</b> ${renderBadge(order.state)}</div>
+        <div><b>Ghi chú thu tiền:</b> ${esc(order.collection_note || 'Chưa có')}</div>
+        <div><b>Tổng tiền đơn:</b> <span class="font-bold text-primary" style="font-size:14px;">${fmt(order.amount_total)} đ</span></div>
+      </div>
+
+      <div style="font-weight:700; margin-bottom:8px; font-size:13px;">Chi tiết sản phẩm đặt mua:</div>
+      <table class="data-table" style="margin-bottom:16px;">
+        <thead>
+          <tr>
+            <th>Mặt hàng</th>
+            <th class="text-center">Số lượng</th>
+            <th class="text-center">Tặng (10+1)</th>
+            <th class="text-right">Đơn giá</th>
+            <th class="text-right">Thành tiền</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${lines.map(l => `
+            <tr>
+              <td>${esc(l.product_name)}</td>
+              <td class="text-center font-bold">${fmt(l.qty)} ${esc(l.uom_name)}</td>
+              <td class="text-center text-success font-bold">${l.promo_qty ? '+' + fmt(l.promo_qty) : '0'}</td>
+              <td class="text-right">${fmt(l.price_unit)} đ</td>
+              <td class="text-right font-bold">${fmt(l.amount_total)} đ</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+
+      <div style="font-weight:700; margin-bottom:8px; font-size:13px;">Phiếu giao hàng liên kết (Stock Picking):</div>
+      ${pickings.length ? `
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Mã phiếu kho</th>
+              <th>Nguồn ➔ Đích</th>
+              <th>Cước giao</th>
+              <th>Trạng thái</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${pickings.map(p => `
+              <tr>
+                <td class="font-bold text-primary">${esc(p.name)}</td>
+                <td>${esc(p.src_name)} ➔ ${esc(p.dest_name)}</td>
+                <td>${fmt(p.carrier_fee)} đ</td>
+                <td>${renderBadge(p.state)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      ` : '<div style="color:#64748b; font-size:12px;">Chưa sinh phiếu kho (đang ở trạng thái Báo giá).</div>'}
+    </div>
+    <div class="modal-footer">
+      ${order.state === 'draft' ? `
+        <button class="btn btn-primary" onclick="confirmOrder(${order.id})">✔ Xác nhận đơn (Sinh phiếu kho)</button>
+      ` : ''}
+      <button class="btn btn-secondary" onclick="closeModal()">Đóng</button>
+    </div>
+  `);
+};
+
+window.confirmOrder = async function(id) {
+  const res = await api(`/api/orders/${id}/confirm`, { method: 'POST' });
+  showToast(`Đã xác nhận đơn! Tự động sinh phiếu giao: ${res.picking_name}`);
+  closeModal();
+  renderView();
+};
+
+// Open Create Order Modal
+window.openCreateOrderModal = async function() {
+  if (!state.products.length) {
+    const data = await api('/api/products');
+    state.products = data.products;
+  }
+
+  openModal(`
+    <div class="modal-header">
+      <div class="modal-title">＋ Tạo Báo Giá / Đơn Bán Hàng Mới</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Tên khách hàng *</label>
+          <input type="text" id="new-ord-customer" class="form-control" placeholder="Ví dụ: Công ty Hanet, Nhà hàng Minh Tuấn..." required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Số điện thoại</label>
+          <input type="text" id="new-ord-phone" class="form-control" placeholder="09xxxxxxx">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Kênh doanh thu</label>
+          <select id="new-ord-channel" class="form-control">
+            <option value="XN">Xí nghiệp (Tính KPI thi đua)</option>
+            <option value="CTY">Công ty mẹ QUAWACO</option>
+            <option value="BC">Trạm Bãi Cháy</option>
+            <option value="MD">Miền Đông</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Kho xuất hàng</label>
+          <select id="new-ord-warehouse" class="form-control">
+            <option value="TANGAP">Kho Tăng Áp</option>
+            <option value="HUE">Kho Huế</option>
+            <option value="VP">Kho Văn Phòng</option>
+            <option value="XEDIEN">Xe tải điện (Kho di động)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Người bán (Cán bộ công nhân viên vận động)</label>
+        <input type="text" id="new-ord-seller" class="form-control" placeholder="Ví dụ: Lương Minh Hương, Đinh Thu Huế, Bùi Hà Thu...">
+      </div>
+
+      <div style="font-weight:700; margin: 16px 0 8px; font-size:13px;">Chọn mặt hàng & Số lượng:</div>
+      <div style="background:#f8fafc; padding:12px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:12px;">
+        <div class="form-row">
+          <div class="form-group" style="flex:2;">
+            <label class="form-label">Sản phẩm</label>
+            <select id="new-ord-prod" class="form-control">
+              ${state.products.map(p => `
+                <option value="${p.code}">${p.name} — ${fmt(p.price)}đ</option>
+              `).join('')}
+            </select>
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label class="form-label">Số lượng</label>
+            <input type="number" id="new-ord-qty" class="form-control" value="10" min="1">
+          </div>
+        </div>
+        <div style="font-size:11px; color:#16a34a;">
+          🎁 <b>Chính sách 10+1:</b> Mua từ 10 đơn vị tự động được tặng 1 sản phẩm khuyến mãi miễn phí!
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Ghi chú thanh toán</label>
+        <input type="text" id="new-ord-note" class="form-control" placeholder="Ví dụ: Thu tiền luôn, CK11/9...">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Hủy</button>
+      <button class="btn btn-primary" onclick="submitNewOrder()">Lưu Báo Giá</button>
+    </div>
+  `);
+};
+
+window.submitNewOrder = async function() {
+  const customer = document.getElementById('new-ord-customer').value.trim();
+  const phone = document.getElementById('new-ord-phone').value.trim();
+  const channel = document.getElementById('new-ord-channel').value;
+  const warehouse = document.getElementById('new-ord-warehouse').value;
+  const seller = document.getElementById('new-ord-seller').value.trim();
+  const prodCode = document.getElementById('new-ord-prod').value;
+  const qty = Number(document.getElementById('new-ord-qty').value) || 1;
+  const note = document.getElementById('new-ord-note').value.trim();
+
+  if (!customer) {
+    alert('Vui lòng nhập tên khách hàng');
+    return;
+  }
+
+  const payload = {
+    customer_name: customer,
+    phone,
+    channel_code: channel,
+    warehouse_code: warehouse,
+    seller: seller || 'Xí nghiệp',
+    lines: [{ product_code: prodCode, qty }],
+    collection_note: note,
+  };
+
+  const res = await api('/api/orders', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+  showToast(`Đã tạo báo giá ${res.name} thành công!`);
+  closeModal();
+  navigateTo('orders');
+};
+
+// 5. Bottle Shells View (Sổ Vỏ)
+async function renderShells(el) {
+  const currentTab = state.shellTab || 'transactions';
+  const txData = await api('/api/shells/transactions');
+  const sumData = await api('/api/shells');
+  const s = txData.summary || { total_borrowed_up: 192, total_borrowed_voi: 68, total_returned_up: 119, total_returned_voi: 44, total_remaining_up: 73, total_remaining_voi: 24, total_deposit: 2300000 };
+
+  el.innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
+      <div>
+        <h2 style="font-size:20px; font-weight:700; color:#0f172a; margin:0 0 4px 0;">🧴 Quản Lý Vật Tư Vỏ Bình 19L (Mượn - Trả)</h2>
+        <div style="font-size:13px; color:#64748b;">Theo dõi chi tiết luân chuyển tài sản: Ngày mượn, Số mượn, Ngày trả, Số trả, Nợ vỏ và Tiền ký cọc</div>
+      </div>
+      <div style="display:flex; gap:6px;">
+        <button class="btn btn-sm ${currentTab === 'transactions' ? 'btn-primary' : 'btn-secondary'}" 
+                onclick="window.switchShellTab('transactions')">📋 Nhật ký chi tiết Mượn - Trả</button>
+        <button class="btn btn-sm ${currentTab === 'summary' ? 'btn-primary' : 'btn-secondary'}" 
+                onclick="window.switchShellTab('summary')">📊 Sổ nợ vỏ tổng hợp (T8 & T9)</button>
+      </div>
+    </div>
+
+    <!-- 4 Shell Metric Cards -->
+    <div class="metrics-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom:20px;">
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">TỔNG XUẤT CHO MƯỢN</span>
+          <span class="metric-icon">📤</span>
+        </div>
+        <div class="metric-value font-bold">${s.total_borrowed_up + s.total_borrowed_voi} vỏ</div>
+        <div class="metric-sub">Úp: <b>${s.total_borrowed_up}</b> | Vòi: <b>${s.total_borrowed_voi}</b></div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">ĐÃ THU HỒI TRẢ VỎ</span>
+          <span class="metric-icon">📥</span>
+        </div>
+        <div class="metric-value font-bold text-success">${s.total_returned_up + s.total_returned_voi} vỏ</div>
+        <div class="metric-sub">Đã trả: <b>${s.total_returned_up}</b> úp | <b>${s.total_returned_voi}</b> vòi</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">KHÁCH CÒN NỢ VỎ</span>
+          <span class="metric-icon">⏳</span>
+        </div>
+        <div class="metric-value font-bold text-danger">${s.total_remaining_up + s.total_remaining_voi} vỏ</div>
+        <div class="metric-sub">Còn nợ: <b class="text-danger">${s.total_remaining_up}</b> úp • <b class="text-danger">${s.total_remaining_voi}</b> vòi</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">TIỀN CỌC VỎ ĐANG GIỮ</span>
+          <span class="metric-icon">💰</span>
+        </div>
+        <div class="metric-value font-bold" style="color:#059669;">${fmt(s.total_deposit)} đ</div>
+        <div class="metric-sub">Đang lưu giữ tại quỹ xí nghiệp</div>
+      </div>
+    </div>
+
+    ${currentTab === 'transactions' ? `
+      <!-- TAB 1: DETAILED TRANSACTIONS TABLE (Ngày mượn, Số mượn, Ngày trả, Số trả) -->
+      <div class="card-box">
+        <div class="card-box-header">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <span class="card-box-title">📋 Nhật ký chi tiết giao nhận vỏ bình theo giao dịch</span>
+            <span class="badge badge-sale">${txData.transactions ? txData.transactions.length : 15} phiếu</span>
+          </div>
+          <span style="font-size:12px; color:#64748b;">Quy định: Tiền cọc 50.000đ/vỏ cho khách lẻ và đại lý</span>
+        </div>
+        <div class="card-box-body" style="padding:0;">
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width:110px;">Mã phiếu</th>
+                  <th>Khách hàng / Đơn vị mượn</th>
+                  <th style="width:90px;">Ngày mượn</th>
+                  <th class="text-center" style="width:100px;">Số mượn (Úp/Vòi)</th>
+                  <th style="width:90px;">Ngày trả</th>
+                  <th class="text-center" style="width:100px;">Số đã trả (Úp/Vòi)</th>
+                  <th class="text-center font-bold text-danger" style="width:100px;">Còn nợ</th>
+                  <th class="text-right" style="width:90px;">Tiền cọc</th>
+                  <th class="text-center" style="width:100px;">Trạng thái</th>
+                  <th class="text-center" style="width:100px;">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${(txData.transactions || []).map(t => {
+                  const statusMap = {
+                    borrowed: ['Đang mượn', 'badge-warning'],
+                    partially_returned: ['Trả 1 phần', 'badge-purple'],
+                    returned: ['Đã trả đủ', 'badge-done']
+                  };
+                  const [stLabel, stBadge] = statusMap[t.status] || [t.status, 'badge-draft'];
+                  const isOwed = (t.remaining_up > 0 || t.remaining_voi > 0);
+
+                  return `
+                    <tr>
+                      <td class="font-bold text-primary font-mono">${esc(t.code)}</td>
+                      <td>
+                        <div class="font-semibold">${esc(t.customer_name)}</div>
+                        ${t.note ? `<div style="font-size:11px; color:#64748b;">${esc(t.note)}</div>` : ''}
+                      </td>
+                      <td style="font-size:12px;">${esc(t.borrow_date)}</td>
+                      <td class="text-center font-semibold">${t.borrow_up} úp / ${t.borrow_voi} vòi</td>
+                      <td style="font-size:12px;">${t.return_date ? esc(t.return_date) : '<span class="text-muted">Chưa trả</span>'}</td>
+                      <td class="text-center text-success font-semibold">${t.return_up} úp / ${t.return_voi} vòi</td>
+                      <td class="text-center font-bold ${isOwed ? 'text-danger' : 'text-muted'}">
+                        ${isOwed ? `${t.remaining_up} úp / ${t.remaining_voi} vòi` : '0'}
+                      </td>
+                      <td class="text-right">${t.deposit > 0 ? fmt(t.deposit) + ' đ' : '—'}</td>
+                      <td class="text-center"><span class="badge ${stBadge}">${stLabel}</span></td>
+                      <td class="text-center">
+                        ${isOwed ? `
+                          <button class="btn btn-primary btn-sm" style="padding:2px 8px; font-size:11px;"
+                                  onclick="window.openReturnShellTxModal(${t.id}, '${esc(t.customer_name)}', ${t.remaining_up}, ${t.remaining_voi}, ${t.deposit})">
+                            ✍️ Trả vỏ
+                          </button>
+                        ` : `
+                          <span class="text-muted" style="font-size:11px;">Hoàn tất</span>
+                        `}
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    ` : `
+      <!-- TAB 2: SUMMARY TABLE -->
+      <div class="card-box">
+        <div class="card-box-header">
+          <span class="card-box-title">📊 Sổ theo dõi nợ vỏ bình theo khách hàng (Kỳ Tháng 9/2026)</span>
+          <span class="badge badge-draft">${sumData.ledgers ? sumData.ledgers.length : 0} khách hàng</span>
+        </div>
+        <div class="card-box-body" style="padding:0;">
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Người theo dõi</th>
+                  <th>Khách hàng nợ vỏ</th>
+                  <th class="text-center">Nợ đầu kỳ</th>
+                  <th class="text-center">Giao trong kỳ</th>
+                  <th class="text-center">Đã trả</th>
+                  <th class="text-center font-bold text-danger">Còn nợ cuối kỳ</th>
+                  <th class="text-right">Tiền cọc</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${(sumData.ledgers || []).slice(0, 30).map(l => `
+                  <tr>
+                    <td>${esc(l.subject)}</td>
+                    <td class="font-semibold">${esc(l.customer)}</td>
+                    <td class="text-center text-muted">${l.opening_up || 0} úp / ${l.opening_voi || 0} vòi</td>
+                    <td class="text-center text-primary font-semibold">+${(l.in_up || 0) + (l.in_voi || 0)}</td>
+                    <td class="text-center text-success font-semibold">-${(l.returned_up || 0) + (l.returned_voi || 0)}</td>
+                    <td class="text-center font-bold text-danger">${l.closing_up || 0} úp / ${l.closing_voi || 0} vòi</td>
+                    <td class="text-right">${l.deposit ? fmt(l.deposit) + ' đ' : '—'}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `}
+  `;
+}
+
+window.switchShellTab = function(tab) {
+  state.shellTab = tab;
+  renderShells(document.getElementById('view-container'));
+};
+
+window.openReturnShellTxModal = function(id, cust, remUp, remVoi, dep) {
+  const today = new Date().toISOString().slice(0, 10);
+  const html = `
+    <div style="width:480px; max-width:92vw;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid #e2e8f0; padding-bottom:8px;">
+        <h3 style="margin:0; font-size:16px; font-weight:700; color:#0f172a;">✍️ Ghi Nhận Thu Hồi Trả Vỏ Bình</h3>
+        <button class="btn btn-secondary btn-sm" onclick="closeModal()">✕</button>
+      </div>
+
+      <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:10px 14px; margin-bottom:14px; font-size:13px;">
+        <div>Khách hàng: <b>${esc(cust)}</b></div>
+        <div style="color:#b45309; margin-top:2px;">Đang nợ: <b>${remUp} bình úp</b> • <b>${remVoi} bình vòi</b> | Tiền cọc: <b>${fmt(dep)} đ</b></div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <div>
+          <label style="display:block; font-size:12px; font-weight:600; color:#334155; margin-bottom:4px;">Ngày thu hồi vỏ</label>
+          <input type="date" id="ret-date" class="form-control" value="${today}" />
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+          <div>
+            <label style="display:block; font-size:12px; font-weight:600; color:#334155; margin-bottom:4px;">Số bình Úp trả (tối đa ${remUp})</label>
+            <input type="number" id="ret-up" class="form-control" value="${remUp}" min="0" max="${remUp}" />
+          </div>
+          <div>
+            <label style="display:block; font-size:12px; font-weight:600; color:#334155; margin-bottom:4px;">Số bình Vòi trả (tối đa ${remVoi})</label>
+            <input type="number" id="ret-voi" class="form-control" value="${remVoi}" min="0" max="${remVoi}" />
+          </div>
+        </div>
+
+        <div>
+          <label style="display:block; font-size:12px; font-weight:600; color:#334155; margin-bottom:4px;">Hoàn tiền cọc trả khách (nếu có)</label>
+          <input type="number" id="ret-dep" class="form-control" value="${dep}" min="0" max="${dep}" />
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
+          <button class="btn btn-secondary" onclick="closeModal()">Hủy</button>
+          <button class="btn btn-primary" onclick="window.submitReturnShellTx(${id})">Xác nhận trả vỏ</button>
+        </div>
+      </div>
+    </div>
+  `;
+  openModal(html);
+};
+
+window.submitReturnShellTx = async function(id) {
+  const return_date = document.getElementById('ret-date').value;
+  const return_up = Number(document.getElementById('ret-up').value) || 0;
+  const return_voi = Number(document.getElementById('ret-voi').value) || 0;
+  const refund_deposit = Number(document.getElementById('ret-dep').value) || 0;
+
+  try {
+    const res = await api('/api/shells/transactions/return', {
+      method: 'POST',
+      body: JSON.stringify({ id, return_date, return_up, return_voi, refund_deposit })
+    });
+    closeModal();
+    showToast(res.message);
+    renderShells(document.getElementById('view-container'));
+  } catch (err) {
+    alert('Lỗi: ' + err.message);
+  }
+};
+
+window.openReturnShellModal = function(id, customer, curUp, curVoi) {
+  openModal(`
+    <div class="modal-header">
+      <div class="modal-title">Thu hồi vỏ bình — ${esc(customer)}</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="margin-bottom:14px; font-size:12px; color:#64748b;">
+        Khách hàng hiện đang nợ: <b>${curUp} vỏ Úp</b> và <b>${curVoi} vỏ Vòi</b>.
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Số vỏ Úp thu về</label>
+          <input type="number" id="ret-up-qty" class="form-control" value="${Math.min(1, curUp)}" min="0" max="${curUp}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Số vỏ Vòi thu về</label>
+          <input type="number" id="ret-voi-qty" class="form-control" value="${Math.min(1, curVoi)}" min="0" max="${curVoi}">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Hủy</button>
+      <button class="btn btn-success" onclick="submitReturnShell(${id})">Xác nhận thu hồi vỏ</button>
+    </div>
+  `);
+};
+
+window.submitReturnShell = async function(id) {
+  const up = Number(document.getElementById('ret-up-qty').value) || 0;
+  const voi = Number(document.getElementById('ret-voi-qty').value) || 0;
+  const res = await api('/api/shells/return', {
+    method: 'POST',
+    body: JSON.stringify({ id, ret_up: up, ret_voi: voi }),
+  });
+  showToast(res.message);
+  closeModal();
+  renderShells(document.getElementById('view-container'));
+};
+
+// 6. Pickings View (Phiếu Kho)
+async function renderPickings(el) {
+  const pickings = await api('/api/pickings');
+  el.innerHTML = `
+    <div class="card-box">
+      <div class="card-box-header">
+        <span class="card-box-title">📋 Danh sách phiếu kho (Nhập / Xuất / Chuyển nội bộ)</span>
+        <span class="badge badge-draft">${pickings.length} phiếu</span>
+      </div>
+      <div class="card-box-body" style="padding:0;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Mã phiếu</th>
+              <th>Loại phiếu</th>
+              <th>Nguồn ➔ Đích</th>
+              <th>Chứng từ gốc</th>
+              <th>Ngày lên lịch</th>
+              <th>Cước vận chuyển</th>
+              <th>Trạng thái</th>
+              <th>Thao tác</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${pickings.slice(0, 30).map(p => `
+              <tr>
+                <td class="font-bold text-primary">${esc(p.name)}</td>
+                <td><span class="badge ${p.type_code === 'outgoing' ? 'badge-sale' : 'badge-purple'}">${p.type_code === 'outgoing' ? 'Xuất giao' : 'Điều chuyển'}</span></td>
+                <td>${esc(p.src_name)} ➔ ${esc(p.dest_name)}</td>
+                <td>${esc(p.origin || '—')}</td>
+                <td>${esc(p.scheduled_date)}</td>
+                <td>${fmt(p.carrier_fee)} đ</td>
+                <td>${renderBadge(p.state)}</td>
+                <td>
+                  <button class="btn btn-secondary btn-sm" onclick="openPickingDetailModal(${p.id})">Chi tiết</button>
+                  ${p.state !== 'done' ? `<button class="btn btn-success btn-sm" onclick="confirmPicking(${p.id})">✔ Xác nhận</button>` : ''}
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+window.openPickingDetailModal = async function(id) {
+  const { picking, moves, workers } = await api(`/api/pickings/${id}`);
+  openModal(`
+    <div class="modal-header">
+      <div class="modal-title">Phiếu kho ${esc(picking.name)}</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:#f8fafc; padding:12px; border-radius:8px; font-size:12px; margin-bottom:14px; display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+        <div><b>Nguồn:</b> ${esc(picking.src_name)}</div>
+        <div><b>Đích:</b> ${esc(picking.dest_name)}</div>
+        <div><b>Trạng thái:</b> ${renderBadge(picking.state)}</div>
+        <div><b>Cước phí:</b> ${fmt(picking.carrier_fee)} đ</div>
+      </div>
+
+      <div style="font-weight:700; margin-bottom:8px;">Dòng dịch chuyển mặt hàng (Bút toán kép):</div>
+      <table class="data-table" style="margin-bottom:14px;">
+        <thead>
+          <tr>
+            <th>Mặt hàng</th>
+            <th class="text-right">Số lượng</th>
+            <th class="text-right">Hàng tặng (KM)</th>
+            <th>Trạng thái</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${moves.map(m => `
+            <tr>
+              <td>${esc(m.product_name)}</td>
+              <td class="text-right font-bold">${fmt(m.qty)}</td>
+              <td class="text-right text-success font-bold">${m.promo_qty ? '+' + fmt(m.promo_qty) : '0'}</td>
+              <td>${renderBadge(m.state)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+
+      <div style="font-weight:700; margin-bottom:8px;">Nhân viên giao hàng nhận thù lao (5.000đ/bình):</div>
+      ${workers.length ? `
+        <div style="font-size:12px; color:#1e293b;">
+          ${workers.map(w => `• <b>${esc(w.employee)}</b> được chia: <span class="text-success font-bold">${fmt(w.fee_share)} đ</span>`).join('<br>')}
+        </div>
+      ` : '<div style="font-size:12px; color:#64748b;">Chưa phân công người đi giao.</div>'}
+    </div>
+    <div class="modal-footer">
+      ${picking.state !== 'done' ? `
+        <button class="btn btn-success" onclick="confirmPicking(${picking.id})">✔ Xác nhận xuất kho ngay</button>
+      ` : ''}
+      <button class="btn btn-secondary" onclick="closeModal()">Đóng</button>
+    </div>
+  `);
+};
+
+window.confirmPicking = async function(id) {
+  await api(`/api/pickings/${id}/confirm`, { method: 'POST' });
+  showToast('Phiếu kho đã được xác nhận! Tồn kho và sổ vỏ đã được cập nhật.');
+  closeModal();
+  renderView();
+};
+
+// 7. Stock Quants View
+async function renderQuants(el) {
+  const quants = await api('/api/quants');
+  el.innerHTML = `
+    <div class="card-box">
+      <div class="card-box-header">
+        <span class="card-box-title">🏬 Tồn kho thời gian thực theo từng vị trí</span>
+        <span class="badge badge-sale">Trực tiếp thời gian thực</span>
+      </div>
+      <div class="card-box-body" style="padding:0;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Địa điểm kho</th>
+              <th>Mã vị trí</th>
+              <th>Sản phẩm</th>
+              <th>ĐVT</th>
+              <th class="text-right">Số lượng tồn</th>
+              <th>Đánh giá an toàn</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${quants.map(q => `
+              <tr>
+                <td class="font-bold">${esc(q.location_name)}</td>
+                <td><code>${esc(q.location_code)}</code></td>
+                <td>${esc(q.product_name)}</td>
+                <td><span class="badge badge-draft">${esc(q.uom_name)}</span></td>
+                <td class="text-right font-bold ${q.quantity < 20 ? 'text-danger' : 'text-success'}" style="font-size:14px;">${fmt(q.quantity)}</td>
+                <td>${q.quantity < 20 ? '<span class="badge badge-danger">Thiếu hàng</span>' : '<span class="badge badge-done">An toàn</span>'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// 8. Moves View
+async function renderMoves(el) {
+  const moves = await api('/api/moves');
+  el.innerHTML = `
+    <div class="pattern-callout">
+      <span class="badge-pattern">Double-Entry Stock</span>
+      <div>
+        <b>Nguyên lý Bút toán kép:</b> Không có hàng hóa nào tự nhiên sinh ra hay mất đi. Mọi dịch chuyển đều ghi rõ <code>Vị trí Nguồn ➔ Vị trí Đích</code>, đảm bảo tính toàn vẹn và kiểm toán 100%.
+      </div>
+    </div>
+    <div class="card-box">
+      <div class="card-box-header"><span class="card-box-title">🔄 Lịch sử các dòng dịch chuyển kho</span></div>
+      <div class="card-box-body" style="padding:0;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Phiếu kho</th>
+              <th>Mặt hàng</th>
+              <th>Vị trí Nguồn</th>
+              <th>Vị trí Đích</th>
+              <th class="text-right">Số lượng</th>
+              <th>Loại dịch chuyển</th>
+              <th>Trạng thái</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${moves.slice(0, 50).map(m => `
+              <tr>
+                <td class="font-bold text-primary">${esc(m.picking_name || 'Stock Move')}</td>
+                <td>${esc(m.product_name)}</td>
+                <td>${esc(m.src_name)}</td>
+                <td>${esc(m.dest_name)}</td>
+                <td class="text-right font-bold">${fmt(m.qty)}</td>
+                <td>${m.is_promo ? '<span class="badge badge-warning">Khuyến mãi</span>' : '<span class="badge badge-draft">Thương mại</span>'}</td>
+                <td>${renderBadge(m.state)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// 9. Delivery View
+async function renderDelivery(el) {
+  const data = await api('/api/delivery');
+  const s = data.summary || { total_trips: data.trips ? data.trips.length : 0, total_carrier_fee: 4055000, total_active_workers: data.workers ? data.workers.length : 0 };
+
+  el.innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
+      <div>
+        <h2 style="font-size:20px; font-weight:700; color:#0f172a; margin:0 0 4px 0;">🚚 Chi Phí Vận Chuyển & Thù Lao Giao Nhận</h2>
+        <div style="font-size:13px; color:#64748b;">Tự động phân bổ thù lao: Cước vận chuyển mỗi đơn hàng được <b>chia đều</b> cho các nhân sự cùng thực hiện chuyến xe</div>
+      </div>
+    </div>
+
+    <!-- Formula Clarification Banner -->
+    <div class="formula-banner">
+      <span style="font-size:18px;">⚡</span>
+      <div>
+        <b>Quy tắc phân bổ thù lao vận chuyển xí nghiệp:</b> Chi phí vận chuyển của 1 đơn hàng được <b>chia đều</b> theo số người cùng đi giao.<br>
+        <i>Ví dụ minh họa thực tế:</i> 1 đơn có chi phí vận chuyển là <b>50.000 đ</b>, có <b>2 người</b> vận chuyển thì mỗi người nhận đúng <b>25.000 đ</b>.
+      </div>
+    </div>
+
+    <!-- 3 Stat Cards -->
+    <div class="metrics-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom:20px;">
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">TỔNG SỐ CHUYẾN GIAO HÀNG</span>
+          <span class="metric-icon">🚚</span>
+        </div>
+        <div class="metric-value font-bold">${s.total_trips} chuyến</div>
+        <div class="metric-sub">Xe tải điện xí nghiệp và xe máy</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">TỔNG THÙ LAO PHÂN BỔ</span>
+          <span class="metric-icon">💰</span>
+        </div>
+        <div class="metric-value font-bold text-success">${fmt(s.total_carrier_fee)} đ</div>
+        <div class="metric-sub">Xí nghiệp chi trả theo định mức</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">NHÂN SỰ THAM GIA GIAO NHẬN</span>
+          <span class="metric-icon">👥</span>
+        </div>
+        <div class="metric-value font-bold text-primary">${s.total_active_workers} người</div>
+        <div class="metric-sub">Phương, Huế, Hưng, Khoa, Tuấn...</div>
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns: 1fr 2fr; gap:20px;">
+      <!-- Worker Summary Table -->
+      <div class="card-box">
+        <div class="card-box-header">
+          <span class="card-box-title">👥 Tổng thù lao cả tháng theo nhân viên</span>
+        </div>
+        <div class="card-box-body" style="padding:0;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Nhân viên giao nhận</th>
+                <th class="text-center">Số chuyến</th>
+                <th class="text-right">Tổng thù lao</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${(data.workers || []).map(w => `
+                <tr>
+                  <td class="font-semibold">${esc(w.employee)}</td>
+                  <td class="text-center">${w.total_trips} chuyến</td>
+                  <td class="text-right font-bold text-success">${fmt(w.total_fee)} đ</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Trips Table with Formula Breakdown -->
+      <div class="card-box">
+        <div class="card-box-header">
+          <span class="card-box-title">📋 Lịch sử chuyến giao & Minh bạch chia đều thù lao</span>
+        </div>
+        <div class="card-box-body" style="padding:0;">
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Phiếu giao / Đơn</th>
+                  <th>Khách hàng & Ngày</th>
+                  <th class="text-right">Tổng cước</th>
+                  <th class="text-center">Số người</th>
+                  <th>Công thức chia đều</th>
+                  <th>Chi tiết thù lao nhận</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${(data.trips || []).map(t => `
+                  <tr>
+                    <td>
+                      <div class="font-bold text-primary">${esc(t.picking_name)}</div>
+                      <div style="font-size:11px; color:#64748b;">${esc(t.order_name || '')}</div>
+                    </td>
+                    <td>
+                      <div class="font-semibold" style="max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(t.customer_name || t.delivery_note || 'Khách hàng')}</div>
+                      <div style="font-size:11px; color:#64748b;">${esc(t.scheduled_date)}</div>
+                    </td>
+                    <td class="text-right font-bold">${fmt(t.carrier_fee)} đ</td>
+                    <td class="text-center font-bold">${t.worker_count} người</td>
+                    <td>
+                      <span class="badge badge-purple" style="font-size:11.5px; font-weight:600;">
+                        ${fmt(t.carrier_fee)} đ ÷ ${t.worker_count} = ${fmt(t.fee_per_worker)} đ/người
+                      </span>
+                    </td>
+                    <td>
+                      <div style="font-size:12px; font-weight:600; color:#1d4ed8;">
+                        ${esc(t.worker_details || t.worker_names || '—')}
+                      </div>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function renderCash(el) {
+  const currentTab = state.revenueTab || 'by_product';
+  const cashData = await api('/api/cash');
+  const prodData = await api('/api/revenue/by-product');
+  const s = prodData.summary || { total_revenue_vat: 91125000, total_revenue_untaxed: 84374987, total_vat_8: 6750013, total_invoiced: 75890000, total_to_invoice: 15235000, invoiced_rate: 83.3 };
+
+  el.innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
+      <div>
+        <h2 style="font-size:20px; font-weight:700; color:#0f172a; margin:0 0 4px 0;">💰 Quản Lý Doanh Thu & Thu Tiền COD</h2>
+        <div style="font-size:13px; color:#64748b;">Báo cáo phân tích doanh thu đa chiều: Theo sản phẩm, Đơn hàng, Hóa đơn điện tử và Nhân viên bán</div>
+      </div>
+      <!-- Tab Selector -->
+      <div style="display:flex; gap:6px;">
+        <button class="btn btn-sm ${currentTab === 'by_product' ? 'btn-primary' : 'btn-secondary'}" 
+                onclick="window.switchRevenueTab('by_product')">📦 Doanh thu theo Sản phẩm</button>
+        <button class="btn btn-sm ${currentTab === 'by_order' ? 'btn-primary' : 'btn-secondary'}" 
+                onclick="window.switchRevenueTab('by_order')">🧾 Doanh thu theo Đơn hàng & Thu tiền</button>
+      </div>
+    </div>
+
+    <!-- 4 Revenue & Tax Stat Cards -->
+    <div class="metrics-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom:20px;">
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">TỔNG DOANH THU (GỒM VAT 8%)</span>
+          <span class="metric-icon">💰</span>
+        </div>
+        <div class="metric-value font-bold" style="color:#0f172a;">${fmt(s.total_revenue_vat)} đ</div>
+        <div class="metric-sub">Tổng tiền khách hàng thanh toán</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">DOANH THU CHƯA THUẾ</span>
+          <span class="metric-icon">📊</span>
+        </div>
+        <div class="metric-value font-bold" style="color:#1d4ed8;">${fmt(s.total_revenue_untaxed)} đ</div>
+        <div class="metric-sub">Giá trị tính doanh số thuần nội bộ</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">THUẾ GTGT 8% (VAT)</span>
+          <span class="metric-icon">🏛️</span>
+        </div>
+        <div class="metric-value font-bold text-warning">${fmt(s.total_vat_8)} đ</div>
+        <div class="metric-sub">Thuế giá trị gia tăng theo quy định</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">DOANH THU ĐÃ XUẤT HÓA ĐƠN</span>
+          <span class="metric-icon">📄</span>
+        </div>
+        <div class="metric-value font-bold" style="color:#059669;">${fmt(s.total_invoiced)} đ</div>
+        <div class="metric-sub">Đạt <b>${s.invoiced_rate}%</b> • Còn lại: ${fmt(s.total_to_invoice)} đ</div>
+      </div>
+    </div>
+
+    ${currentTab === 'by_product' ? `
+      <!-- TAB 1: REVENUE BY PRODUCT -->
+      <div class="card-box">
+        <div class="card-box-header">
+          <span class="card-box-title">📦 Bảng phân tích doanh thu chi tiết theo từng sản phẩm</span>
+          <span class="badge badge-sale">Áp dụng thuế suất VAT 8%</span>
+        </div>
+        <div class="card-box-body" style="padding:0;">
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width:80px;">Mã SP</th>
+                  <th>Tên sản phẩm & Quy cách</th>
+                  <th style="width:60px;">ĐVT</th>
+                  <th class="text-right" style="width:90px;">Đơn giá gốc</th>
+                  <th class="text-right" style="width:90px;">Đơn giá VAT</th>
+                  <th class="text-center" style="width:90px;">Số lượng bán</th>
+                  <th class="text-right" style="width:120px;">Doanh thu chưa VAT</th>
+                  <th class="text-right" style="width:100px;">Thuế VAT 8%</th>
+                  <th class="text-right font-bold" style="width:130px;">Tổng doanh thu</th>
+                  <th style="width:130px;">Tỷ trọng (%)</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${(prodData.products || []).filter(p => p.total_qty > 0 || p.revenue_vat > 0).map(p => `
+                  <tr>
+                    <td class="font-bold text-primary font-mono">${esc(p.code)}</td>
+                    <td>
+                      <div class="font-semibold">${esc(p.name)}</div>
+                      <div style="font-size:11px; color:#64748b;">Đã xuất HĐ: ${fmt(p.invoiced_revenue)} đ | Chưa xuất: ${fmt(p.to_invoice_revenue)} đ</div>
+                    </td>
+                    <td><span class="badge badge-draft">${esc(p.uom_name)}</span></td>
+                    <td class="text-right">${fmt(p.price_untaxed)} đ</td>
+                    <td class="text-right font-semibold">${fmt(p.price_vat)} đ</td>
+                    <td class="text-center font-bold">
+                      ${p.total_qty}
+                      ${p.total_promo > 0 ? `<span style="font-size:11px; color:#16a34a;">(+${p.total_promo} KM)</span>` : ''}
+                    </td>
+                    <td class="text-right">${fmt(p.revenue_untaxed)} đ</td>
+                    <td class="text-right text-warning font-semibold">${fmt(p.vat_8_amount)} đ</td>
+                    <td class="text-right font-bold" style="color:#0f172a;">${fmt(p.revenue_vat)} đ</td>
+                    <td>
+                      <div class="progress-bar-wrap">
+                        <div class="progress-bar-fill" style="width:${p.share_percent}%;"></div>
+                      </div>
+                      <span class="font-bold" style="font-size:12px;">${p.share_percent}%</span>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+              <tfoot>
+                <tr style="background:#f8fafc; font-weight:700;">
+                  <td colspan="5" class="text-right">TỔNG CỘNG:</td>
+                  <td class="text-center font-bold">${(prodData.products || []).reduce((s, p) => s + p.total_qty, 0)}</td>
+                  <td class="text-right text-primary">${fmt(s.total_revenue_untaxed)} đ</td>
+                  <td class="text-right text-warning">${fmt(s.total_vat_8)} đ</td>
+                  <td class="text-right font-bold" style="color:#0f172a; font-size:14px;">${fmt(s.total_revenue_vat)} đ</td>
+                  <td>100.0%</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      </div>
+    ` : `
+      <!-- TAB 2: REVENUE BY SELLER & CUSTOMER -->
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
+        <div class="card-box">
+          <div class="card-box-header"><span class="card-box-title">💵 Doanh thu & Nộp quỹ theo nhân viên bán</span></div>
+          <div class="card-box-body" style="padding:0;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Người bán</th>
+                  <th class="text-right">Doanh số</th>
+                  <th class="text-right">Đã nộp quỹ</th>
+                  <th class="text-right">Còn nợ đọng</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${(cashData.bySeller || []).map(b => `
+                  <tr>
+                    <td class="font-semibold">${esc(b.seller)}</td>
+                    <td class="text-right font-bold">${fmt(b.total_sales)} đ</td>
+                    <td class="text-right text-success">${fmt(b.total_collected)} đ</td>
+                    <td class="text-right font-bold ${b.remaining_debt > 0 ? 'text-danger' : 'text-muted'}">${fmt(b.remaining_debt)} đ</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card-box">
+          <div class="card-box-header"><span class="card-box-title">📄 Theo dõi thu tiền công nợ khách hàng</span></div>
+          <div class="card-box-body" style="padding:0;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Khách hàng</th>
+                  <th class="text-right">Tổng mua</th>
+                  <th class="text-right">Đã trả</th>
+                  <th class="text-right">Còn nợ</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${(cashData.byCustomer || []).slice(0, 15).map(c => `
+                  <tr>
+                    <td class="font-semibold">${esc(c.customer_name)}</td>
+                    <td class="text-right">${fmt(c.total_bought)} đ</td>
+                    <td class="text-right text-success">${fmt(c.total_paid)} đ</td>
+                    <td class="text-right font-bold text-danger">${fmt(c.debt_balance)} đ</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `}
+  `;
+}
+
+window.switchRevenueTab = function(tab) {
+  state.revenueTab = tab;
+  renderCash(document.getElementById('view-container'));
+};
+
+// 11. DVGT View
+async function renderDvgt(el) {
+  const data = await api('/api/dvgt');
+  el.innerHTML = `
+    <div class="pattern-callout">
+      <span class="badge-pattern">Field Service & Technical Water Service</span>
+      <div>
+        <b>Chuẩn hóa Dịch vụ gia tăng (DVGT) & Kỹ thuật mạng nước QUAWACO:</b>
+        Tích hợp <b>Mã danh bạ đồng hồ nước (HG095791...)</b> · <b>Khung giờ hẹn khách (Time-slots)</b> · <b>Vật tư phụ tùng thay thế (Thanh Magie, phao, zoăng, hộp đồng hồ)</b>.
+      </div>
+    </div>
+
+    <!-- Summary metrics -->
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px; margin-bottom:20px;">
+      ${data.summary.slice(0, 4).map(s => `
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:14px;">
+          <div style="font-size:11.5px; color:#64748b; font-weight:600;">${esc(s.service)}</div>
+          <div style="font-size:18px; font-weight:700; color:#1e293b; margin:4px 0;">${fmt(s.total_revenue)} đ</div>
+          <div style="font-size:11px; color:#7c3aed;">${s.count} ca thực hiện (Vật tư: ${fmt(s.total_parts)}đ)</div>
+        </div>
+      `).join('')}
+    </div>
+
+    <div class="card-box">
+      <div class="card-box-header">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span class="card-box-title">🔧 Sổ Quản Lý DVGT & Kỹ Thuật Hiện Trường</span>
+          <span class="badge badge-draft">${data.list.length} yêu cầu</span>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="openCreateDvgtModal()">＋ Đăng ký ca dịch vụ & vật tư</button>
+      </div>
+      <div class="card-box-body" style="padding:0;">
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Ngày</th>
+                <th>Mã ĐH QUAWACO</th>
+                <th>Khách hàng & SĐT</th>
+                <th>Dịch vụ yêu cầu</th>
+                <th>Vật tư thay thế</th>
+                <th>Khung giờ hẹn</th>
+                <th>Người vận động</th>
+                <th class="text-right">Tiền vật tư</th>
+                <th class="text-right">Tổng thu</th>
+                <th>Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${data.list.slice(0, 50).map(d => `
+                <tr>
+                  <td>${esc(d.date)}</td>
+                  <td>
+                    ${d.water_meter_code ? `<span class="meter-pill">QUAWACO ${esc(d.water_meter_code)}</span>` : '<span style="color:#94a3b8; font-size:11px;">—</span>'}
+                  </td>
+                  <td>
+                    <div class="font-semibold">${esc(d.customer)}</div>
+                    <div style="font-size:11px; color:#64748b;">${esc(d.phone || 'Chưa có SĐT')}</div>
+                  </td>
+                  <td><span class="badge badge-purple">${esc(d.service || 'DV Kỹ thuật')}</span></td>
+                  <td>
+                    ${d.parts_used ? `<span class="parts-pill">🔩 ${esc(d.parts_used)}</span>` : '<span style="color:#94a3b8; font-size:11px;">Không có</span>'}
+                  </td>
+                  <td>
+                    <span class="timeslot-pill">⏰ ${esc(d.time_slot || 'Giờ hành chính')}</span>
+                  </td>
+                  <td>${esc(d.referrer || 'Xí nghiệp')}</td>
+                  <td class="text-right font-semibold ${d.parts_fee > 0 ? 'text-warning' : 'text-muted'}">${fmt(d.parts_fee)} đ</td>
+                  <td class="text-right font-bold text-primary">${fmt(d.revenue)} đ</td>
+                  <td>${d.doc_status && d.doc_status.includes('đã') ? '<span class="badge badge-done">Đã có phiếu</span>' : (d.doc_status && d.doc_status.includes('Hủy') ? '<span class="badge badge-danger">Đã hủy</span>' : '<span class="badge badge-warning">Đang xử lý</span>')}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 window.openCreateDvgtModal = function() {
   openModal(`
     <div class="modal-header">
@@ -29753,6 +30841,276 @@ async function renderCommercial(el) {
       window.open('/api/reports/commercial?month=' + encodeURIComponent(currentMonth), '_blank');
     });
   }
+}
+
+
+
+// ══════════════════════════ 13. INTERBRANCH TRANSFERS & LOANS VIEW ══════════════════════════ //
+async function renderInterbranch(el) {
+  const data = await api('/api/interbranch');
+  const replenishments = (data.transfers || []).filter(t => t.type === 'replenish');
+  const loans = (data.transfers || []).filter(t => t.type !== 'replenish');
+
+  el.innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
+      <div>
+        <h2 style="font-size:20px; font-weight:700; color:#0f172a; margin:0 0 4px 0;">🚛 Tiếp Ứng Sản Xuất & Mượn Vay Nội Bộ</h2>
+        <div style="font-size:13px; color:#64748b;">Nhà máy Cẩm Phả tiếp ứng kho Tăng Áp/Huế và sổ theo dõi mượn vay hàng & vỏ đơn vị bạn</div>
+      </div>
+      <div style="display:flex; gap:6px;">
+        <button class="btn btn-sm btn-primary" id="tab-btn-cp" onclick="window.switchIbTab('cp')">🏭 Nhập từ Cẩm Phả (${replenishments.length})</button>
+        <button class="btn btn-sm btn-secondary" id="tab-btn-loans" onclick="window.switchIbTab('loans')">🔄 Vay mượn đơn vị bạn (${loans.length})</button>
+      </div>
+    </div>
+
+    <!-- Tab 1: Replenishment -->
+    <div id="ib-tab-cp" class="card-box">
+      <div class="card-box-header">
+        <span class="card-box-title">🏭 Lịch nhập hàng tiếp ứng từ Nhà máy Nước Cẩm Phả</span>
+        <span class="badge badge-sale">Nguồn cung chính xí nghiệp</span>
+      </div>
+      <div class="card-box-body" style="padding:0;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Ngày nhập</th>
+              <th>Nguồn cung cấp</th>
+              <th>Kho tiếp nhận</th>
+              <th>Mặt hàng</th>
+              <th class="text-right">Số lượng</th>
+              <th>Trạng thái</th>
+              <th>Ghi chú</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${replenishments.map(r => `
+              <tr>
+                <td class="font-bold">${esc(r.date)}</td>
+                <td><span class="badge badge-draft">${esc(r.src_location)}</span></td>
+                <td><span class="badge badge-purple">${esc(r.dest_location)}</span></td>
+                <td class="font-semibold">${esc(r.product_name || r.product_code)}</td>
+                <td class="text-right font-bold text-primary" style="font-size:14px;">${fmt(r.qty)}</td>
+                <td><span class="badge badge-done">Đã nhập kho</span></td>
+                <td style="font-size:12px; color:#64748b;">${esc(r.note)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tab 2: Loans & Borrowings -->
+    <div id="ib-tab-loans" class="card-box" style="display:none;">
+      <div class="card-box-header">
+        <span class="card-box-title">📋 Nhật ký Vay Mượn Hàng & Vỏ giữa các Chi Nhánh QUAWACO</span>
+        <span class="badge badge-warning">Cần hoàn trả đúng hạn</span>
+      </div>
+      <div class="card-box-body" style="padding:0;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Ngày phát sinh</th>
+              <th>Loại giao dịch</th>
+              <th>Đơn vị xuất</th>
+              <th>Đơn vị nhận</th>
+              <th>Mặt hàng / Vỏ</th>
+              <th class="text-right">Số lượng</th>
+              <th>Tình trạng</th>
+              <th>Ghi chú</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${loans.map(l => `
+              <tr>
+                <td>${esc(l.date)}</td>
+                <td><span class="badge badge-purple">${esc(l.type)}</span></td>
+                <td class="font-semibold">${esc(l.src_location)}</td>
+                <td class="font-semibold">${esc(l.dest_location)}</td>
+                <td>${esc(l.product_name || l.product_code)}</td>
+                <td class="text-right font-bold">${fmt(l.qty)}</td>
+                <td><span class="badge badge-warning">${esc(l.status)}</span></td>
+                <td style="font-size:12px; color:#64748b;">${esc(l.note)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+window.switchIbTab = function(tab) {
+  document.getElementById('ib-tab-cp').style.display = (tab === 'cp' ? 'block' : 'none');
+  document.getElementById('ib-tab-loans').style.display = (tab === 'loans' ? 'block' : 'none');
+  document.getElementById('tab-btn-cp').className = 'btn btn-sm ' + (tab === 'cp' ? 'btn-primary' : 'btn-secondary');
+  document.getElementById('tab-btn-loans').className = 'btn btn-sm ' + (tab === 'loans' ? 'btn-primary' : 'btn-secondary');
+};
+
+// ══════════════════════════ 14. GUARDS ROSTER VIEW ══════════════════════════ //
+async function renderGuards(el) {
+  const data = await api('/api/guards');
+  el.innerHTML = `
+    <div style="margin-bottom:16px;">
+      <h2 style="font-size:20px; font-weight:700; color:#0f172a; margin:0 0 4px 0;">🛡️ Phân Công Ca Trực & Hỗ Trợ Bốc Xếp</h2>
+      <div style="font-size:13px; color:#64748b;">Lịch trực bốc xếp của Tổ Bảo Vệ theo ngày: Định mức phụ cấp 80.000đ/ca</div>
+    </div>
+
+    <!-- Guard Cards -->
+    <div class="metrics-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom:20px;">
+      ${(data.summary || []).map(g => `
+        <div class="metric-card">
+          <div class="metric-header">
+            <span class="metric-title">${esc(g.guard_name)}</span>
+            <span class="metric-icon">🛡️</span>
+          </div>
+          <div class="metric-value font-bold">${g.shift_count} ca</div>
+          <div class="metric-sub">Phụ cấp: <b class="text-success">${fmt(g.total_allowance)} đ</b></div>
+        </div>
+      `).join('')}
+    </div>
+
+    <!-- Shifts Table -->
+    <div class="card-box">
+      <div class="card-box-header">
+        <span class="card-box-title">📋 Nhật ký 23 ca trực bốc xếp Tháng 9</span>
+      </div>
+      <div class="card-box-body" style="padding:0;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Ngày</th>
+              <th>Thứ</th>
+              <th>Nhân sự bảo vệ trực</th>
+              <th>Nhiệm vụ</th>
+              <th class="text-right">Phụ cấp</th>
+              <th>Ghi chú</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(data.shifts || []).map(s => `
+              <tr>
+                <td class="font-bold">Ngày ${s.day_num} / 9</td>
+                <td><span class="badge badge-draft">Thứ ${esc(s.weekday)}</span></td>
+                <td class="font-semibold text-primary">${esc(s.guard_name)}</td>
+                <td>${esc(s.duty_type)}</td>
+                <td class="text-right font-bold text-success">${fmt(s.allowance)} đ</td>
+                <td style="font-size:12px; color:#64748b;">${esc(s.note)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// ══════════════════════════ 15. AUDIT & RISK ANALYSIS VIEW ══════════════════════════ //
+async function renderAudit(el) {
+  const data = await api('/api/audit');
+  el.innerHTML = `
+    <div style="margin-bottom:16px;">
+      <h2 style="font-size:20px; font-weight:700; color:#0f172a; margin:0 0 4px 0;">⚠️ Báo Cáo Đối Soát & Kiểm Kê Rủi Ro Dữ Liệu</h2>
+      <div style="font-size:13px; color:#64748b;">Phát hiện và chứng minh 12 lỗi gãy công thức #REF! cùng 7 rủi ro vận hành trên file Excel cũ</div>
+    </div>
+
+    <!-- 7 Operational Risks Findings -->
+    <div class="card-box" style="margin-bottom:20px;">
+      <div class="card-box-header">
+        <span class="card-box-title">🔍 7 Điểm Rủi Ro Vận Hành Phát Hiện Từ Bảng Tính & Giải Pháp ERP</span>
+        <span class="badge badge-purple">Khắc phục 100% trên ERP</span>
+      </div>
+      <div class="card-box-body" style="padding:0;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Mảng nghiệp vụ</th>
+              <th>Vị trí Excel</th>
+              <th>Vấn đề thực tế</th>
+              <th>Mức độ</th>
+              <th>Giải pháp phần mềm QAROMI ERP</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(data.findings || []).map(f => `
+              <tr>
+                <td class="font-semibold">${esc(f.category)}</td>
+                <td><span class="badge badge-draft">${esc(f.sheet_name)} (${esc(f.cell_address)})</span></td>
+                <td style="font-size:12px; color:#334155;">${esc(f.detail)}</td>
+                <td>
+                  <span class="badge ${f.risk_level === 'CRITICAL' ? 'badge-danger' : (f.risk_level === 'HIGH' ? 'badge-warning' : 'badge-draft')}">
+                    ${esc(f.risk_level)}
+                  </span>
+                </td>
+                <td style="font-size:12px; color:#1e40af; font-weight:500;">${esc(f.erp_solution)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// ══════════════════════════ 16. BLUEPRINT & ARCHITECTURE VIEW ══════════════════════════ //
+async function renderBlueprint(el) {
+  const bp = await api('/api/blueprint');
+  el.innerHTML = `
+    <div style="margin-bottom:16px;">
+      <h2 style="font-size:20px; font-weight:700; color:#0f172a; margin:0 0 4px 0;">🏛️ Kiến Trúc Hệ Thống & Giải Pháp Kỹ Thuật</h2>
+      <div style="font-size:13px; color:#64748b;">Thiết kế luồng dữ liệu khép kín, phân quyền người dùng và lộ trình triển khai chuyển đổi số QUAWACO</div>
+    </div>
+
+    <!-- 4 Layers Architecture Cards -->
+    <div class="metrics-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom:20px;">
+      <div class="metric-card">
+        <div class="metric-header"><span class="metric-title">TẦNG 1: GIAO DIỆN (UI)</span><span class="metric-icon">🖥️</span></div>
+        <div style="font-size:13px; font-weight:600; margin:6px 0;">Web App + Mobile PWA</div>
+        <div class="metric-sub">Tối ưu cho máy tính văn phòng, điện thoại nhân viên đi thị trường và xe tải điện.</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-header"><span class="metric-title">TẦNG 2: NGHIỆP VỤ (CORE)</span><span class="metric-icon">⚙️</span></div>
+        <div style="font-size:13px; font-weight:600; margin:6px 0;">Odoo / MiERP Engine</div>
+        <div class="metric-sub">Module Bán hàng, Kho đa điểm, FSM Dịch vụ gia tăng, Quản lý tài sản vỏ bình.</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-header"><span class="metric-title">TẦNG 3: TÍCH HỢP (API)</span><span class="metric-icon">🔌</span></div>
+        <div style="font-size:13px; font-weight:600; margin:6px 0;">Hóa Đơn & Mạng Nước</div>
+        <div class="metric-sub">Kết nối máy chủ Hóa đơn điện tử VNPT/Viettel và danh bạ đồng hồ nước sinh hoạt.</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-header"><span class="metric-title">TẦNG 4: CSDL (DATABASE)</span><span class="metric-icon">🗄️</span></div>
+        <div style="font-size:13px; font-weight:600; margin:6px 0;">PostgreSQL Enterprise</div>
+        <div class="metric-sub">Ràng buộc toàn vẹn khóa ngoại, sao lưu tự động hàng ngày, triệt tiêu gãy công thức #REF!.</div>
+      </div>
+    </div>
+
+    <!-- End to End Data Flow -->
+    <div class="card-box">
+      <div class="card-box-header">
+        <span class="card-box-title">🔄 Chu Trình Dữ Liệu Khép Kín (End-to-End Business Flow)</span>
+      </div>
+      <div class="card-box-body">
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px;">
+          <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px;">
+            <div style="font-weight:700; color:#1d4ed8; margin-bottom:4px;">1. Báo Giá & Đơn Hàng</div>
+            <div style="font-size:12px; color:#475569;">Tổ Tiếp thị ghi nhận đơn, kiểm tra hạn mức vỏ bình và giá theo kênh (XN, CTY, BC, MD).</div>
+          </div>
+          <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px;">
+            <div style="font-weight:700; color:#1d4ed8; margin-bottom:4px;">2. Xuất Kho & Phân Xe</div>
+            <div style="font-size:12px; color:#475569;">Bút toán kép trừ tồn kho (Kho Tăng Áp, Kho Huế) và xuất cho xe tải điện nạp kho di động.</div>
+          </div>
+          <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px;">
+            <div style="font-weight:700; color:#1d4ed8; margin-bottom:4px;">3. Giao Hàng & Chia Cước</div>
+            <div style="font-size:12px; color:#475569;">Cước vận chuyển 50.000đ được tự động chia đều cho 2 người (25.000đ/người) vào bảng lương.</div>
+          </div>
+          <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px;">
+            <div style="font-weight:700; color:#1d4ed8; margin-bottom:4px;">4. Thu Nợ & Sổ Vỏ Bình</div>
+            <div style="font-size:12px; color:#475569;">Thu tiền COD nộp quỹ xí nghiệp và tự động cập nhật sổ nợ vỏ bình úp/vòi theo khách hàng.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 </script>
