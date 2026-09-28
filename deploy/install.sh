@@ -7,7 +7,7 @@
 set -euo pipefail
 
 # ---------- Cấu hình (sửa ở đây nếu cần) ----------
-GITHUB_REPO="https://github.com/MiERP/QLBanHang.git"
+GITHUB_REPO="MiERP/QLBanHang"     # dạng "owner/repo"
 BRANCH="14-09-2026"
 APP_DIR="/opt/qaromi-erp"
 RUN_USER="qaromi"
@@ -21,6 +21,14 @@ export DEBIAN_FRONTEND=noninteractive
 log()  { printf '\n\033[1;32m[+] %s\033[0m\n' "$*"; }
 warn() { printf '\n\033[1;33m[!] %s\033[0m\n' "$*"; }
 err()  { printf '\033[1;31m[x] %s\033[0m\n' "$*" >&2; }
+
+# Repo private cần token: truyền qua biến môi trường GITHUB_TOKEN khi chạy.
+if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+  REPO_URL="https://${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git"
+  log "Dùng GITHUB_TOKEN để clone (repo private)."
+else
+  REPO_URL="https://github.com/${GITHUB_REPO}.git"
+fi
 
 [[ $EUID -eq 0 ]] || { err "Phải chạy với quyền root."; exit 1; }
 
@@ -64,7 +72,7 @@ else
   # và giữ nguyên data/ + backups/ nếu đã có dữ liệu.
   TMP="$(mktemp -d)"
   chown "$RUN_USER:$RUN_USER" "$TMP"
-  sudo -u "$RUN_USER" git clone "$GITHUB_REPO" "$TMP/repo"
+  sudo -u "$RUN_USER" git clone "$REPO_URL" "$TMP/repo"
   sudo -u "$RUN_USER" git -C "$TMP/repo" checkout "$BRANCH"
   sudo -u "$RUN_USER" git -C "$TMP/repo" pull --ff-only "origin" "$BRANCH"
   cp -a "$TMP/repo/." "$APP_DIR/"
