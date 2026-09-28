@@ -1,17 +1,41 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import { categories, customerGroups, customers, partnerBranches, products, roles, staff, stations, warehouses } from '../api';
-import type { Category, Customer, CustomerGroup, Employee, PartnerBranch, Product, Role, Station, Warehouse } from '../types';
+import {
+  categories,
+  customerGroups,
+  customers,
+  fetchSettings,
+  orgUnits,
+  partnerUnits,
+  positions,
+  products,
+  staff,
+  warehouses,
+} from '../api';
+import type {
+  AppSettings,
+  Category,
+  Customer,
+  CustomerGroup,
+  Employee,
+  OrgUnit,
+  PartnerUnit,
+  Position,
+  Product,
+  Warehouse,
+} from '../types';
 
 interface ReferenceData {
   products: Product[];
   warehouses: Warehouse[];
   staff: Employee[];
-  stations: Station[];
-  roles: Role[];
+  orgUnits: OrgUnit[];
+  positions: Position[];
   categories: Category[];
   groups: CustomerGroup[];
-  branches: PartnerBranch[];
   customers: Customer[];
+  partnerUnits: PartnerUnit[];
+  /** Cấu hình hệ thống (khoá → giá trị) — các màn nghiệp vụ đọc để áp quy tắc chung. */
+  settings: AppSettings;
   loading: boolean;
   reload: () => void;
 }
@@ -23,30 +47,43 @@ export function ReferenceProvider({ children }: { children: ReactNode }) {
     products: [],
     warehouses: [],
     staff: [],
-    stations: [],
-    roles: [],
+    orgUnits: [],
+    positions: [],
     categories: [],
     groups: [],
-    branches: [],
     customers: [],
+    partnerUnits: [],
+    settings: {},
   });
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [p, w, e, st, r, c, g, b, cu] = await Promise.all([
+      const [p, w, e, ou, pos, c, g, cu, pu, st] = await Promise.all([
         products.list(),
         warehouses.list(),
         staff.list(),
-        stations.list(),
-        roles.list(),
+        orgUnits.list(),
+        positions.list(),
         categories.list(),
         customerGroups.list(),
-        partnerBranches.list(),
         customers.list(),
+        partnerUnits.list(),
+        fetchSettings(),
       ]);
-      setState({ products: p, warehouses: w, staff: e, stations: st, roles: r, categories: c, groups: g, branches: b, customers: cu });
+      setState({
+        products: p,
+        warehouses: w,
+        staff: e,
+        orgUnits: ou,
+        positions: pos,
+        categories: c,
+        groups: g,
+        customers: cu,
+        partnerUnits: pu,
+        settings: st,
+      });
     } finally {
       setLoading(false);
     }

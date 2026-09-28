@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeftRight, Boxes, Droplets, Handshake, Package, ShoppingCart, TrendingDown, TrendingUp, Truck, Users, Wallet } from 'lucide-react';
+import { AlertTriangle, ArrowLeftRight, Boxes, Droplets, Package, RotateCcw, ShoppingCart, TrendingDown, TrendingUp, Truck, Users, Wallet } from 'lucide-react';
 import { useMemo } from 'react';
 import * as api from '../../api';
 import { Badge } from '../../components/ui/Badge';
@@ -13,8 +13,7 @@ import { formatCurrency, formatDateShort, formatMonth, formatNumber } from '../.
 import { cn } from '../../lib/cn';
 import type { Order, StockItem } from '../../types';
 import type { TabId } from '../../layout';
-
-const PAYMENT_LABEL: Record<string, string> = { PAID: 'Đã thanh toán', PARTIAL: 'Một phần', UNPAID: 'Công nợ' };
+import { paymentStatusMeta, statusMeta } from '../orders/orderStatus';
 
 export function OverviewTab({ month, onNavigate }: { month: string; onNavigate: (t: TabId) => void }) {
   const dashboardApi = useApi(() => api.fetchDashboard(month), [month]);
@@ -31,9 +30,8 @@ export function OverviewTab({ month, onNavigate }: { month: string; onNavigate: 
   }, [kpis]);
 
   const productMix = (d?.productMix ?? []).map((p) => ({ name: p.name.replace('Nước Tinh Khiết RO QAROMI ', 'RO ').replace('Nước Ion Kiềm QAROMI ', 'Kiềm '), value: p.quantity }));
-  const paymentMix = (d?.paymentStatus ?? []).map((p) => ({ name: PAYMENT_LABEL[p.name] ?? p.name, value: p.value }));
+  const paymentMix = (d?.paymentStatus ?? []).map((p) => ({ name: paymentStatusMeta(p.name).label, value: p.value }));
   const bottleDebt = (d?.bottleDebtByCustomer ?? []).map((c) => ({ name: c.name.length > 18 ? `${c.name.slice(0, 18)}…` : c.name, 'Vỏ Vòi': c.voi, 'Vỏ Úp': c.up }));
-  const loanAging = (d?.branchLoanAging ?? []).map((l) => ({ name: l.code, 'Còn lại': l.outstanding }));
   const movements = (d?.movementsSummary ?? []).map((m) => ({ name: m.name, 'Số lượng': m.quantity }));
 
   const alertColumns: Column<StockItem>[] = [
@@ -57,8 +55,24 @@ export function OverviewTab({ month, onNavigate }: { month: string; onNavigate: 
     { key: 'order_code', header: 'Mã đơn', className: 'font-mono font-semibold text-brand-navy' },
     { key: 'customer_name', header: 'Khách hàng' },
     { key: 'total_amount', header: 'Tổng tiền', align: 'right', render: (r) => formatCurrency(r.total_amount) },
-    { key: 'payment_status', header: 'Thanh toán', align: 'center', render: (r) => <Badge tone={r.payment_status === 'PAID' ? 'green' : r.payment_status === 'PARTIAL' ? 'amber' : 'red'}>{PAYMENT_LABEL[r.payment_status]}</Badge> },
-    { key: 'order_status', header: 'Trạng thái', align: 'center', render: (r) => <span className="text-slate-500">{r.order_status}</span> },
+    {
+      key: 'payment_status',
+      header: 'Thanh toán',
+      align: 'center',
+      render: (r) => {
+        const m = paymentStatusMeta(r.payment_status);
+        return <Badge tone={m.tone}>{m.label}</Badge>;
+      },
+    },
+    {
+      key: 'order_status',
+      header: 'Trạng thái',
+      align: 'center',
+      render: (r) => {
+        const m = statusMeta(r.order_status);
+        return <Badge tone={m.tone}>{m.label}</Badge>;
+      },
+    },
   ];
 
   return (
@@ -79,7 +93,23 @@ export function OverviewTab({ month, onNavigate }: { month: string; onNavigate: 
             </span>
           }
         />
-        <StatCard icon={ShoppingCart} tone="cyan" label={`Doanh thu ${formatMonth(month)}`} value={formatCurrency(kpis?.revenueMonth ?? 0)} hint={`${formatNumber(kpis?.ordersMonth ?? 0)} đơn hàng`} onClick={() => onNavigate('sales')} />
+        <StatCard icon={ShoppingCart} tone="cyan" label={`Doanh thu ${formatMonth(month)}`} value={formatCurrency(kpis?.revenueMonth ?? 0)} hint={`${formatNumber(kpis?.ordersMonth ?? 0)} đơn hàng (chưa trừ hàng hoàn)`} onClick={() => onNavigate('orders')} />
+        <StatCard
+          icon={RotateCcw}
+          tone="red"
+          label="Hàng hoàn trong tháng"
+          value={formatCurrency(kpis?.revenueReturnedMonth ?? 0)}
+          hint="Trừ vào doanh thu"
+          onClick={() => onNavigate('revenue')}
+        />
+        <StatCard
+          icon={Wallet}
+          tone="green"
+          label="Doanh thu thuần"
+          value={formatCurrency(kpis?.revenueNetMonth ?? 0)}
+          hint="Doanh thu gộp − hàng hoàn"
+          onClick={() => onNavigate('revenue')}
+        />
         <StatCard
           icon={Droplets}
           tone="indigo"
@@ -96,8 +126,7 @@ export function OverviewTab({ month, onNavigate }: { month: string; onNavigate: 
           onClick={() => onNavigate('customers')}
         />
         <StatCard icon={Users} tone="red" label="Công nợ tiền khách hàng" value={formatCurrency(kpis?.totalDebt ?? 0)} hint="Tổng dư nợ hiện tại" onClick={() => onNavigate('customers')} />
-        <StatCard icon={Handshake} tone="green" label="Vay mượn chờ hoàn trả" value={`${formatNumber(kpis?.pendingLoans ?? 0)} phiếu`} hint={`${formatNumber(kpis?.overdueLoans ?? 0)} phiếu quá hạn`} onClick={() => onNavigate('branches')} />
-        <StatCard icon={Truck} tone="amber" label="Cảnh báo tồn kho" value={`${formatNumber(kpis?.alertCount ?? 0)} mặt hàng`} hint="Dưới ngưỡng tối thiểu" onClick={() => onNavigate('warehouse')} />
+        <StatCard icon={Truck} tone="amber" label="Cảnh báo tồn kho" value={`${formatNumber(kpis?.alertCount ?? 0)} mặt hàng`} hint="Dưới ngưỡng tối thiểu" onClick={() => onNavigate('stock')} />
         <StatCard icon={Boxes} tone="cyan" label="Lưu chuyển kho trong tháng" value={`${formatNumber((d?.movementsSummary ?? []).reduce((a, m) => a + m.quantity, 0))} lượt`} />
       </div>
 
@@ -175,14 +204,6 @@ export function OverviewTab({ month, onNavigate }: { month: string; onNavigate: 
             series={[{ key: 'Hoàn thành', name: '% hoàn thành', color: '#8B5CF6' }]}
           />
         </ChartCard>
-        <ChartCard title="Vay mượn chi nhánh chưa hoàn trả" subtitle="Xếp theo hạn trả" empty={loanAging.length === 0}>
-          <BarSeries
-            data={loanAging}
-            xKey="name"
-            angleLabels
-            series={[{ key: 'Còn lại', name: 'SL còn lại', color: '#F59E0B' }]}
-          />
-        </ChartCard>
         <ChartCard title="Biến động kho trong tháng" subtitle="Theo loại giao dịch" empty={movements.length === 0}>
           <BarSeries
             data={movements}
@@ -200,7 +221,7 @@ export function OverviewTab({ month, onNavigate }: { month: string; onNavigate: 
               title="Cảnh báo tồn kho cấp bách"
               subtitle="Mặt hàng dưới ngưỡng tối thiểu"
               action={
-                <button onClick={() => onNavigate('warehouse')} className="text-xs font-semibold text-brand-cyan hover:underline">
+                <button onClick={() => onNavigate('stock')} className="text-xs font-semibold text-brand-cyan hover:underline">
                   Xem tất cả →
                 </button>
               }
@@ -217,7 +238,7 @@ export function OverviewTab({ month, onNavigate }: { month: string; onNavigate: 
                   rowKey={(r) => r.id}
                   searchable={false}
                   pageSize={5}
-                  onRowClick={() => onNavigate('warehouse')}
+                  onRowClick={() => onNavigate('stock')}
                 />
               )}
             </CardBody>
@@ -228,13 +249,13 @@ export function OverviewTab({ month, onNavigate }: { month: string; onNavigate: 
           <CardHeader
             title="Đơn hàng gần nhất"
             action={
-              <button onClick={() => onNavigate('sales')} className="text-xs font-semibold text-brand-cyan hover:underline">
+              <button onClick={() => onNavigate('orders')} className="text-xs font-semibold text-brand-cyan hover:underline">
                 Xem tất cả →
               </button>
             }
           />
           <CardBody className="p-0">
-            <DataTable columns={orderColumns} data={ordersApi.data ?? []} rowKey={(r) => r.id} searchable={false} pageSize={5} onRowClick={() => onNavigate('sales')} dense />
+            <DataTable columns={orderColumns} data={ordersApi.data ?? []} rowKey={(r) => r.id} searchable={false} pageSize={5} onRowClick={() => onNavigate('orders')} dense />
           </CardBody>
         </Card>
       </div>

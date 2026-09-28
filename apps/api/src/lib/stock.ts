@@ -8,6 +8,9 @@ export type MovementType =
   | 'TRANSFER_IN'
   | 'LOAN_OUT'
   | 'LOAN_IN'
+  | 'BORROW_IN'
+  | 'BORROW_OUT'
+  | 'RETURN_IN'
   | 'ADJUSTMENT';
 
 interface StockDeltaOptions {
@@ -57,25 +60,45 @@ interface MovementOptions {
   quantityPromo?: number;
   sourceWarehouseId?: number | null;
   targetWarehouseId?: number | null;
+  sourceId?: number | null;
   referenceId?: string | number | null;
+  ticketId?: number | null;
   performedBy?: number | null;
   note?: string;
+  createdAt?: string;
 }
 
 export function recordMovement(db: Database.Database, opts: MovementOptions) {
-  db.prepare(
-    `INSERT INTO stock_movements
-      (movement_type, source_warehouse_id, target_warehouse_id, product_id, quantity, quantity_promo, reference_id, performed_by, note)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(
+  const cols = [
+    'movement_type',
+    'source_warehouse_id',
+    'target_warehouse_id',
+    'source_id',
+    'product_id',
+    'quantity',
+    'quantity_promo',
+    'reference_id',
+    'ticket_id',
+    'performed_by',
+    'note',
+  ];
+  const values: unknown[] = [
     opts.movementType,
     opts.sourceWarehouseId ?? null,
     opts.targetWarehouseId ?? null,
+    opts.sourceId ?? null,
     opts.productId,
     opts.quantity,
     opts.quantityPromo ?? 0,
     opts.referenceId != null ? String(opts.referenceId) : null,
+    opts.ticketId ?? null,
     opts.performedBy ?? null,
-    opts.note ?? null
-  );
+    opts.note ?? null,
+  ];
+  // Ngày nghiệp vụ của bút toán = ngày phiếu (để đối soát theo kỳ đúng ngày phát sinh).
+  if (opts.createdAt) {
+    cols.push('created_at');
+    values.push(opts.createdAt);
+  }
+  db.prepare(`INSERT INTO stock_movements (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`).run(...values);
 }

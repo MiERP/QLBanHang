@@ -1,12 +1,30 @@
 import {
-  Handshake,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Boxes,
+  ClipboardCheck,
+  Coins,
+  FilePlus,
+  FileSpreadsheet,
+  Gift,
+  History,
+  Network,
   LayoutDashboard,
+  Landmark,
+  ListOrdered,
+  MapPin,
   Package,
+  Receipt,
+  Recycle,
+  Scale,
   Settings,
   ShoppingCart,
+  Tags,
   Target,
+  TrendingUp,
   Truck,
   UserCog,
+  UserRound,
   Users,
   Wallet,
   Warehouse,
@@ -16,56 +34,134 @@ import {
 
 export type TabId =
   | 'overview'
-  | 'sales'
-  | 'delivery'
-  | 'customers'
+  | 'create-order'
+  | 'orders'
+  | 'invoices'
   | 'products'
-  | 'warehouse'
-  | 'branches'
+  | 'price-list'
+  | 'shipping-fees'
+  | 'promotions'
+  | 'partner-units'
+  | 'customers'
+  | 'customer-detail'
+  | 'stock-in'
+  | 'stock-out'
+  | 'stock'
+  | 'stock-audit'
+  | 'import-sources'
+  | 'shell-stock'
+  | 'shell-audit'
+  | 'loans'
   | 'kpi'
-  | 'dvgt'
-  | 'finance'
+  | 'revenue'
+  | 'expenses'
+  | 'customer-debt'
+  | 'cash-audit'
+  | 'deposits'
+  | 'shipping-report'
+  | 'service-report'
+  | 'shell-deposits'
   | 'staff'
-  | 'settings';
+  | 'settings'
+  | 'audit-log';
+
+export interface NavChild {
+  id: TabId;
+  label: string;
+  icon: LucideIcon;
+}
 
 export interface NavItem {
   id: TabId;
   label: string;
   icon: LucideIcon;
-  group: string;
+  children?: NavChild[];
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { id: 'overview', label: 'Tổng quan', icon: LayoutDashboard, group: 'Điều hành' },
+  { id: 'overview', label: 'Tổng quan', icon: LayoutDashboard },
 
-  { id: 'sales', label: 'Bán hàng & Đơn hàng', icon: ShoppingCart, group: 'Kinh doanh' },
-  { id: 'delivery', label: 'Giao hàng & Quyết toán', icon: Truck, group: 'Kinh doanh' },
-  { id: 'customers', label: 'Khách hàng & Nợ vỏ', icon: Users, group: 'Kinh doanh' },
-  { id: 'dvgt', label: 'Dịch vụ gia tăng', icon: Wrench, group: 'Kinh doanh' },
+  {
+    id: 'orders',
+    label: 'Đơn hàng',
+    icon: ShoppingCart,
+    children: [
+      { id: 'create-order', label: 'Tạo đơn', icon: FilePlus },
+      { id: 'orders', label: 'Đơn hàng', icon: ListOrdered },
+      { id: 'invoices', label: 'Hóa đơn', icon: Receipt },
+      { id: 'products', label: 'Sản phẩm', icon: Package },
+      { id: 'price-list', label: 'Bảng giá', icon: Tags },
+      { id: 'shipping-fees', label: 'Phí vận chuyển', icon: MapPin },
+      { id: 'promotions', label: 'Khuyến mãi', icon: Gift },
+      { id: 'partner-units', label: 'Đối tác liên kết', icon: Network },
+    ],
+  },
 
-  { id: 'products', label: 'Sản phẩm & Bảng giá', icon: Package, group: 'Hàng hóa & Kho' },
-  { id: 'warehouse', label: 'Tồn kho & Nhật ký', icon: Warehouse, group: 'Hàng hóa & Kho' },
-  { id: 'branches', label: 'Vay mượn liên chi nhánh', icon: Handshake, group: 'Hàng hóa & Kho' },
+  {
+    id: 'customers',
+    label: 'Khách hàng',
+    icon: Users,
+    children: [
+      { id: 'customers', label: 'Danh sách khách hàng', icon: Users },
+      { id: 'customer-detail', label: 'Chi tiết khách hàng', icon: UserRound },
+    ],
+  },
+  {
+    id: 'expenses',
+    label: 'Tài chính',
+    icon: Wallet,
+    children: [
+      { id: 'expenses', label: 'Phí vận chuyển', icon: Receipt },
+      { id: 'customer-debt', label: 'Công nợ khách hàng', icon: Users },
+      { id: 'cash-audit', label: 'Đối chiếu tiền', icon: Landmark },
+      { id: 'deposits', label: 'Dòng tiền cọc vỏ', icon: Coins },
+    ],
+  },
+  {
+    id: 'stock-in',
+    label: 'Kho',
+    icon: Warehouse,
+    children: [
+      { id: 'stock-in', label: 'Nhập kho', icon: ArrowDownToLine },
+      { id: 'stock-out', label: 'Xuất kho', icon: ArrowUpFromLine },
+      { id: 'stock', label: 'Tồn kho', icon: Boxes },
+      { id: 'stock-audit', label: 'Đối soát kho', icon: ClipboardCheck },
+      { id: 'shell-stock', label: 'Vỏ bình', icon: Recycle },
+      { id: 'shell-audit', label: 'Đối chiếu vỏ', icon: Scale },
+      { id: 'import-sources', label: 'Nguồn nhập', icon: Package },
+      { id: 'loans', label: 'Quản lý mượn - trả', icon: ArrowUpFromLine },
+    ],
+  },
 
-  { id: 'kpi', label: 'Chỉ tiêu KPI', icon: Target, group: 'Nhân sự & Chỉ tiêu' },
-  { id: 'staff', label: 'Nhân sự & Phân quyền', icon: UserCog, group: 'Nhân sự & Chỉ tiêu' },
+  {
+    id: 'staff',
+    label: 'Nhân sự',
+    icon: UserCog,
+    children: [
+      { id: 'staff', label: 'Danh sách nhân viên', icon: Users },
+      { id: 'kpi', label: 'Chỉ tiêu', icon: Target },
+    ],
+  },
 
-  { id: 'finance', label: 'Sổ quỹ Thu - Chi', icon: Wallet, group: 'Tài chính' },
+  {
+    id: 'revenue',
+    label: 'Báo cáo',
+    icon: FileSpreadsheet,
+    children: [
+      { id: 'revenue', label: 'Doanh thu', icon: TrendingUp },
+      { id: 'shipping-report', label: 'Phí vận chuyển', icon: Truck },
+      { id: 'service-report', label: 'Dịch vụ gia tăng', icon: Wrench },
+      { id: 'shell-deposits', label: 'Vỏ bình & cọc', icon: Coins },
+    ],
+  },
 
-  { id: 'settings', label: 'Danh mục hệ thống', icon: Settings, group: 'Hệ thống' },
+  {
+    id: 'settings',
+    label: 'Hệ thống',
+    icon: Settings,
+    children: [
+      { id: 'settings', label: 'Cấu hình', icon: Settings },
+      { id: 'audit-log', label: 'Nhật ký hệ thống', icon: History },
+    ],
+  },
 ];
-
-export const TAB_META: Record<TabId, { title: string; subtitle: string }> = {
-  overview: { title: 'Bảng điều khiển', subtitle: 'Tổng hợp điều hành toàn xí nghiệp' },
-  sales: { title: 'Bán hàng & Đơn hàng', subtitle: 'Lập đơn, khuyến mại 10+1, hóa đơn VAT' },
-  delivery: { title: 'Giao hàng & Quyết toán', subtitle: 'Điều phối shipper, thu tiền và đối soát vỏ bình' },
-  customers: { title: 'Khách hàng & Sổ nợ vỏ', subtitle: 'Hồ sơ khách hàng, công nợ vỏ Vòi / Úp' },
-  products: { title: 'Sản phẩm & Bảng giá', subtitle: 'Danh mục nước QAROMI, giá bán và tiền cọc vỏ' },
-  warehouse: { title: 'Tồn kho & Nhật ký', subtitle: 'Tồn kho 6 kho, điều chuyển và nhật ký xuất nhập' },
-  branches: { title: 'Vay mượn liên chi nhánh', subtitle: 'Phiếu vay mượn, hoàn trả và quyết toán' },
-  kpi: { title: 'Chỉ tiêu KPI & DVGT', subtitle: 'Định mức thi đua tháng của CBCNV' },
-  dvgt: { title: 'Dịch vụ gia tăng', subtitle: 'Đăng ký và thực hiện dịch vụ bình nóng lạnh, bể téc' },
-  finance: { title: 'Sổ quỹ Thu - Chi', subtitle: 'Phiếu thu, phiếu chi và dòng tiền' },
-  staff: { title: 'Nhân sự & Phân quyền', subtitle: 'Hồ sơ CBCNV, trạm công tác và vai trò' },
-  settings: { title: 'Danh mục hệ thống', subtitle: 'Trạm, vai trò, nhóm hàng, kho, chi nhánh, nhóm khách hàng' },
-};

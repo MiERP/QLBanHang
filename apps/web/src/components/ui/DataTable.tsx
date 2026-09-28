@@ -1,12 +1,12 @@
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
-import { useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useMemo, useState, type ReactNode } from 'react';
 import { cn } from '../../lib/cn';
 import { EmptyState } from './EmptyState';
 import { LoadingBlock } from './Spinner';
 
 export interface Column<T> {
   key: string;
-  header: string;
+  header: ReactNode;
   render?: (row: T) => ReactNode;
   sortValue?: (row: T) => string | number;
   searchValue?: (row: T) => string;
@@ -30,6 +30,7 @@ interface DataTableProps<T> {
   initialSortKey?: string;
   initialSortDir?: 'asc' | 'desc';
   dense?: boolean;
+  renderExpanded?: (row: T) => ReactNode;
 }
 
 const ALIGN = { left: 'text-left', center: 'text-center', right: 'text-right' } as const;
@@ -49,11 +50,22 @@ export function DataTable<T>({
   initialSortKey,
   initialSortDir = 'asc',
   dense,
+  renderExpanded,
 }: DataTableProps<T>) {
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState<string | undefined>(initialSortKey);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(initialSortDir);
+  const [expandedKeys, setExpandedKeys] = useState<Set<string | number>>(new Set());
+
+  const toggleExpanded = (key: string | number) => {
+    setExpandedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   const valueOf = (row: T, col: Column<T>, sort: boolean): string | number => {
     if (sort && col.sortValue) return col.sortValue(row);
@@ -134,6 +146,7 @@ export function DataTable<T>({
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               <tr>
+                {renderExpanded && <th className="w-10 px-3 py-3" />}
                 {columns.map((col) => {
                   const canSort = col.sortable || !!col.sortValue;
                   return (
@@ -157,19 +170,36 @@ export function DataTable<T>({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {paged.map((row) => (
-                <tr
-                  key={rowKey(row)}
-                  onClick={onRowClick ? () => onRowClick(row) : undefined}
-                  className={cn('bg-white transition', onRowClick && 'cursor-pointer hover:bg-brand-cyan-subtle')}
-                >
-                  {columns.map((col) => (
-                    <td key={col.key} className={cn(dense ? 'px-4 py-2' : 'px-4 py-3', ALIGN[col.align ?? 'left'], col.className)}>
-                      {col.render ? col.render(row) : String(valueOf(row, col, false) ?? '')}
-                    </td>
-                  ))}
-                </tr>
-              ))}
+              {paged.map((row) => {
+                const key = rowKey(row);
+                const expanded = !!renderExpanded && expandedKeys.has(key);
+                return (
+                  <Fragment key={key}>
+                    <tr
+                      onClick={renderExpanded ? () => toggleExpanded(key) : onRowClick ? () => onRowClick(row) : undefined}
+                      className={cn('bg-white transition', (renderExpanded || onRowClick) && 'cursor-pointer hover:bg-brand-cyan-subtle')}
+                    >
+                      {renderExpanded && (
+                        <td className="w-10 px-3 py-3">
+                          <ChevronRight className={cn('h-4 w-4 text-slate-400 transition-transform', expanded && 'rotate-90 text-brand-cyan')} />
+                        </td>
+                      )}
+                      {columns.map((col) => (
+                        <td key={col.key} className={cn(dense ? 'px-4 py-2' : 'px-4 py-3', ALIGN[col.align ?? 'left'], col.className)}>
+                          {col.render ? col.render(row) : String(valueOf(row, col, false) ?? '')}
+                        </td>
+                      ))}
+                    </tr>
+                    {expanded && (
+                      <tr className="bg-slate-50">
+                        <td colSpan={columns.length + 1} className="px-4 py-3">
+                          {renderExpanded?.(row)}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>

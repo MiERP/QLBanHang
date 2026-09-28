@@ -28,12 +28,6 @@ export function dateKey(date?: string): string {
   return `${y}${m}${day}`;
 }
 
-export function monthKey(date?: string): string {
-  const d = date ? new Date(date) : new Date();
-  const safe = Number.isNaN(d.getTime()) ? new Date() : d;
-  return `${safe.getFullYear()}${String(safe.getMonth() + 1).padStart(2, '0')}`;
-}
-
 export function today(date?: string): string {
   const d = date ? new Date(date) : new Date();
   const safe = Number.isNaN(d.getTime()) ? new Date() : d;
@@ -52,9 +46,6 @@ export const revenueCode = (db: Database.Database, date?: string) =>
 export const expenseCode = (db: Database.Database, date?: string) =>
   nextCode(db, { table: 'expense_transactions', column: 'expense_code', prefix: `PC-${dateKey(date)}-`, width: 3 });
 
-export const dvgtCode = (db: Database.Database, date?: string) =>
-  nextCode(db, { table: 'dvgt_requests', column: 'request_code', prefix: `DV-${dateKey(date)}-`, width: 2 });
-
 export const customerCode = (db: Database.Database) =>
   nextCode(db, { table: 'customers', column: 'code', prefix: 'KH', width: 3 });
 
@@ -63,6 +54,3 @@ export const staffCode = (db: Database.Database) =>
 
 export const productCode = (db: Database.Database) =>
   nextCode(db, { table: 'products', column: 'code', prefix: 'SP', width: 4 });
-
-export const branchLoanCode = (db: Database.Database, date?: string) =>
-  nextCode(db, { table: 'branch_loans', column: 'loan_code', prefix: `VM-${monthKey(date)}-`, width: 2 });

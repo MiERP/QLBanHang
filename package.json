@@ -1,5 +1,7 @@
 {
   "name": "qaromi-erp",
+  "productName": "QAROMI ERP",
+  "description": "Phần mềm quản trị bán hàng QAROMI ERP - Xí Nghiệp Nước Hồng Gai (QUAWACO)",
   "private": true,
   "version": "1.0.0",
   "workspaces": [
@@ -10,7 +12,10 @@
     "build": "npm run build -w @qaromi/api && npm run build -w @qaromi/web",
     "start": "npm run start -w @qaromi/api",
     "demo": "node demo/server.cjs",
-    "desktop:dev": "npm run build && electron ."
+    "desktop:dev": "node desktop/scripts/ensure-electron.mjs && npm run build && electron .",
+    "desktop:prepare": "node desktop/scripts/ensure-electron.mjs && node desktop/scripts/prepare-runtime.mjs",
+    "desktop:pack": "npm run desktop:prepare && npm run build && electron-builder --dir",
+    "desktop:build": "npm run desktop:prepare && npm run build && electron-builder --win"
   },
   "dependencies": {
     "better-sqlite3": "^12.11.1",
@@ -29,6 +34,7 @@
     "@vitejs/plugin-react": "^6.0.3",
     "concurrently": "^10.0.3",
     "electron": "^43.1.0",
+    "electron-builder": "^26.15.3",
     "tsx": "^4.23.0",
     "typescript": "^5.7.2",
     "vite": "^8.1.4"

@@ -1,4 +1,4 @@
-import { Building2, Factory, Layers, Plus, Repeat, ShieldCheck, Tags, Users2 } from 'lucide-react';
+import { Briefcase, Building2, Coins, Layers, Network, Percent, Plus, Settings2, Tags } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import * as api from '../../api';
 import { Badge } from '../../components/ui/Badge';
@@ -6,15 +6,20 @@ import { Button } from '../../components/ui/Button';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
 import { DataTable, type Column } from '../../components/ui/DataTable';
 import { Field, FormGrid, Input, Select } from '../../components/ui/Field';
+import { ImportExcelButton } from '../../components/ui/ImportExcelButton';
 import { Modal } from '../../components/ui/Modal';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { Tabs } from '../../components/ui/Tabs';
 import { useToast } from '../../components/ui/Toast';
 import { useReference } from '../../context/ReferenceContext';
 import { useApi } from '../../lib/hooks';
-import type { Category, CustomerGroup, PartnerBranch, ProductConversion, Role, Station, Warehouse } from '../../types';
+import { formatDate, formatNumber } from '../../lib/format';
+import type { Category, CustomerGroup, ShellDeposit, VatRate, Warehouse } from '../../types';
+import { PositionsTab } from '../positions/PositionsTab';
+import { UnitsTab } from '../units/UnitsTab';
+import { GeneralSettingsTab } from './GeneralSettingsTab';
 
-type FieldType = 'text' | 'number' | 'select' | 'checkbox';
+type FieldType = 'text' | 'number' | 'select' | 'checkbox' | 'date';
 interface FieldCfg {
   name: string;
   label: string;
@@ -40,6 +45,7 @@ function MasterSection<T extends { id: number }>({
   cfg,
   title,
   subtitle,
+  extra,
 }: {
   data: T[];
   loading: boolean;
@@ -47,6 +53,7 @@ function MasterSection<T extends { id: number }>({
   cfg: SectionCfg<T>;
   title: string;
   subtitle: string;
+  extra?: ReactNode;
 }) {
   const toast = useToast();
   const confirm = useConfirm();
@@ -113,9 +120,12 @@ function MasterSection<T extends { id: number }>({
         onRowClick={openEdit}
         searchPlaceholder={`Tìm trong ${title.toLowerCase()}...`}
         toolbar={
-          <Button size="sm" onClick={openCreate}>
-            <Plus className="h-3.5 w-3.5" /> Thêm mới
-          </Button>
+          <>
+            {extra}
+            <Button size="sm" onClick={openCreate}>
+              <Plus className="h-3.5 w-3.5" /> Thêm mới
+            </Button>
+          </>
         }
       />
 
@@ -162,7 +172,7 @@ function MasterSection<T extends { id: number }>({
                     </label>
                   ) : (
                     <Input
-                      type={f.type === 'number' ? 'number' : 'text'}
+                      type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
                       value={String(form[f.name] ?? '')}
                       onChange={(e) => setForm({ ...form, [f.name]: e.target.value })}
                     />
@@ -177,69 +187,19 @@ function MasterSection<T extends { id: number }>({
 }
 
 export function SettingsTab() {
-  const { staff, products } = useReference();
-  const [tab, setTab] = useState('stations');
+  const { staff, reload: reloadRefs } = useReference();
+  const [tab, setTab] = useState('units');
 
-  const stationsApi = useApi(() => api.stations.list(), []);
-  const rolesApi = useApi(() => api.roles.list(), []);
   const categoriesApi = useApi(() => api.categories.list(), []);
   const warehousesApi = useApi(() => api.warehouses.list(), []);
-  const branchesApi = useApi(() => api.partnerBranches.list(), []);
   const groupsApi = useApi(() => api.customerGroups.list(), []);
-  const conversionsApi = useApi(() => api.productConversions.list(), []);
-
-  const productOptions = products.map((p) => ({ value: p.id, label: p.name }));
+  const vatApi = useApi(() => api.vatRates.list(), []);
+  const shellApi = useApi(() => api.shellDeposits.list(), []);
   const staffOptions = staff.map((s) => ({ value: s.id, label: s.full_name }));
 
   const sections: Record<string, ReactNode> = {
-    stations: (
-      <MasterSection<Station>
-        title="Trạm cấp nước"
-        subtitle="Danh mục trạm trực thuộc xí nghiệp"
-        data={stationsApi.data ?? []}
-        loading={stationsApi.loading}
-        reload={stationsApi.reload}
-        cfg={{
-          api: api.stations,
-          empty: { code: '', name: '', address: '', phone: '' },
-          fields: [
-            { name: 'code', label: 'Mã trạm', required: true },
-            { name: 'name', label: 'Tên trạm', required: true },
-            { name: 'address', label: 'Địa chỉ', colSpan: true },
-            { name: 'phone', label: 'Điện thoại' },
-          ],
-          columns: [
-            { key: 'code', header: 'Mã', className: 'font-mono font-semibold text-brand-navy', sortValue: (r) => r.code },
-            { key: 'name', header: 'Tên trạm', sortValue: (r) => r.name },
-            { key: 'address', header: 'Địa chỉ' },
-            { key: 'phone', header: 'Điện thoại' },
-          ],
-        }}
-      />
-    ),
-    roles: (
-      <MasterSection<Role>
-        title="Vai trò & Phân quyền"
-        subtitle="Định nghĩa vai trò người dùng"
-        data={rolesApi.data ?? []}
-        loading={rolesApi.loading}
-        reload={rolesApi.reload}
-        cfg={{
-          api: api.roles,
-          empty: { code: '', name: '', description: '' },
-          fields: [
-            { name: 'code', label: 'Mã vai trò', required: true },
-            { name: 'name', label: 'Tên vai trò', required: true },
-            { name: 'description', label: 'Mô tả', colSpan: true },
-          ],
-          columns: [
-            { key: 'code', header: 'Mã', className: 'font-mono font-semibold text-brand-navy', sortValue: (r) => r.code },
-            { key: 'name', header: 'Vai trò', sortValue: (r) => r.name },
-            { key: 'description', header: 'Mô tả' },
-          ],
-        }}
-      />
-    ),
+    general: <GeneralSettingsTab />,
+    units: <UnitsTab />,
     categories: (
       <MasterSection<Category>
         title="Nhóm hàng hóa"
@@ -247,6 +207,16 @@ export function SettingsTab() {
         data={categoriesApi.data ?? []}
         loading={categoriesApi.loading}
         reload={categoriesApi.reload}
+        extra={
+          <ImportExcelButton
+            kind="categories"
+            hint="Nhóm hàng là danh mục nền — nhập trước khi nhập sản phẩm từ Excel."
+            onDone={() => {
+              categoriesApi.reload();
+              reloadRefs();
+            }}
+          />
+        }
         cfg={{
           api: api.categories,
           empty: { code: '', name: '', type: 'BOTTLE_WATER' },
@@ -284,15 +254,24 @@ export function SettingsTab() {
     warehouses: (
       <MasterSection<Warehouse>
         title="Kho hàng"
-        subtitle="6 kho bãi và kho lưu động"
+        subtitle="Kho bãi, xe lưu động, khách hàng và kho ảo"
         data={warehousesApi.data ?? []}
         loading={warehousesApi.loading}
         reload={warehousesApi.reload}
+        extra={
+          <ImportExcelButton
+            kind="warehouses"
+            hint="Nhập kho từ Excel. Nên nhập kho trước khi nhập tồn kho đầu kỳ và đơn hàng."
+            onDone={() => {
+              warehousesApi.reload();
+              reloadRefs();
+            }}
+          />
+        }
         cfg={{
           api: api.warehouses,
-          empty: { code: '', name: '', type: 'STORE', manager_employee_id: '', location: '', is_active: true },
+          empty: { name: '', type: 'STORE', manager_employee_id: '', location: '', is_active: true },
           fields: [
-            { name: 'code', label: 'Mã kho', required: true },
             { name: 'name', label: 'Tên kho', required: true },
             {
               name: 'type',
@@ -303,16 +282,16 @@ export function SettingsTab() {
                 { value: 'CENTRAL', label: 'Kho trung tâm' },
                 { value: 'STORE', label: 'Kho cửa hàng' },
                 { value: 'VEHICLE', label: 'Kho lưu động (xe)' },
-                { value: 'SHELL_STORAGE', label: 'Kho vỏ bình' },
                 { value: 'STATION', label: 'Kho trạm' },
+                { value: 'CUSTOMER', label: 'Khách hàng' },
+                { value: 'VIRTUAL', label: 'Kho ảo (trung gian)' },
               ],
             },
             { name: 'manager_employee_id', label: 'Thủ kho phụ trách', type: 'select', options: staffOptions },
             { name: 'location', label: 'Vị trí', colSpan: true },
-            { name: 'is_active', label: 'Đang hoạt động', type: 'checkbox', createOnly: true },
+            { name: 'is_active', label: 'Đang hoạt động', type: 'checkbox' },
           ],
           columns: [
-            { key: 'code', header: 'Mã', className: 'font-mono font-semibold text-brand-navy', sortValue: (r) => r.code },
             { key: 'name', header: 'Tên kho', sortValue: (r) => r.name },
             { key: 'type', header: 'Loại' },
             { key: 'manager_name', header: 'Thủ kho', render: (r) => r.manager_name ?? '—' },
@@ -321,75 +300,112 @@ export function SettingsTab() {
         }}
       />
     ),
-    branches: (
-      <MasterSection<PartnerBranch>
-        title="Chi nhánh liên kết"
-        subtitle="Đơn vị bạn trong Tổng công ty QUAWANCO"
-        data={branchesApi.data ?? []}
-        loading={branchesApi.loading}
-        reload={branchesApi.reload}
-        cfg={{
-          api: api.partnerBranches,
-          empty: { code: '', name: '', phone: '', address: '', is_internal: 1 },
-          fields: [
-            { name: 'code', label: 'Mã chi nhánh', required: true },
-            { name: 'name', label: 'Tên chi nhánh', required: true },
-            { name: 'phone', label: 'Điện thoại' },
-            { name: 'address', label: 'Địa chỉ', colSpan: true },
-          ],
-          columns: [
-            { key: 'code', header: 'Mã', className: 'font-mono font-semibold text-brand-navy', sortValue: (r) => r.code },
-            { key: 'name', header: 'Tên chi nhánh', sortValue: (r) => r.name },
-            { key: 'phone', header: 'Điện thoại' },
-            { key: 'address', header: 'Địa chỉ' },
-          ],
-        }}
-      />
-    ),
     groups: (
       <MasterSection<CustomerGroup>
         title="Nhóm khách hàng"
-        subtitle="Phân loại và chiết khấu khách hàng"
+        subtitle="Phân loại khách hàng"
         data={groupsApi.data ?? []}
         loading={groupsApi.loading}
         reload={groupsApi.reload}
+        extra={
+          <ImportExcelButton
+            kind="customer-groups"
+            hint="Nhóm khách hàng dùng để phân loại và áp bảng giá riêng — nhập trước khi nhập khách hàng."
+            onDone={() => {
+              groupsApi.reload();
+              reloadRefs();
+            }}
+          />
+        }
         cfg={{
           api: api.customerGroups,
-          empty: { code: '', name: '', discount_percent: 0 },
+          empty: { code: '', name: '' },
           fields: [
             { name: 'code', label: 'Mã nhóm', required: true },
             { name: 'name', label: 'Tên nhóm', required: true },
-            { name: 'discount_percent', label: 'Chiết khấu (%)', type: 'number' },
           ],
           columns: [
             { key: 'code', header: 'Mã', className: 'font-mono font-semibold text-brand-navy', sortValue: (r) => r.code },
             { key: 'name', header: 'Nhóm khách hàng', sortValue: (r) => r.name },
-            { key: 'discount_percent', header: 'Chiết khấu', align: 'right', render: (r) => `${r.discount_percent}%`, sortValue: (r) => r.discount_percent },
           ],
         }}
       />
     ),
-    conversions: (
-      <MasterSection<ProductConversion>
-        title="Quy cách quy đổi"
-        subtitle="Chai ↔ Vỉ ↔ Hộp/Thùng"
-        data={conversionsApi.data ?? []}
-        loading={conversionsApi.loading}
-        reload={conversionsApi.reload}
+    positions: <PositionsTab />,
+    shells: (
+      <MasterSection<ShellDeposit>
+        title="Cọc vỏ bình"
+        subtitle="Một mức cọc cho mỗi loại vỏ — dùng chung cho cả thu cọc khi giao hàng lẫn hoàn cọc khi thu hồi"
+        data={shellApi.data ?? []}
+        loading={shellApi.loading}
+        reload={shellApi.reload}
         cfg={{
-          api: api.productConversions,
-          empty: { from_product_id: '', to_product_id: '', ratio: 1, note: '' },
+          api: api.shellDeposits,
+          empty: { bottle_type: 'VOI', deposit_fee: 0, note: '' },
           fields: [
-            { name: 'from_product_id', label: 'Từ sản phẩm', type: 'select', required: true, options: productOptions },
-            { name: 'to_product_id', label: 'Sang sản phẩm', type: 'select', required: true, options: productOptions },
-            { name: 'ratio', label: 'Tỷ lệ quy đổi', type: 'number', required: true },
+            {
+              name: 'bottle_type',
+              label: 'Loại vỏ',
+              type: 'select',
+              required: true,
+              options: [
+                { value: 'VOI', label: 'Vỏ Vòi' },
+                { value: 'UP', label: 'Vỏ Úp' },
+              ],
+            },
+            { name: 'deposit_fee', label: 'Tiền cọc (đ/bình)', type: 'number', required: true },
             { name: 'note', label: 'Ghi chú', colSpan: true },
           ],
           columns: [
-            { key: 'from_product_name', header: 'Từ sản phẩm', render: (r) => r.from_product_name ?? '—' },
-            { key: 'to_product_name', header: 'Sang sản phẩm', render: (r) => r.to_product_name ?? '—' },
-            { key: 'ratio', header: 'Tỷ lệ', align: 'right', sortValue: (r) => r.ratio },
-            { key: 'note', header: 'Ghi chú' },
+            {
+              key: 'bottle_type',
+              header: 'Loại vỏ',
+              render: (r) => <Badge tone={r.bottle_type === 'VOI' ? 'cyan' : 'indigo'}>{r.bottle_type === 'VOI' ? 'Vỏ Vòi' : 'Vỏ Úp'}</Badge>,
+              sortValue: (r) => r.bottle_type,
+            },
+            {
+              key: 'deposit_fee',
+              header: 'Tiền cọc',
+              align: 'right',
+              render: (r) => `${formatNumber(r.deposit_fee)} đ`,
+              sortValue: (r) => r.deposit_fee,
+            },
+            { key: 'note', header: 'Ghi chú', render: (r) => r.note || '—' },
+          ],
+        }}
+      />
+    ),
+    vat: (
+      <MasterSection<VatRate>
+        title="Thuế suất GTGT"
+        subtitle="Danh mục theo thời hiệu — luật đổi thuế chỉ cần thêm dòng mới, số liệu kỳ cũ giữ nguyên"
+        data={vatApi.data ?? []}
+        loading={vatApi.loading}
+        reload={vatApi.reload}
+        cfg={{
+          api: api.vatRates,
+          empty: { code: '', name: '', rate: 8, effective_from: '', effective_to: '', note: '' },
+          fields: [
+            { name: 'code', label: 'Mã', required: true },
+            { name: 'name', label: 'Nhóm thuế', required: true },
+            { name: 'rate', label: 'Thuế suất (%)', type: 'number', required: true },
+            { name: 'effective_from', label: 'Hiệu lực từ ngày', type: 'date' },
+            { name: 'effective_to', label: 'Đến ngày (bỏ trống = còn hiệu lực)', type: 'date' },
+            { name: 'note', label: 'Ghi chú', colSpan: true },
+          ],
+          columns: [
+            { key: 'code', header: 'Mã', className: 'font-mono font-semibold text-brand-navy', sortValue: (r) => r.code },
+            { key: 'name', header: 'Nhóm thuế', sortValue: (r) => r.name },
+            {
+              key: 'rate',
+              header: 'Thuế suất',
+              align: 'right',
+              render: (r) => `${formatNumber(r.rate)}%`,
+              sortValue: (r) => r.rate,
+            },
+            { key: 'effective_from', header: 'Từ ngày', render: (r) => (r.effective_from ? formatDate(r.effective_from) : '—') },
+            { key: 'effective_to', header: 'Đến ngày', render: (r) => (r.effective_to ? formatDate(r.effective_to) : 'Còn hiệu lực') },
+            { key: 'note', header: 'Ghi chú', render: (r) => r.note || '—' },
           ],
         }}
       />
@@ -398,17 +414,21 @@ export function SettingsTab() {
 
   return (
     <>
-      <PageHeader title="Danh mục hệ thống" subtitle="Khai báo toàn bộ danh mục nền — không cần sửa trực tiếp trong cơ sở dữ liệu" />
+      <PageHeader
+        title="Danh mục hệ thống"
+        subtitle="Khai báo tập trung toàn bộ danh mục nền — đơn vị, nhóm hàng, kho, nhóm khách hàng, chức vụ"
+      />
       <Tabs
         className="mb-4"
         items={[
-          { id: 'stations', label: 'Trạm', icon: Factory },
-          { id: 'roles', label: 'Vai trò', icon: ShieldCheck },
+          { id: 'general', label: 'Cấu hình chung', icon: Settings2 },
+          { id: 'units', label: 'Đơn vị', icon: Network },
           { id: 'categories', label: 'Nhóm hàng', icon: Layers },
           { id: 'warehouses', label: 'Kho', icon: Building2 },
-          { id: 'branches', label: 'Chi nhánh', icon: Users2 },
           { id: 'groups', label: 'Nhóm KH', icon: Tags },
-          { id: 'conversions', label: 'Quy đổi', icon: Repeat },
+          { id: 'positions', label: 'Chức vụ', icon: Briefcase },
+          { id: 'shells', label: 'Cọc vỏ', icon: Coins },
+          { id: 'vat', label: 'Thuế suất VAT', icon: Percent },
         ]}
         value={tab}
         onChange={setTab}

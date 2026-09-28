@@ -7,6 +7,10 @@ dist/
 apps/*/dist/
 *.tsbuildinfo
 
+# Bộ cài desktop
+release/
+desktop/runtime/
+
 # Database files
 *.db
 *.sqlite

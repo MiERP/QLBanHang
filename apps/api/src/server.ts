@@ -3,19 +3,27 @@ import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getDb } from './db.js';
+import { auditMiddleware } from './lib/audit.js';
 import { errorMiddleware } from './lib/http.js';
 import { masterDataRouter } from './routes/masterData.js';
+import { settingsRouter } from './routes/settings.js';
 import { productsRouter } from './routes/products.js';
 import { customersRouter } from './routes/customers.js';
 import { staffRouter } from './routes/staff.js';
 import { ordersRouter } from './routes/orders.js';
 import { inventoryRouter } from './routes/inventory.js';
-import { branchLoansRouter } from './routes/branchLoans.js';
-import { deliveryRouter } from './routes/delivery.js';
-import { dvgtRouter } from './routes/dvgt.js';
+import { stockTicketsRouter } from './routes/stockTickets.js';
+import { depositsRouter } from './routes/deposits.js';
 import { financeRouter } from './routes/finance.js';
-import { kpiRouter } from './routes/kpi.js';
+import { reportsRouter } from './routes/reports.js';
+import { shellsRouter } from './routes/shells.js';
+import { targetsRouter } from './routes/targets.js';
+import { invoicesRouter } from './routes/invoices.js';
+import { loansRouter } from './routes/loans.js';
 import { dashboardRouter } from './routes/dashboard.js';
+import { notificationsRouter } from './routes/notifications.js';
+import { importsRouter } from './routes/imports.js';
+import { auditLogsRouter } from './routes/auditLogs.js';
 
 const app = express();
 const port = Number(process.env.PORT || 4325);
@@ -40,18 +48,28 @@ app.get('/api/health', (_req, res) => {
 
 const apiRouters = [
   masterDataRouter(),
+  settingsRouter(),
   productsRouter(),
   customersRouter(),
   staffRouter(),
   ordersRouter(),
   inventoryRouter(),
-  branchLoansRouter(),
-  deliveryRouter(),
-  dvgtRouter(),
+  stockTicketsRouter(),
   financeRouter(),
-  kpiRouter(),
+  depositsRouter(),
+  reportsRouter(),
+  shellsRouter(),
+  targetsRouter(),
+  invoicesRouter(),
+  loansRouter(),
   dashboardRouter(),
+  notificationsRouter(),
+  importsRouter(),
+  auditLogsRouter(),
 ];
+
+// Nhật ký đặt TRƯỚC router: handler thành công không gọi next() nên phải bọc res.json từ trước.
+app.use('/api', auditMiddleware);
 
 for (const router of apiRouters) {
   app.use('/api', router);

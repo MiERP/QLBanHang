@@ -1,0 +1,53 @@
+appId: com.quawaco.qaromi-erp
+productName: QAROMI ERP
+copyright: Xí Nghiệp Nước Hồng Gai (QUAWACO)
+
+directories:
+  output: release
+
+# Electron lấy tên này để tạo thư mục dữ liệu người dùng (%APPDATA%\QAROMI ERP).
+extraMetadata:
+  productName: QAROMI ERP
+
+# API chạy bằng node.exe đi kèm (tiến trình riêng), không chạy trong Electron,
+# nên KHÔNG được rebuild better-sqlite3 theo ABI của Electron.
+npmRebuild: false
+
+# node.exe không đọc được file bên trong asar.
+asar: false
+
+# Kiểm tra gói trước khi tạo bộ cài (xem desktop/scripts/after-pack.cjs).
+afterPack: desktop/scripts/after-pack.cjs
+
+files:
+  - package.json
+  - logo.png
+  - desktop/**
+  - '!desktop/runtime/**'
+  - apps/api/dist/**
+  - apps/api/src/*.sql
+  - apps/web/dist/**
+
+extraResources:
+  - from: desktop/runtime
+    to: runtime
+
+win:
+  icon: desktop/build/icon.png
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: QAROMI ERP
+  artifactName: QAROMI-ERP-Setup-${version}.${ext}
+
+portable:
+  artifactName: QAROMI-ERP-${version}-portable.${ext}

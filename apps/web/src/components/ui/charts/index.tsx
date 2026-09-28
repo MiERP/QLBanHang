@@ -7,8 +7,6 @@ import {
   CartesianGrid,
   Cell,
   Legend,
-  Line,
-  LineChart,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -65,7 +63,7 @@ export function ChartCard({ title, subtitle, action, height = 280, empty, childr
   );
 }
 
-export interface SeriesDef {
+interface SeriesDef {
   key: string;
   name: string;
   color?: string;
@@ -78,30 +76,6 @@ interface BaseSeriesProps {
   series: SeriesDef[];
   currency?: boolean;
   angleLabels?: boolean;
-}
-
-export function LineTrend({ data, xKey, series, currency }: BaseSeriesProps) {
-  return (
-    <LineChart data={data} margin={{ top: 8, right: 12, left: 4, bottom: 4 }}>
-      <CartesianGrid strokeDasharray="3 3" stroke="#eef2f6" vertical={false} />
-      <XAxis dataKey={xKey} tick={AXIS} tickLine={false} axisLine={{ stroke: '#e2e8f0' }} />
-      <YAxis tick={AXIS} tickLine={false} axisLine={false} width={54} tickFormatter={currency ? currencyTick : undefined} />
-      <Tooltip formatter={formatValue(currency)} />
-      <Legend wrapperStyle={{ fontSize: 11 }} />
-      {series.map((s, i) => (
-        <Line
-          key={s.key}
-          type="monotone"
-          dataKey={s.key}
-          name={s.name}
-          stroke={s.color ?? CHART_COLORS[i % CHART_COLORS.length]}
-          strokeWidth={2.5}
-          dot={{ r: 3 }}
-          activeDot={{ r: 5 }}
-        />
-      ))}
-    </LineChart>
-  );
 }
 
 export function AreaTrend({ data, xKey, series, currency }: BaseSeriesProps) {

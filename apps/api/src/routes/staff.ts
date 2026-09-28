@@ -12,12 +12,13 @@ export function staffRouter(): Router {
     handle((_req, res) => {
       const staff = db
         .prepare(
-          `SELECT e.*, s.name as station_name, r.name as role_name, r.code as role_code
+          `SELECT e.*, s.name as station_name, ou.name as org_unit_name, p.name as position_name
            FROM employees e
            LEFT JOIN stations s ON e.station_id = s.id
-           LEFT JOIN roles r ON e.role_id = r.id
+           LEFT JOIN org_units ou ON e.org_unit_id = ou.id
+           LEFT JOIN positions p ON e.position_id = p.id
            WHERE e.is_active = 1
-           ORDER BY e.role_id ASC, e.id ASC`
+           ORDER BY e.org_unit_id ASC, e.id ASC`
         )
         .all();
       res.json(staff);
@@ -33,17 +34,23 @@ export function staffRouter(): Router {
       const insert = db
         .prepare(
           `INSERT INTO employees
-            (station_id, role_id, code, full_name, position, phone, home_address, commission_rate, shipping_allowance, is_active)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`
+            (org_unit_id, position_id, code, full_name, position, phone, home_address,
+             date_of_birth, gender, id_number, join_date, education, commission_rate, shipping_allowance, is_active)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`
         )
         .run(
-          body.station_id ? Number(body.station_id) : null,
-          Number(body.role_id) || 3,
+          body.org_unit_id ? Number(body.org_unit_id) : null,
+          body.position_id ? Number(body.position_id) : null,
           code,
           body.full_name,
-          body.position || 'Nhân viên',
+          body.position || '',
           body.phone || '',
           body.home_address || '',
+          body.date_of_birth || null,
+          body.gender || null,
+          body.id_number || null,
+          body.join_date || null,
+          body.education || null,
           Number(body.commission_rate) || 0,
           Number(body.shipping_allowance) || 5000
         );
@@ -57,12 +64,17 @@ export function staffRouter(): Router {
       const id = Number(req.params.id);
       const body = req.body ?? {};
       const allowed = [
-        'station_id',
-        'role_id',
+        'org_unit_id',
+        'position_id',
         'full_name',
         'position',
         'phone',
         'home_address',
+        'date_of_birth',
+        'gender',
+        'id_number',
+        'join_date',
+        'education',
         'commission_rate',
         'shipping_allowance',
         'is_active',
@@ -89,46 +101,6 @@ export function staffRouter(): Router {
       const result = db.prepare(`UPDATE employees SET is_active = 0 WHERE id = ?`).run(id);
       if (result.changes === 0) throw new ApiError(404, 'Không tìm thấy nhân viên');
       res.json({ success: true, id });
-    })
-  );
-
-  router.get(
-    '/staff/shipping-settlements',
-    handle((req, res) => {
-      const month = (req.query.month as string) || new Date().toISOString().slice(0, 7);
-      const settlements = db
-        .prepare(
-          `SELECT e.id as employee_id, e.full_name, s.name as station_name,
-                  COUNT(o.id) as total_trips,
-                  COALESCE(SUM(o.shipping_fee), 0) as total_shipping_fee,
-                  COALESCE(SUM(CASE WHEN o.payment_status = 'PAID' AND o.payment_method = 'CASH' THEN o.total_amount ELSE 0 END), 0) as total_cash_collected
-           FROM employees e
-           LEFT JOIN stations s ON e.station_id = s.id
-           LEFT JOIN orders o ON o.shipper_employee_id = e.id AND strftime('%Y-%m', o.order_date) = ?
-           WHERE e.role_id = 4 AND e.is_active = 1
-           GROUP BY e.id
-           ORDER BY e.id ASC`
-        )
-        .all(month);
-      res.json(settlements);
-    })
-  );
-
-  router.get(
-    '/staff/bottle-ledgers',
-    handle((req, res) => {
-      const eId = req.query.employee_id as string | undefined;
-      let query = `SELECT el.*, e.full_name as employee_name, w.name as warehouse_name
-                   FROM employee_bottle_ledgers el
-                   JOIN employees e ON el.employee_id = e.id
-                   JOIN warehouses w ON el.warehouse_id = w.id`;
-      const params: unknown[] = [];
-      if (eId) {
-        query += ` WHERE el.employee_id = ?`;
-        params.push(eId);
-      }
-      query += ` ORDER BY el.id DESC LIMIT 200`;
-      res.json(db.prepare(query).all(...params));
     })
   );
 
