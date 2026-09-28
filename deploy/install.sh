@@ -53,13 +53,24 @@ mkdir -p "$APP_DIR/data" "$APP_DIR/backups"
 chown -R "$RUN_USER:$RUN_USER" "$APP_DIR"
 
 log "5/9 Lấy mã nguồn (nhánh $BRANCH)..."
-if [[ ! -d "$APP_DIR/.git" ]]; then
-  sudo -u "$RUN_USER" git clone "$GITHUB_REPO" "$APP_DIR"
-else
+if [[ -d "$APP_DIR/.git" ]]; then
+  # Đã clone rồi -> chỉ cập nhật
   sudo -u "$RUN_USER" git -C "$APP_DIR" fetch origin
+  sudo -u "$RUN_USER" git -C "$APP_DIR" checkout "$BRANCH"
+  sudo -u "$RUN_USER" git -C "$APP_DIR" pull --ff-only "origin" "$BRANCH"
+else
+  # Clone vào thư mục tạm rồi gộp vào APP_DIR, tránh lỗi
+  # "destination path exists and is not an empty directory"
+  # và giữ nguyên data/ + backups/ nếu đã có dữ liệu.
+  TMP="$(mktemp -d)"
+  chown "$RUN_USER:$RUN_USER" "$TMP"
+  sudo -u "$RUN_USER" git clone "$GITHUB_REPO" "$TMP/repo"
+  sudo -u "$RUN_USER" git -C "$TMP/repo" checkout "$BRANCH"
+  sudo -u "$RUN_USER" git -C "$TMP/repo" pull --ff-only "origin" "$BRANCH"
+  cp -a "$TMP/repo/." "$APP_DIR/"
+  rm -rf "$TMP"
 fi
-sudo -u "$RUN_USER" git -C "$APP_DIR" checkout "$BRANCH"
-sudo -u "$RUN_USER" git -C "$APP_DIR" pull --ff-only "origin" "$BRANCH"
+chown -R "$RUN_USER:$RUN_USER" "$APP_DIR"
 
 log "6/9 Cài dependencies + build (lâu nhất, 2-5 phút)..."
 sudo -u "$RUN_USER" bash -c "cd '$APP_DIR' && npm ci && npm run build"
