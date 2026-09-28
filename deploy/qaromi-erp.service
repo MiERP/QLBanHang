@@ -1,0 +1,23 @@
+[Unit]
+Description=QAROMI ERP API (Express + SQLite)
+After=network.target
+
+[Service]
+Type=simple
+User=qaromi
+Group=qaromi
+WorkingDirectory=/opt/qaromi-erp
+Environment=NODE_ENV=production
+Environment=PORT=4325
+Environment=DB_PATH=/opt/qaromi-erp/data/qaromi_erp.db
+ExecStart=/usr/bin/node apps/api/dist/server.js
+Restart=always
+RestartSec=3
+TimeoutStopSec=10
+
+# Hardening cơ bản
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
