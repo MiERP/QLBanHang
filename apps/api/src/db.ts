@@ -454,6 +454,11 @@ function rebuildStockMovementsIfNeeded(db: Database.Database) {
     .get() as { sql: string } | undefined;
   if (!row || (row.sql.includes('BORROW_IN') && row.sql.includes('RETURN_IN'))) return;
 
+  // DB cũ có thể chưa có các cột này (source_id thêm sau) → bổ sung trước khi copy để SELECT không lỗi.
+  ensureColumn(db, 'stock_movements', 'source_id', 'INTEGER');
+  ensureColumn(db, 'stock_movements', 'ticket_id', 'INTEGER');
+  ensureColumn(db, 'stock_movements', 'quantity_promo', 'INTEGER DEFAULT 0');
+
   db.pragma('foreign_keys = OFF');
   try {
     db.exec(`BEGIN;
@@ -467,13 +472,14 @@ function rebuildStockMovementsIfNeeded(db: Database.Database) {
         quantity INTEGER NOT NULL,
         quantity_promo INTEGER DEFAULT 0,
         reference_id TEXT,
+        ticket_id INTEGER,
         performed_by INTEGER REFERENCES employees(id),
         note TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
       INSERT INTO stock_movements_new
-        (id, movement_type, source_warehouse_id, target_warehouse_id, source_id, product_id, quantity, quantity_promo, reference_id, performed_by, note, created_at)
-        SELECT id, movement_type, source_warehouse_id, target_warehouse_id, source_id, product_id, quantity, quantity_promo, reference_id, performed_by, note, created_at
+        (id, movement_type, source_warehouse_id, target_warehouse_id, source_id, product_id, quantity, quantity_promo, reference_id, ticket_id, performed_by, note, created_at)
+        SELECT id, movement_type, source_warehouse_id, target_warehouse_id, source_id, product_id, quantity, quantity_promo, reference_id, ticket_id, performed_by, note, created_at
         FROM stock_movements;
       DROP TABLE stock_movements;
       ALTER TABLE stock_movements_new RENAME TO stock_movements;
