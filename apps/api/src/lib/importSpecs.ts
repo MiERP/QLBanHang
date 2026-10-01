@@ -338,7 +338,7 @@ export const IMPORT_SPECS: Record<ImportKind, ImportSpec> = {
         enumValues: [
           { value: 'CASH', label: 'Tiền mặt' },
           { value: 'BANK_TRANSFER', label: 'Chuyển khoản' },
-          { value: 'DEBT', label: 'Ghi nợ' },
+          { value: 'DEBT', label: 'Công nợ' },
         ],
       },
       { key: 'delivery_date', header: 'Ngày giao', type: 'date' },

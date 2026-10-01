@@ -9,7 +9,7 @@ import express from 'express';
 const testDir = mkdtempSync(join(tmpdir(), 'qaromi-business-test-'));
 process.env.DB_PATH = join(testDir, 'test.db');
 
-const [{ getDb }, { ordersRouter }, { loansRouter }, { stockTicketsRouter }, { reportsRouter }, { dashboardRouter }, { errorMiddleware }, { ORDER_DEBT_EXPR }] =
+const [{ getDb }, { ordersRouter }, { loansRouter }, { stockTicketsRouter }, { reportsRouter }, { dashboardRouter }, { customersRouter }, { errorMiddleware }, { ORDER_DEBT_EXPR }] =
   await Promise.all([
     import('../src/db.js'),
     import('../src/routes/orders.js'),
@@ -17,6 +17,7 @@ const [{ getDb }, { ordersRouter }, { loansRouter }, { stockTicketsRouter }, { r
     import('../src/routes/stockTickets.js'),
     import('../src/routes/reports.js'),
     import('../src/routes/dashboard.js'),
+    import('../src/routes/customers.js'),
     import('../src/lib/http.js'),
     import('../src/lib/customerDebt.js'),
   ]);
@@ -24,7 +25,7 @@ const [{ getDb }, { ordersRouter }, { loansRouter }, { stockTicketsRouter }, { r
 const db = getDb();
 const app = express();
 app.use(express.json());
-for (const router of [ordersRouter(), loansRouter(), stockTicketsRouter(), reportsRouter(), dashboardRouter()]) {
+for (const router of [ordersRouter(), loansRouter(), stockTicketsRouter(), reportsRouter(), dashboardRouter(), customersRouter()]) {
   app.use('/api', router);
 }
 app.use(errorMiddleware);
@@ -75,6 +76,14 @@ async function createOrder(overrides: Record<string, unknown> = {}): Promise<num
   });
   assert.equal(result.status, 200, JSON.stringify(result.data));
   return result.data.orderId;
+}
+
+async function withTwoPlusOne(run: () => Promise<void>): Promise<void> {
+  const promo = db.prepare(`INSERT INTO promotions (code, name, product_id, buy_quantity, free_quantity, is_active)
+                            VALUES (?, 'Test 2+1', ?, 2, 1, 1)`)
+    .run(`KM-TEST-${Date.now()}-${Math.random()}`, productId);
+  try { await run(); }
+  finally { db.prepare('UPDATE promotions SET is_active = 0 WHERE id = ?').run(promo.lastInsertRowid); }
 }
 
 async function completeOrder(id: number): Promise<void> {
@@ -181,7 +190,7 @@ test('editing a confirmed order replaces the pending ticket and shipping checks 
   assert.equal((await api('POST', `/orders/${id}/status`, { status: 'CANCELLED' })).status, 200);
 });
 
-test('full return requires promotional units and cannot be repeated', async () => {
+test('full return requires promotional units and cannot be repeated', async () => withTwoPlusOne(async () => {
   const id = await createOrder({ items: [{ product_id: productId, quantity: 2, quantity_promo: 1 }] });
   await completeOrder(id);
   const item = row<{ id: number }>('SELECT id FROM order_items WHERE order_id = ?', id).id;
@@ -191,7 +200,7 @@ test('full return requires promotional units and cannot be repeated', async () =
   assert.equal(row<{ order_status: string }>('SELECT order_status FROM orders WHERE id = ?', id).order_status, 'RETURNED');
   assert.deepEqual(row<{ quantity: number; quantity_promo: number }>("SELECT ti.quantity, ti.quantity_promo FROM stock_ticket_items ti JOIN stock_tickets t ON t.id = ti.ticket_id WHERE t.order_id = ? AND t.reason = 'ORDER_RETURN'", id), { quantity: 2, quantity_promo: 1 });
   assert.equal((await api('POST', `/orders/${id}/return`, { return_date: '2026-09-25', items: [{ order_item_id: item, quantity: 2, quantity_promo: 1 }] })).status, 400);
-});
+}));
 
 test('trade report defaults to consolidated sales and splits the source quota', async () => {
   const baseline = await api('GET', '/reports/trade-template?month=2026-09');
@@ -281,6 +290,22 @@ test('customer return keeps the original delivery fee, reduces debt, and refunds
     'SELECT transaction_type, amount, payment_method FROM revenue_transactions WHERE order_id = ? AND amount < 0', paidId
   );
   assert.deepEqual(refundTx, { transaction_type: 'SALE_REFUND', amount: -paid.subtotal_amount, payment_method: 'BANK_TRANSFER' });
+});
+
+test('customer receivables show only the remaining unpaid balance after a return', async () => {
+  const id = await createOrder({ payment_status: 'UNPAID', payment_method: 'DEBT' });
+  await completeOrder(id);
+  const item = row<{ id: number }>('SELECT id FROM order_items WHERE order_id = ?', id).id;
+  const original = row<{ total_amount: number; shipping_fee: number }>('SELECT total_amount, shipping_fee FROM orders WHERE id = ?', id);
+  const returned = await api('POST', `/orders/${id}/return`, {
+    return_date: '2026-09-25', items: [{ order_item_id: item, quantity: 1 }],
+  });
+  assert.equal(returned.status, 200, JSON.stringify(returned.data));
+  const receivables = await api('GET', '/customers/receivables');
+  assert.equal(receivables.status, 200, JSON.stringify(receivables.data));
+  const customer = receivables.data.byCustomer.find((entry: { customer_id: number }) => entry.customer_id === customerId);
+  const order = customer?.orders.find((entry: { order_id: number }) => entry.order_id === id);
+  assert.equal(order?.outstanding, original.shipping_fee);
 });
 
 test('partially paid sale refunds the excess after return and retains the delivery fee', async () => {
@@ -430,7 +455,7 @@ test('borrowed customer return can be sent back to the partner as a separate sto
   assert.equal(partnerReturn.data.state.status, 'SETTLED');
 });
 
-test('loan debt begins at shipping and settles only when all paid and promo units return', async () => {
+test('loan debt begins at shipping and settles only when all paid and promo units return', async () => withTwoPlusOne(async () => {
   const id = await createOrder({ order_type: 'BORROW_IN', partner_unit_id: partnerId,
     items: [{ product_id: productId, quantity: 2, quantity_promo: 1 }] });
   const draft = await api('GET', '/loans');
@@ -447,7 +472,7 @@ test('loan debt begins at shipping and settles only when all paid and promo unit
   });
   assert.equal(final.status, 200, JSON.stringify(final.data));
   assert.equal(final.data.state.status, 'SETTLED');
-});
+}));
 
 test('shipping loan order with a partial partner return cannot be cancelled', async () => {
   const id = await createOrder({ order_type: 'LEND_OUT', partner_unit_id: partnerId,
@@ -511,11 +536,11 @@ test('completed order locks shipper allocation and route fee uses product units 
   assert.equal(row<{ allocated_fee: number }>('SELECT SUM(allocated_fee) AS allocated_fee FROM order_shippers WHERE order_id = ?', id).allocated_fee, before);
 });
 
-test('delivery fee counts promotional products that physically travel with the order', async () => {
+test('delivery fee counts sold products but excludes promotional products', async () => withTwoPlusOne(async () => {
   const id = await createOrder({ items: [{ product_id: productId, quantity: 2, quantity_promo: 1 }] });
-  assert.equal(row<{ shipping_fee: number }>('SELECT shipping_fee FROM orders WHERE id = ?', id).shipping_fee, 15000);
-  assert.equal(row<{ allocated_fee: number }>('SELECT SUM(allocated_fee) AS allocated_fee FROM order_shippers WHERE order_id = ?', id).allocated_fee, 15000);
-});
+  assert.equal(row<{ shipping_fee: number }>('SELECT shipping_fee FROM orders WHERE id = ?', id).shipping_fee, 10000);
+  assert.equal(row<{ allocated_fee: number }>('SELECT SUM(allocated_fee) AS allocated_fee FROM order_shippers WHERE order_id = ?', id).allocated_fee, 10000);
+}));
 
 test('loan settlement refuses money and tracks goods debt by product units', async () => {
   const id = await createOrder({ order_type: 'LEND_OUT', partner_unit_id: partnerId,

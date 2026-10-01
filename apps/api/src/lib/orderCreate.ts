@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import { loanWarehouseId } from '../db.js';
 import { orderCode, today } from './codes.js';
 import { badRequest } from './http.js';
+import { applyOrderPromotions } from './promotions.js';
 import { assertPhysicalOrderWarehouse, getOrder, paymentStatus, recalcTotals, shipperRequired, syncOrderCashLedger } from './orderStatus.js';
 
 export interface RawItem {
@@ -93,6 +94,7 @@ export function insertItems(db: Database.Database, orderId: number, items: RawIt
     if (!Number.isFinite(unitPrice) || unitPrice < 0) throw badRequest(`Đơn giá của "${product.name}" phải là số không âm`);
     stmt.run(orderId, product.id, quantity, promo, unitPrice, quantity * unitPrice, item.note ?? '');
   }
+  applyOrderPromotions(db, orderId);
 }
 
 // Chỉ thay phân bổ phí GIAO HÀNG; phí đi nhận hàng hoàn (kind = 'RETURN') giữ nguyên.

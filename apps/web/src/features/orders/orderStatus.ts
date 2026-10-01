@@ -33,7 +33,7 @@ export const ORDER_ACTION_LABEL: Record<OrderStatus, string> = {
 export const PAYMENT_STATUS_META: Record<string, { label: string; tone: Tone }> = {
   PAID: { label: 'Đã thanh toán', tone: 'green' },
   PARTIAL: { label: 'Thanh toán một phần', tone: 'amber' },
-  UNPAID: { label: 'Công nợ', tone: 'red' },
+  UNPAID: { label: 'Chưa thanh toán', tone: 'red' },
 };
 
 export const ORDER_TYPE_LABEL: Record<string, string> = {

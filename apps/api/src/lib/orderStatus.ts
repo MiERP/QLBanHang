@@ -197,17 +197,18 @@ function bottleAmounts(items: ItemRow[]) {
 }
 
 // Phí vận chuyển theo tuyến: một nguồn duy nhất cho cả phí giao hàng và phí đi nhận hàng hoàn.
-export function routeFeeFor(db: Database.Database, shippingFeeId: number | null | undefined, billableUnits: number): number {
+export function routeFeeFor(db: Database.Database, shippingFeeId: number | null | undefined, soldUnits: number): number {
   if (!shippingFeeId) return 0;
   const fee = db
     .prepare('SELECT fee_per_unit FROM shipping_fees WHERE id = ?')
     .get(shippingFeeId) as { fee_per_unit: number } | undefined;
   if (!fee) return 0;
-  return (Number(fee.fee_per_unit) || 0) * billableUnits;
+  return (Number(fee.fee_per_unit) || 0) * soldUnits;
 }
 
 // Tính lại tiền hàng / phí ship / cọc / tổng tiền từ dòng hàng.
-// Phí vận chuyển có MỘT nguồn duy nhất: tuyến đã chọn × số đơn vị hàng tính tiền (không dưới mức tối thiểu).
+// Phí vận chuyển có MỘT nguồn duy nhất: tuyến đã chọn × số lượng sản phẩm bán.
+// Hàng khuyến mãi vẫn xuất kho nhưng không làm tăng phí vận chuyển.
 export function recalcTotals(db: Database.Database, orderId: number) {
   const row = db
     .prepare(
@@ -227,13 +228,13 @@ export function recalcTotals(db: Database.Database, orderId: number) {
       s: number;
     }).s
   );
-  const billableUnits = Number(
-    (db.prepare('SELECT COALESCE(SUM(quantity + COALESCE(quantity_promo, 0)),0) as q FROM order_items WHERE order_id = ?').get(orderId) as { q: number }).q
+  const soldUnits = Number(
+    (db.prepare('SELECT COALESCE(SUM(quantity),0) as q FROM order_items WHERE order_id = ?').get(orderId) as { q: number }).q
   );
   const shippingFee = !hasDeliveryShipper(db, orderId)
     ? 0
     : row.shipping_fee_id
-      ? routeFeeFor(db, row.shipping_fee_id, billableUnits)
+      ? routeFeeFor(db, row.shipping_fee_id, soldUnits)
       : Number(row.shipping_fee) || 0;
   const discount = Number(row.discount_amount) || 0;
   if (!Number.isFinite(Number(row.discount_amount)) || discount < 0 ||
@@ -628,7 +629,8 @@ export function applyOrderReturn(db: Database.Database, order: OrderRecord, inpu
   const netGoods = Math.max(0, grossGoods - (Number(order.discount_amount) || 0));
   const totalReturnedValue = netGoods;
   const returnedValue = netGoods;
-  const billableUnits = lines.reduce((sum, line) => sum + line.quantity + line.promo, 0);
+  // Phí đi nhận hàng hoàn chỉ tính theo số sản phẩm bán, không tính hàng khuyến mãi.
+  const soldUnits = lines.reduce((sum, line) => sum + line.quantity, 0);
 
   let returnWarehouseId = order.warehouse_id;
   if (order.order_type === 'BORROW_IN') {
@@ -698,7 +700,7 @@ export function applyOrderReturn(db: Database.Database, order: OrderRecord, inpu
 
   // Nhân viên đến lấy hàng hoàn thì được tính phí y như một chuyến giao hàng (chia đều cho người đi nhận).
   if (input.pickupType === 'STAFF_PICKUP' && input.collectors.length) {
-    const fee = routeFeeFor(db, order.shipping_fee_id, billableUnits);
+    const fee = routeFeeFor(db, order.shipping_fee_id, soldUnits);
     const base = Math.floor(fee / input.collectors.length);
     const remainder = fee - base * input.collectors.length;
     const insert = db.prepare(
@@ -741,7 +743,7 @@ export function applyOrderReturn(db: Database.Database, order: OrderRecord, inpu
     depositRefund,
     shellsVoi,
     shellsUp,
-    billableUnits,
+    soldUnits,
   };
 }
 

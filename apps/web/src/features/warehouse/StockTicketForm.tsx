@@ -8,6 +8,7 @@ import { useToast } from '../../components/ui/Toast';
 import { useReference } from '../../context/ReferenceContext';
 import { useApi } from '../../lib/hooks';
 import { formatCurrency, formatNumber, todayISO } from '../../lib/format';
+import { withPromotions } from '../../lib/promotions';
 import { stockWarehouses } from '../../lib/warehouses';
 import type { StockTicket } from '../../types';
 import { IN_REASONS, OUT_REASONS, TICKET_TYPE_LABEL, reasonLabel, type TicketType } from './ticketMeta';
@@ -36,6 +37,7 @@ export function StockTicketForm({
 }) {
   const { products, warehouses, partnerUnits, staff } = useReference();
   const sourcesApi = useApi(() => api.importSources.list(), []);
+  const promotionsApi = useApi(() => api.promotions.list(), []);
   const toast = useToast();
   const editing = !!ticket;
 
@@ -63,6 +65,15 @@ export function StockTicketForm({
   const [saving, setSaving] = useState(false);
 
   const isIn = ticketType === 'IN';
+  const promoEligible = !ticket?.auto && !ticket?.order_id && (
+    (ticketType === 'IN' && ['PARENT_RECEIVE', 'TRANSFER_IN', 'OTHER_IN'].includes(reason)) ||
+    (ticketType === 'OUT' && reason === 'OTHER_OUT') ||
+    (ticketType === 'TRANSFER' && reason === 'TRANSFER')
+  );
+  const shownLines = useMemo(() => promoEligible
+    ? withPromotions(lines, products, promotionsApi.data ?? [], ticketDate)
+    : ticket?.auto || ticket?.order_id ? lines : lines.map((line) => ({ ...line, quantity_promo: 0 })),
+  [promoEligible, lines, products, promotionsApi.data, ticketDate, ticket?.auto, ticket?.order_id]);
   // Kho xuất: cần biết tồn hiện có để biết còn bao nhiêu mà xuất.
   const stockApi = useApi(
     () => (warehouseId ? api.fetchStock(Number(warehouseId)) : Promise.resolve([])),
@@ -77,15 +88,15 @@ export function StockTicketForm({
   const showPartner = REASONS_FOR_PARTNER.includes(reason);
   const showSource = reason === 'PARENT_RECEIVE';
 
-  const totalQty = lines.reduce((a, l) => a + (Number(l.quantity) || 0) + (Number(l.quantity_promo) || 0), 0);
-  const totalPromo = lines.reduce((a, l) => a + (Number(l.quantity_promo) || 0), 0);
+  const totalQty = shownLines.reduce((a, l) => a + (Number(l.quantity) || 0) + (Number(l.quantity_promo) || 0), 0);
+  const totalPromo = shownLines.reduce((a, l) => a + (Number(l.quantity_promo) || 0), 0);
   const totalValue = useMemo(
     () =>
-      lines.reduce((a, l) => {
+      shownLines.reduce((a, l) => {
         const p = products.find((x) => x.id === Number(l.product_id));
         return a + (Number(l.quantity) || 0) * (p?.cost_price ?? 0);
       }, 0),
-    [lines, products]
+    [shownLines, products]
   );
 
   const save = async () => {
@@ -93,15 +104,20 @@ export function StockTicketForm({
     if (!warehouseId) return toast.error(ticketType === 'IN' ? 'Chọn kho nhập' : 'Chọn kho xuất');
     if (ticketType === 'TRANSFER' && !targetWarehouseId) return toast.error('Chọn kho nhận điều chuyển');
     if (showPartner && !partnerUnitId) return toast.error('Chọn đối tác');
-    const valid = lines.filter((l) => l.product_id && Number(l.quantity) > 0);
+    const valid = shownLines.filter((l) => l.product_id && Number(l.quantity) > 0);
     if (!valid.length) return toast.error('Thêm ít nhất một mặt hàng với số lượng > 0');
     // Phiếu xuất/điều chuyển: không được xuất quá tồn kho hiện có.
     if (!isIn) {
-      const over = valid.find((l) => Number(l.quantity) > (stockByProduct.get(Number(l.product_id)) ?? 0));
+      const required = new Map<number, number>();
+      for (const line of valid) {
+        const id = Number(line.product_id);
+        required.set(id, (required.get(id) ?? 0) + Number(line.quantity) + (Number(line.quantity_promo) || 0));
+      }
+      const over = [...required].find(([id, quantity]) => quantity > (stockByProduct.get(id) ?? 0));
       if (over) {
-        const p = products.find((x) => x.id === Number(over.product_id));
-        const available = stockByProduct.get(Number(over.product_id)) ?? 0;
-        return toast.error(`"${p?.name ?? 'Sản phẩm'}" vượt tồn kho (hiện có ${available}, cần ${Number(over.quantity)})`);
+        const p = products.find((x) => x.id === over[0]);
+        const available = stockByProduct.get(over[0]) ?? 0;
+        return toast.error(`"${p?.name ?? 'Sản phẩm'}" vượt tồn kho (hiện có ${available}, cần ${over[1]})`);
       }
     }
     setSaving(true);
@@ -265,7 +281,7 @@ export function StockTicketForm({
             <span className="w-9" />
           </div>
           <div className="space-y-2">
-            {lines.map((l, i) => {
+            {shownLines.map((l, i) => {
               const available = stockByProduct.get(Number(l.product_id)) ?? 0;
               const over = !isIn && l.product_id !== '' && Number(l.quantity) + (Number(l.quantity_promo) || 0) > available;
               return (
@@ -315,8 +331,8 @@ export function StockTicketForm({
                     />
                   </div>
                   {!!l.quantity_promo && (
-                    <span className="w-20 text-right text-xs font-semibold text-amber-600" title="Hàng khuyến mãi đi kèm đơn">
-                      KM {formatNumber(l.quantity_promo)}
+                    <span className="w-20 text-right text-xs font-semibold text-amber-600" title="Hàng khuyến mãi cùng sản phẩm">
+                      KM {formatNumber(Number(l.quantity_promo))}
                     </span>
                   )}
                   <Button

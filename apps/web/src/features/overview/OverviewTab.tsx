@@ -1,294 +1,155 @@
-import { AlertTriangle, ArrowLeftRight, Boxes, Droplets, Package, RotateCcw, ShoppingCart, TrendingDown, TrendingUp, Truck, Users, Wallet } from 'lucide-react';
-import { useMemo } from 'react';
+import { BarChart3, Boxes, Building2, Droplets, Package, Target, Wallet } from 'lucide-react';
 import * as api from '../../api';
-import { Badge } from '../../components/ui/Badge';
 import { Card, CardBody, CardHeader } from '../../components/ui/Card';
-import { AreaTrend, BarSeries, ChartCard, DonutChart } from '../../components/ui/charts';
-import { DataTable, type Column } from '../../components/ui/DataTable';
+import { AreaTrend, BarSeries, ChartCard } from '../../components/ui/charts';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { StatCard } from '../../components/ui/StatCard';
 import { useApi } from '../../lib/hooks';
 import { formatCurrency, formatDateShort, formatMonth, formatNumber } from '../../lib/format';
-import { cn } from '../../lib/cn';
-import type { Order, StockItem } from '../../types';
+import type { DashboardData, TargetBoardRow } from '../../types';
 import type { TabId } from '../../layout';
-import { paymentStatusMeta, statusMeta } from '../orders/orderStatus';
+
+function SectionHeading({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <div className="mb-3">
+      <h2 className="text-base font-bold text-brand-navy">{title}</h2>
+      <p className="text-xs text-slate-500">{subtitle}</p>
+    </div>
+  );
+}
+
+function KpiTable({ rows, label }: { rows: TargetBoardRow[]; label: string }) {
+  if (!rows.length) return <EmptyState icon={Target} title={`Chưa có ${label.toLowerCase()}`} message="Danh sách sẽ hiện khi có dữ liệu." />;
+  const sorted = [...rows].sort((a, b) => Number(b.target_revenue > 0) - Number(a.target_revenue > 0) ||
+    b.completion_percentage - a.completion_percentage || a.name.localeCompare(b.name));
+  return (
+    <div className="max-h-80 overflow-auto">
+      <table className="w-full min-w-[480px] text-left text-xs">
+        <thead className="sticky top-0 bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
+          <tr><th className="px-4 py-2.5">{label}</th><th className="px-3 py-2.5 text-right">Thực hiện</th><th className="px-3 py-2.5 text-right">Chỉ tiêu</th><th className="px-4 py-2.5 text-right">Đạt</th></tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {sorted.map((row) => (
+            <tr key={`${row.scope_type}-${row.employee_id ?? row.org_unit_id}`}>
+              <th scope="row" className="max-w-48 px-4 py-3 font-semibold text-slate-700">{row.name}</th>
+              <td className="whitespace-nowrap px-3 py-3 text-right text-slate-700">{formatCurrency(row.actual_revenue)}</td>
+              <td className="whitespace-nowrap px-3 py-3 text-right text-slate-500">{row.target_revenue > 0 ? formatCurrency(row.target_revenue) : 'Chưa giao'}</td>
+              <td className="whitespace-nowrap px-4 py-3 text-right">
+                {row.target_revenue > 0 ? (
+                  <span className={`font-bold ${row.completion_percentage >= 100 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                    {formatNumber(row.completion_percentage)}%
+                  </span>
+                ) : <span className="text-slate-400">—</span>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function WarehouseStock({ warehouses }: { warehouses: DashboardData['stockByWarehouse'] }) {
+  if (!warehouses.length) return <EmptyState icon={Boxes} title="Chưa có kho vật lý" message="Thêm kho để theo dõi tồn theo từng địa điểm." />;
+  return (
+    <div className="divide-y divide-slate-100">
+      {warehouses.map((warehouse, index) => (
+        <details key={warehouse.warehouse_id} className="group" open={index === 0}>
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-brand-cyan">
+            <span className="min-w-0 font-semibold text-slate-700">{warehouse.name}</span>
+            <span className="shrink-0 text-xs text-slate-500">{formatNumber(warehouse.items.filter((item) => item.quantity > 0).length)} mã còn hàng <span aria-hidden="true" className="ml-1 inline-block text-brand-cyan group-open:rotate-90">›</span></span>
+          </summary>
+          <div className="overflow-x-auto border-t border-slate-100 bg-slate-50/50 px-4 pb-3">
+            <table className="w-full min-w-[380px] text-xs">
+              <thead className="text-slate-500"><tr><th className="py-2 text-left font-semibold">Sản phẩm</th><th className="py-2 text-right font-semibold">Tồn</th></tr></thead>
+              <tbody className="divide-y divide-slate-100">
+                {warehouse.items.map((item) => (
+                  <tr key={item.product_id}><td className="py-2 text-slate-700">{item.product_name}</td><td className={`py-2 text-right font-semibold ${item.quantity <= 0 ? 'text-brand-red' : 'text-brand-navy'}`}>{formatNumber(item.quantity)} {item.unit}</td></tr>
+                ))}
+              </tbody>
+            </table>
+            {!warehouse.items.length && <p className="py-3 text-xs text-slate-500">Chưa có sản phẩm hàng hóa đang hoạt động.</p>}
+          </div>
+        </details>
+      ))}
+    </div>
+  );
+}
 
 export function OverviewTab({ month, onNavigate }: { month: string; onNavigate: (t: TabId) => void }) {
   const dashboardApi = useApi(() => api.fetchDashboard(month), [month]);
-  const alertsApi = useApi(() => api.fetchAlerts(), []);
-  const ordersApi = useApi(() => api.fetchOrders({ limit: 8 }), []);
-
+  const targetsApi = useApi(() => api.fetchTargets(month), [month]);
   const d = dashboardApi.data;
-  const kpis = d?.kpis;
-
-  const revenueDelta = useMemo(() => {
-    if (!kpis) return 0;
-    if (!kpis.revenueYesterday) return kpis.revenueToday > 0 ? 100 : 0;
-    return Math.round(((kpis.revenueToday - kpis.revenueYesterday) / kpis.revenueYesterday) * 100);
-  }, [kpis]);
-
-  const productMix = (d?.productMix ?? []).map((p) => ({ name: p.name.replace('Nước Tinh Khiết RO QAROMI ', 'RO ').replace('Nước Ion Kiềm QAROMI ', 'Kiềm '), value: p.quantity }));
-  const paymentMix = (d?.paymentStatus ?? []).map((p) => ({ name: paymentStatusMeta(p.name).label, value: p.value }));
-  const bottleDebt = (d?.bottleDebtByCustomer ?? []).map((c) => ({ name: c.name.length > 18 ? `${c.name.slice(0, 18)}…` : c.name, 'Vỏ Vòi': c.voi, 'Vỏ Úp': c.up }));
-  const movements = (d?.movementsSummary ?? []).map((m) => ({ name: m.name, 'Số lượng': m.quantity }));
-
-  const alertColumns: Column<StockItem>[] = [
-    { key: 'product_name', header: 'Sản phẩm' },
-    { key: 'warehouse_name', header: 'Kho' },
-    { key: 'quantity', header: 'Tồn', align: 'right', render: (r) => <b>{r.quantity}</b>, sortValue: (r) => r.quantity },
-    { key: 'days_left', header: 'Còn lại', align: 'right', render: (r) => `${r.days_left} ngày`, sortValue: (r) => r.days_left },
-    {
-      key: 'urgency_level',
-      header: 'Mức độ',
-      align: 'center',
-      render: (r) => (
-        <Badge tone={r.urgency_level === 'CRITICAL' ? 'red' : r.urgency_level === 'HIGH' ? 'amber' : 'cyan'}>
-          {r.urgency_level === 'CRITICAL' ? 'Cực gấp' : r.urgency_level === 'HIGH' ? 'Cao' : 'Trung bình'}
-        </Badge>
-      ),
-    },
-  ];
-
-  const orderColumns: Column<Order>[] = [
-    { key: 'order_code', header: 'Mã đơn', className: 'font-mono font-semibold text-brand-navy' },
-    { key: 'customer_name', header: 'Khách hàng' },
-    { key: 'total_amount', header: 'Tổng tiền', align: 'right', render: (r) => formatCurrency(r.total_amount) },
-    {
-      key: 'payment_status',
-      header: 'Thanh toán',
-      align: 'center',
-      render: (r) => {
-        const m = paymentStatusMeta(r.payment_status);
-        return <Badge tone={m.tone}>{m.label}</Badge>;
-      },
-    },
-    {
-      key: 'order_status',
-      header: 'Trạng thái',
-      align: 'center',
-      render: (r) => {
-        const m = statusMeta(r.order_status);
-        return <Badge tone={m.tone}>{m.label}</Badge>;
-      },
-    },
-  ];
+  const k = d?.kpis;
+  const scopeChart = (d?.revenueByScope ?? []).map((row) => ({
+    name: row.scope === 'COMPANY' ? 'Công ty' : 'Xí nghiệp', 'Doanh thu': row.revenue,
+  }));
+  const lastDay = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate();
+  const periodHint = `01/01–${lastDay}/${month.slice(5, 7)}/${month.slice(0, 4)}`;
 
   return (
     <>
-      <PageHeader title="Bảng điều khiển" subtitle={`Tổng hợp điều hành · ${formatMonth(month)}`} />
+      <PageHeader title="Bảng điều khiển" subtitle={`Tình hình điều hành · ${formatMonth(month)}`} />
 
-      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          icon={Wallet}
-          tone="navy"
-          label="Doanh thu hôm nay"
-          value={formatCurrency(kpis?.revenueToday ?? 0)}
-          hint={
-            <span className={cn('inline-flex items-center gap-1 font-semibold', revenueDelta >= 0 ? 'text-emerald-600' : 'text-brand-red')}>
-              {revenueDelta >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-              {revenueDelta >= 0 ? '+' : ''}
-              {revenueDelta}% so với hôm qua
-            </span>
-          }
-        />
-        <StatCard icon={ShoppingCart} tone="cyan" label={`Doanh thu ${formatMonth(month)}`} value={formatCurrency(kpis?.revenueMonth ?? 0)} hint={`${formatNumber(kpis?.ordersMonth ?? 0)} đơn hàng (chưa trừ hàng hoàn)`} onClick={() => onNavigate('orders')} />
-        <StatCard
-          icon={RotateCcw}
-          tone="red"
-          label="Hàng hoàn trong tháng"
-          value={formatCurrency(kpis?.revenueReturnedMonth ?? 0)}
-          hint="Trừ vào doanh thu"
-          onClick={() => onNavigate('revenue')}
-        />
-        <StatCard
-          icon={Wallet}
-          tone="green"
-          label="Doanh thu thuần"
-          value={formatCurrency(kpis?.revenueNetMonth ?? 0)}
-          hint="Doanh thu gộp − hàng hoàn"
-          onClick={() => onNavigate('revenue')}
-        />
-        <StatCard
-          icon={Droplets}
-          tone="indigo"
-          label="Sản lượng bình xuất"
-          value={`${formatNumber(kpis?.bottlesMonth ?? 0)} bình`}
-          hint={`RO/Vòi ${formatNumber(kpis?.bottlesVoi ?? 0)} · Úp ${formatNumber(kpis?.bottlesUp ?? 0)}`}
-        />
-        <StatCard
-          icon={Package}
-          tone="amber"
-          label="Tồn vỏ ngoài thị trường"
-          value={`${formatNumber((kpis?.bottleDebtVoi ?? 0) + (kpis?.bottleDebtUp ?? 0))} vỏ`}
-          hint={`Vòi ${formatNumber(kpis?.bottleDebtVoi ?? 0)} · Úp ${formatNumber(kpis?.bottleDebtUp ?? 0)}`}
-          onClick={() => onNavigate('customers')}
-        />
-        <StatCard icon={Users} tone="red" label="Công nợ tiền khách hàng" value={formatCurrency(kpis?.totalDebt ?? 0)} hint="Tổng dư nợ hiện tại" onClick={() => onNavigate('customers')} />
-        <StatCard icon={Truck} tone="amber" label="Cảnh báo tồn kho" value={`${formatNumber(kpis?.alertCount ?? 0)} mặt hàng`} hint="Dưới ngưỡng tối thiểu" onClick={() => onNavigate('stock')} />
-        <StatCard icon={Boxes} tone="cyan" label="Lưu chuyển kho trong tháng" value={`${formatNumber((d?.movementsSummary ?? []).reduce((a, m) => a + m.quantity, 0))} lượt`} />
-      </div>
+      {dashboardApi.error && (
+        <Card className="mb-5 border-brand-red/30"><CardBody className="flex flex-wrap items-center justify-between gap-2 text-sm text-brand-red">
+          <span>Không tải được dashboard: {dashboardApi.error}</span>
+          <button type="button" className="font-semibold underline" onClick={dashboardApi.reload}>Thử lại</button>
+        </CardBody></Card>
+      )}
+      {dashboardApi.error ? null : dashboardApi.loading ? <p role="status" className="mb-5 rounded-xl bg-slate-100 p-8 text-sm text-slate-500">Đang tải số liệu điều hành…</p> : (
+        <>
+          <section className="mb-6" aria-label="Doanh thu">
+            <SectionHeading title="Doanh thu" subtitle="Giá trị tiền hàng của đơn đã hoàn tất, chưa trừ hàng hoàn và không gồm phí vận chuyển." />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <StatCard icon={Wallet} tone="navy" label="Trong ngày" value={formatCurrency(k?.revenueToday ?? 0)} hint="Hôm nay" />
+              <StatCard icon={BarChart3} tone="cyan" label="Trong tháng" value={formatCurrency(k?.revenueMonth ?? 0)} hint={formatMonth(month)} />
+              <StatCard icon={Building2} tone="green" label="Lũy kế năm" value={formatCurrency(k?.revenueYear ?? 0)} hint={periodHint} />
+            </div>
+          </section>
 
-      <div className="mb-5 grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <div className="xl:col-span-2">
-          <ChartCard title="Doanh thu theo ngày" subtitle={formatMonth(month)} empty={(d?.revenueByDay ?? []).length === 0}>
-            <AreaTrend
-              data={(d?.revenueByDay ?? []).map((r) => ({ date: formatDateShort(r.date), revenue: r.revenue, orders: r.orders }))}
-              xKey="date"
-              currency
-              series={[{ key: 'revenue', name: 'Doanh thu', color: '#50ADDE' }]}
-            />
-          </ChartCard>
-        </div>
-        <ChartCard title="Cơ cấu thanh toán" subtitle={`${kpis?.ordersMonth ?? 0} đơn trong tháng`} empty={paymentMix.length === 0}>
-          <DonutChart data={paymentMix} colors={['#10B981', '#F59E0B', '#C62430']} />
-        </ChartCard>
-      </div>
+          <section className="mb-6" aria-label="Công nợ chưa thu">
+            <SectionHeading title="Công nợ chưa thu" subtitle="Số hiện còn phải thu của đơn phát sinh trong kỳ, sau các khoản đã thanh toán và hàng hoàn." />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <StatCard icon={Wallet} tone="red" label="Phát sinh trong ngày" value={formatCurrency(k?.debtToday ?? 0)} hint="Đơn lập hôm nay" />
+              <StatCard icon={Wallet} tone="amber" label="Phát sinh trong tháng" value={formatCurrency(k?.debtMonth ?? 0)} hint={formatMonth(month)} />
+              <StatCard icon={Wallet} tone="indigo" label="Phát sinh lũy kế năm" value={formatCurrency(k?.debtYear ?? 0)} hint={periodHint} />
+            </div>
+          </section>
 
-      <div className="mb-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <ChartCard title="Sản lượng theo mặt hàng" subtitle="Top mặt hàng bán chạy" empty={productMix.length === 0}>
-          <DonutChart data={productMix} />
-        </ChartCard>
-        <ChartCard title="Doanh thu theo kho xuất" subtitle="Phân bổ theo kho/trạm" empty={(d?.revenueByWarehouse ?? []).length === 0}>
-          <BarSeries
-            data={(d?.revenueByWarehouse ?? []).map((w) => ({ name: w.name.length > 20 ? `${w.name.slice(0, 20)}…` : w.name, 'Doanh thu': w.revenue }))}
-            xKey="name"
-            currency
-            angleLabels
-            series={[{ key: 'Doanh thu', name: 'Doanh thu', color: '#2C2C6B' }]}
-          />
-        </ChartCard>
-      </div>
+          <div className="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <ChartCard title="Doanh thu theo chỉ tiêu" subtitle={`Công ty và Xí nghiệp · ${formatMonth(month)}`} empty={!scopeChart.some((row) => row['Doanh thu'] > 0)} height={260}>
+              <BarSeries data={scopeChart} xKey="name" currency series={[{ key: 'Doanh thu', name: 'Doanh thu', color: '#2C2C6B' }]} />
+            </ChartCard>
+            <ChartCard title="Xu hướng doanh thu" subtitle={`Theo ngày · ${formatMonth(month)}`} empty={(d?.revenueByDay ?? []).length === 0} height={260}>
+              <AreaTrend data={(d?.revenueByDay ?? []).map((row) => ({ date: formatDateShort(row.date), revenue: row.revenue }))} xKey="date" currency series={[{ key: 'revenue', name: 'Doanh thu', color: '#50ADDE' }]} />
+            </ChartCard>
+          </div>
 
-      <div className="mb-5 grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <ChartCard title="Doanh số theo nhân viên bán" subtitle="Top 8" empty={(d?.salesBySeller ?? []).length === 0}>
-          <BarSeries
-            data={(d?.salesBySeller ?? []).map((s) => ({ name: s.name.split(' ').slice(-2).join(' '), 'Doanh số': s.revenue }))}
-            xKey="name"
-            currency
-            angleLabels
-            series={[{ key: 'Doanh số', name: 'Doanh số', color: '#50ADDE' }]}
-          />
-        </ChartCard>
-        <ChartCard title="Nợ vỏ bình theo khách hàng" subtitle="Top khách đang giữ vỏ" empty={bottleDebt.length === 0}>
-          <BarSeries
-            data={bottleDebt}
-            xKey="name"
-            angleLabels
-            series={[
-              { key: 'Vỏ Vòi', name: 'Vỏ Vòi (T9)', color: '#2C2C6B', stackId: 'a' },
-              { key: 'Vỏ Úp', name: 'Vỏ Úp (T8)', color: '#50ADDE', stackId: 'a' },
-            ]}
-          />
-        </ChartCard>
-        <ChartCard title="Hiệu suất giao hàng" subtitle="Bình giao theo shipper" empty={(d?.shipperPerformance ?? []).length === 0}>
-          <BarSeries
-            data={(d?.shipperPerformance ?? []).map((s) => ({ name: s.name.split(' ').slice(-2).join(' '), 'Bình giao': s.bottles, 'Chuyến': s.trips }))}
-            xKey="name"
-            angleLabels
-            series={[
-              { key: 'Bình giao', name: 'Bình giao', color: '#10B981' },
-              { key: 'Chuyến', name: 'Chuyến', color: '#F59E0B' },
-            ]}
-          />
-        </ChartCard>
-      </div>
+          <section className="mb-6" aria-label="Nợ vỏ bình">
+            <SectionHeading title="Nợ vỏ bình" subtitle="Số vỏ khách hàng đang giữ, theo loại bình." />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <StatCard icon={Droplets} tone="navy" label="Vỏ bình Vòi" value={`${formatNumber(k?.bottleDebtVoi ?? 0)} vỏ`} hint="Số dư hiện tại" />
+              <StatCard icon={Droplets} tone="cyan" label="Vỏ bình Úp" value={`${formatNumber(k?.bottleDebtUp ?? 0)} vỏ`} hint="Số dư hiện tại" />
+            </div>
+          </section>
 
-      <div className="mb-5 grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <ChartCard title="Tiến độ hoàn thành KPI" subtitle="Top nhân viên" empty={(d?.kpiByEmployee ?? []).length === 0}>
-          <BarSeries
-            data={(d?.kpiByEmployee ?? []).map((k) => ({ name: k.name.split(' ').slice(-2).join(' '), 'Hoàn thành': k.completion }))}
-            xKey="name"
-            angleLabels
-            series={[{ key: 'Hoàn thành', name: '% hoàn thành', color: '#8B5CF6' }]}
-          />
-        </ChartCard>
-        <ChartCard title="Biến động kho trong tháng" subtitle="Theo loại giao dịch" empty={movements.length === 0}>
-          <BarSeries
-            data={movements}
-            xKey="name"
-            angleLabels
-            series={[{ key: 'Số lượng', name: 'Số lượng', color: '#2C2C6B' }]}
-          />
-        </ChartCard>
-      </div>
+          <section className="mb-6" aria-label="KPI">
+            <SectionHeading title="KPI nhân viên và đơn vị" subtitle={`Thực hiện so với chỉ tiêu được giao trong ${formatMonth(month)}.`} />
+            {targetsApi.error && <p role="alert" className="mb-3 text-sm text-brand-red">Không tải được KPI: {targetsApi.error} <button type="button" className="underline" onClick={targetsApi.reload}>Thử lại</button></p>}
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+              <Card><CardHeader title="Nhân viên" subtitle="Doanh thu và tỷ lệ hoàn thành" action={<button type="button" onClick={() => onNavigate('kpi')} className="text-xs font-semibold text-brand-cyan hover:underline">Xem chỉ tiêu →</button>} /><CardBody className="p-0">{targetsApi.error ? <p className="p-5 text-xs text-slate-500">Dữ liệu KPI chưa sẵn sàng.</p> : targetsApi.loading ? <p className="p-5 text-xs text-slate-500">Đang tải KPI…</p> : <KpiTable rows={targetsApi.data?.employees ?? []} label="Nhân viên" />}</CardBody></Card>
+              <Card><CardHeader title="Đơn vị" subtitle="Bao gồm nhân viên thuộc đơn vị con" action={<button type="button" onClick={() => onNavigate('kpi')} className="text-xs font-semibold text-brand-cyan hover:underline">Xem chỉ tiêu →</button>} /><CardBody className="p-0">{targetsApi.error ? <p className="p-5 text-xs text-slate-500">Dữ liệu KPI chưa sẵn sàng.</p> : targetsApi.loading ? <p className="p-5 text-xs text-slate-500">Đang tải KPI…</p> : <KpiTable rows={targetsApi.data?.units ?? []} label="Đơn vị" />}</CardBody></Card>
+            </div>
+          </section>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <div className="xl:col-span-2">
-          <Card>
-            <CardHeader
-              title="Cảnh báo tồn kho cấp bách"
-              subtitle="Mặt hàng dưới ngưỡng tối thiểu"
-              action={
-                <button onClick={() => onNavigate('stock')} className="text-xs font-semibold text-brand-cyan hover:underline">
-                  Xem tất cả →
-                </button>
-              }
-            />
-            <CardBody className="p-0">
-              {alertsApi.loading ? (
-                <p className="p-6 text-center text-xs text-slate-400">Đang tải...</p>
-              ) : (alertsApi.data?.length ?? 0) === 0 ? (
-                <EmptyState icon={Boxes} title="Tồn kho an toàn" message="Không có mặt hàng nào dưới ngưỡng cảnh báo." />
-              ) : (
-                <DataTable
-                  columns={alertColumns}
-                  data={alertsApi.data ?? []}
-                  rowKey={(r) => r.id}
-                  searchable={false}
-                  pageSize={5}
-                  onRowClick={() => onNavigate('stock')}
-                />
-              )}
-            </CardBody>
-          </Card>
-        </div>
-
-        <Card>
-          <CardHeader
-            title="Đơn hàng gần nhất"
-            action={
-              <button onClick={() => onNavigate('orders')} className="text-xs font-semibold text-brand-cyan hover:underline">
-                Xem tất cả →
-              </button>
-            }
-          />
-          <CardBody className="p-0">
-            <DataTable columns={orderColumns} data={ordersApi.data ?? []} rowKey={(r) => r.id} searchable={false} pageSize={5} onRowClick={() => onNavigate('orders')} dense />
-          </CardBody>
-        </Card>
-      </div>
-
-      <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <ChartCard title="Dòng tiền thu - chi" subtitle={formatMonth(month)} empty={(d?.cashFlow ?? []).length === 0}>
-          <AreaTrend
-            data={(d?.cashFlow ?? []).map((c) => ({ date: formatDateShort(c.date), 'Thu': c.revenue, 'Chi': c.expense }))}
-            xKey="date"
-            currency
-            series={[
-              { key: 'Thu', name: 'Thu', color: '#10B981' },
-              { key: 'Chi', name: 'Chi', color: '#C62430' },
-            ]}
-          />
-        </ChartCard>
-        <ChartCard title="Tồn kho tại Kho Tăng Áp" subtitle="So với ngưỡng cảnh báo" empty={(d?.stockLevels ?? []).length === 0}>
-          <BarSeries
-            data={(d?.stockLevels ?? []).map((s) => ({ name: s.name.replace('Nước Tinh Khiết RO QAROMI ', 'RO ').replace('Nước Ion Kiềm QAROMI ', 'Kiềm '), 'Tồn': s.quantity, 'Ngưỡng': s.min_stock_alert }))}
-            xKey="name"
-            angleLabels
-            series={[
-              { key: 'Tồn', name: 'Tồn hiện tại', color: '#50ADDE' },
-              { key: 'Ngưỡng', name: 'Ngưỡng tối thiểu', color: '#C62430' },
-            ]}
-          />
-        </ChartCard>
-      </div>
-
-      <p className="mt-4 flex items-center gap-1 text-xs text-slate-400">
-        <AlertTriangle className="h-3.5 w-3.5" /> Số liệu tổng hợp trực tiếp từ hệ thống, cập nhật theo thời gian thực.
-        <ArrowLeftRight className="ml-2 h-3.5 w-3.5" /> Nhấn vào thẻ để mở phân hệ tương ứng.
-      </p>
+          <section aria-label="Tồn kho chi tiết">
+            <SectionHeading title="Tồn kho theo kho" subtitle={`Tất cả ${formatNumber(k?.warehouseCount ?? 0)} kho vật lý đang hoạt động; mở từng kho để xem tồn của mọi mã hàng, kể cả tồn 0.`} />
+            <Card><CardHeader title={<span className="flex items-center gap-2"><Package className="h-4 w-4 text-brand-cyan" /> Chi tiết hàng hóa</span>} action={<button type="button" onClick={() => onNavigate('stock')} className="text-xs font-semibold text-brand-cyan hover:underline">Mở phân hệ kho →</button>} /><CardBody className="p-0"><WarehouseStock warehouses={d?.stockByWarehouse ?? []} /></CardBody></Card>
+          </section>
+        </>
+      )}
     </>
   );
 }

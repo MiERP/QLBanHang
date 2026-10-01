@@ -20,7 +20,7 @@ Hệ thống được thiết kế và xây dựng dựa trên việc giải mã
    - Điều phối đơn hàng xuất bán theo ngày.
    - Bảng kê phân công xe/shipper (Phương xe điện, Khoa, Hưng, Xuân...).
    - Tính toán chi phí vận chuyển bốc xếp giao hàng.
-   - Chính sách khuyến mại **10 + 1**: Mua 10 bình tặng 1 vỉ / 10 bình tặng 1 bình (trừ kho nhưng 0₫ doanh thu).
+   - Chính sách khuyến mại **10 + 1**: Mua 10 sản phẩm tặng 1 sản phẩm cùng mã (trừ kho nhưng 0₫ doanh thu).
    - Xuất hóa đơn VAT điện tử cho cơ quan, trường học, bệnh viện, doanh nghiệp.
 
 2. **File `XNT T9.hương -Nhung.xlsx`:**

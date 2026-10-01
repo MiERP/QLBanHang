@@ -21,7 +21,6 @@ const emptyForm = {
   category_id: '',
   buy_quantity: 10,
   free_quantity: 1,
-  free_product_id: '',
   start_date: '',
   end_date: '',
   is_active: true,
@@ -53,7 +52,6 @@ export function PromotionsTab() {
       category_id: row.category_id ?? '',
       buy_quantity: row.buy_quantity,
       free_quantity: row.free_quantity,
-      free_product_id: row.free_product_id ?? '',
       start_date: row.start_date ?? '',
       end_date: row.end_date ?? '',
       is_active: !!row.is_active,
@@ -71,7 +69,7 @@ export function PromotionsTab() {
         category_id: form.scope === 'category' ? form.category_id || null : null,
         buy_quantity: Number(form.buy_quantity),
         free_quantity: Number(form.free_quantity),
-        free_product_id: form.free_product_id || null,
+        free_product_id: null,
         start_date: form.start_date || null,
         end_date: form.end_date || null,
         is_active: form.is_active ? 1 : 0,
@@ -127,7 +125,7 @@ export function PromotionsTab() {
       key: 'is_active',
       header: 'Trạng thái',
       align: 'center',
-      render: (r) => (r.is_active ? <Badge tone="green">Đang chạy</Badge> : <Badge tone="neutral">Ngừng</Badge>),
+      render: (r) => (r.free_product_id ? <Badge tone="amber">Cần sửa</Badge> : r.is_active ? <Badge tone="green">Đang chạy</Badge> : <Badge tone="neutral">Ngừng</Badge>),
     },
   ];
 
@@ -213,16 +211,7 @@ export function PromotionsTab() {
             <Field label="Số lượng tặng" required>
               <Input type="number" value={String(form.free_quantity ?? '')} onChange={(e) => setForm({ ...form, free_quantity: e.target.value })} />
             </Field>
-            <Field label="Sản phẩm tặng" hint="Để trống = tặng chính sản phẩm đang mua">
-              <Select value={String(form.free_product_id ?? '')} onChange={(e) => setForm({ ...form, free_product_id: e.target.value })}>
-                <option value="">-- Cùng sản phẩm --</option>
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
+            <p className="text-sm text-slate-600">Hàng tặng là chính sản phẩm được mua khi đạt đủ số lượng.</p>
             <Field label="Ngày bắt đầu">
               <Input type="date" value={String(form.start_date ?? '')} onChange={(e) => setForm({ ...form, start_date: e.target.value })} />
             </Field>

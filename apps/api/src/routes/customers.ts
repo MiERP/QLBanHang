@@ -229,7 +229,7 @@ export function customersRouter(): Router {
     })
   );
 
-  // --- Công nợ khách hàng: nợ đầu kỳ + phần chưa thu của các đơn đã hoàn thành (luỹ kế, không theo kỳ) ---
+  // --- Công nợ khách hàng: nợ đầu kỳ + số còn phải thu của đơn bán/mượn đã hoàn tất ---
   interface CustomerDebtOrderRow {
     order_id: number;
     order_code: string;
@@ -268,18 +268,21 @@ export function customersRouter(): Router {
     const orderRows = db
       .prepare(
         `SELECT id as order_id, customer_id, order_code, order_date, order_status, order_type,
-                total_amount, paid_amount, payment_status, payment_method, invoice_status
-         FROM orders
-         WHERE order_status IN ('COMPLETED', 'RETURNED') AND order_type IN ('SALE', 'BORROW_IN')
-           AND (total_amount - paid_amount) > 0.5
+                total_amount, paid_amount, payment_status, payment_method, invoice_status,
+                total_amount - COALESCE(ret.returned_amount, 0) - paid_amount + COALESCE(ret.refund_amount, 0) AS outstanding
+         FROM orders o
+         LEFT JOIN (SELECT order_id, SUM(returned_amount) AS returned_amount, SUM(refund_amount) AS refund_amount
+                    FROM order_returns GROUP BY order_id) ret ON ret.order_id = o.id
+         WHERE o.order_status IN ('COMPLETED', 'RETURNED') AND o.order_type IN ('SALE', 'BORROW_IN')
+           AND (total_amount - COALESCE(ret.returned_amount, 0) - paid_amount + COALESCE(ret.refund_amount, 0)) > 0.5
          ORDER BY order_date ASC, id ASC`
       )
-      .all() as (Omit<CustomerDebtOrderRow, 'outstanding'> & { customer_id: number })[];
+      .all() as (Omit<CustomerDebtOrderRow, 'outstanding'> & { customer_id: number; outstanding: number })[];
 
     const ordersByCustomer = new Map<number, CustomerDebtOrderRow[]>();
     for (const row of orderRows) {
       const list = ordersByCustomer.get(row.customer_id) ?? [];
-      list.push({ ...row, outstanding: (Number(row.total_amount) || 0) - (Number(row.paid_amount) || 0) });
+      list.push({ ...row, outstanding: Math.max(0, Number(row.outstanding) || 0) });
       ordersByCustomer.set(row.customer_id, list);
     }
 

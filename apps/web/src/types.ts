@@ -263,6 +263,8 @@ export interface Order {
   return_info?: OrderReturnInfo | null;
   return_history?: OrderReturnInfo[];
   returned_value?: number;
+  /** Số tiền còn phải thu sau khi trừ tiền đã thu và hoàn tiền. */
+  outstanding_amount?: number;
 }
 
 export interface Invoice {
@@ -538,6 +540,11 @@ export interface DashboardData {
     revenueToday: number;
     revenueYesterday: number;
     revenueMonth: number;
+    revenueYear: number;
+    debtToday: number;
+    debtMonth: number;
+    debtYear: number;
+    warehouseCount: number;
     revenueReturnedMonth: number;
     revenueNetMonth: number;
     ordersMonth: number;
@@ -550,6 +557,13 @@ export interface DashboardData {
     alertCount: number;
   };
   revenueByDay: { date: string; revenue: number; orders: number }[];
+  revenueByScope: { scope: 'COMPANY' | 'ENTERPRISE'; revenue: number }[];
+  stockByWarehouse: {
+    warehouse_id: number;
+    code: string;
+    name: string;
+    items: { product_id: number; product_name: string; unit: string; quantity: number }[];
+  }[];
   revenueByWarehouse: { name: string; revenue: number; bottles: number }[];
   productMix: { name: string; quantity: number; revenue: number }[];
   paymentStatus: { name: string; value: number }[];

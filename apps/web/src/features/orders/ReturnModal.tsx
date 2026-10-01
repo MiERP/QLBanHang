@@ -60,7 +60,8 @@ export function ReturnModal({ order, open, onClose, onDone }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, order.id]);
 
-  const billableUnits = items.reduce((sum, item) => sum + (Number(quantities[item.id ?? 0]) || 0) + (Number(promos[item.id ?? 0]) || 0), 0);
+  const returnedUnits = items.reduce((sum, item) => sum + (Number(quantities[item.id ?? 0]) || 0) + (Number(promos[item.id ?? 0]) || 0), 0);
+  const soldUnits = items.reduce((sum, item) => sum + (Number(quantities[item.id ?? 0]) || 0), 0);
   const returnedValue = Math.max(0, (Number(order.subtotal_amount) || 0) - (Number(order.discount_amount) || 0));
   const refundAmount = Math.max(0, Math.round((Number(order.paid_amount) || 0)
     - ((Number(order.total_amount) || 0) - returnedValue)));
@@ -103,8 +104,8 @@ export function ReturnModal({ order, open, onClose, onDone }: Props) {
   const returnShippingFee = useMemo(() => {
     const route = (shippingFeesApi.data ?? []).find((f) => f.id === order.shipping_fee_id);
     if (!route) return 0;
-    return (Number(route.fee_per_unit) || 0) * billableUnits;
-  }, [shippingFeesApi.data, order.shipping_fee_id, billableUnits]);
+    return (Number(route.fee_per_unit) || 0) * soldUnits;
+  }, [shippingFeesApi.data, order.shipping_fee_id, soldUnits]);
 
   const submit = async () => {
     const lines = items
@@ -210,8 +211,8 @@ export function ReturnModal({ order, open, onClose, onDone }: Props) {
             </tbody>
           </table>
           <p className="mt-2 text-right text-[11px] text-slate-500">
-            Doanh thu hàng hoàn: <b className="text-slate-700">{formatCurrency(returnedValue)}</b> · số đơn vị hoàn{' '}
-            {formatNumber(billableUnits)}
+            Doanh thu hàng hoàn: <b className="text-slate-700">{formatCurrency(returnedValue)}</b> · sản phẩm bán hoàn{' '}
+            {formatNumber(soldUnits)} · tổng hàng nhập kho {formatNumber(returnedUnits)}
           </p>
         </div>
 
@@ -247,7 +248,7 @@ export function ReturnModal({ order, open, onClose, onDone }: Props) {
               <div className="flex items-center gap-2 text-xs text-slate-600">
                 <span>Phí ship hàng hoàn:</span>
                 <b className="text-brand-navy">{formatCurrency(returnShippingFee)}</b>
-                <span className="text-slate-400">(theo tuyến của đơn × {formatNumber(billableUnits)} đơn vị hoàn)</span>
+                <span className="text-slate-400">(theo tuyến của đơn × {formatNumber(soldUnits)} sản phẩm bán; không tính hàng khuyến mãi)</span>
               </div>
               {collectors.map((collector, index) => (
                 <div key={collector.employee_id} className="flex items-center gap-1.5">

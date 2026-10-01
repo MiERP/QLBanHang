@@ -149,6 +149,21 @@ export function OrderDetailTab({ order, onBack, onChanged }: { order: Order; onB
         }
       />
 
+      <div className="mb-4 grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
+        <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+          <span className="text-slate-500">Tổng phải thanh toán</span>
+          <b className="ml-2 text-brand-navy">{formatCurrency(order.total_amount)}</b>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+          <span className="text-slate-500">Đã thu</span>
+          <b className="ml-2 text-emerald-700">{formatCurrency(order.paid_amount)}</b>
+        </div>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+          <span className="text-amber-700">Còn phải thu</span>
+          <b className="ml-2 text-amber-800">{formatCurrency(order.outstanding_amount ?? remaining)}</b>
+        </div>
+      </div>
+
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {nextActions.map((s) =>
           s === 'CANCELLED' ? (

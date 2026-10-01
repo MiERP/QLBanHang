@@ -10,7 +10,7 @@ import type { AddressInfo } from 'node:net';
 
 const sourcePath = resolve(dirname(fileURLToPath(import.meta.url)), '../../../qaromi_erp.db');
 
-test('existing 105-order database migrates and a paid sale return reconciles on a copy', { skip: !existsSync(sourcePath) }, async () => {
+test('current test database migrates and a paid sale return reconciles on a copy', { skip: !existsSync(sourcePath) }, async () => {
   const directory = mkdtempSync(join(tmpdir(), 'qaromi-real-flow-'));
   const copyPath = join(directory, 'real-copy.db');
   const source = new Database(sourcePath, { readonly: true, fileMustExist: true });
@@ -30,21 +30,21 @@ test('existing 105-order database migrates and a paid sale return reconciles on 
       import('../src/lib/http.js'),
     ]);
     db = getDb();
-    assert.equal((db.prepare('SELECT COUNT(*) AS count FROM orders').get() as { count: number }).count, 105);
+    assert.ok((db.prepare('SELECT COUNT(*) AS count FROM orders').get() as { count: number }).count > 0);
     assert.equal((db.prepare('PRAGMA integrity_check').get() as { integrity_check: string }).integrity_check, 'ok');
     assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
-    const candidate = db.prepare(`SELECT o.id, oi.id AS item_id, oi.quantity, o.paid_amount, o.shipping_fee
+    const candidate = db.prepare(`SELECT o.id, o.order_date, oi.id AS item_id, oi.quantity, o.paid_amount, o.shipping_fee
       FROM orders o JOIN order_items oi ON oi.order_id = o.id
       WHERE o.order_type = 'SALE' AND o.order_status = 'COMPLETED' AND o.paid_amount > 0
         AND COALESCE(o.invoice_status, 'NOT_INVOICED') <> 'INVOICED' AND oi.quantity > 0
       ORDER BY o.id, oi.id LIMIT 1`).get() as
-      { id: number; item_id: number; quantity: number; paid_amount: number; shipping_fee: number } | undefined;
-    assert.ok(candidate, 'The imported database must contain a completed paid sale');
+      { id: number; order_date: string; item_id: number; quantity: number; paid_amount: number; shipping_fee: number } | undefined;
+    assert.ok(candidate, 'The test database must contain a completed paid sale');
     const order = getOrder(db, candidate.id)!;
     const returnLines = db.prepare('SELECT id AS order_item_id, quantity, quantity_promo FROM order_items WHERE order_id = ?').all(candidate.id) as
       { order_item_id: number; quantity: number; quantity_promo: number }[];
     const result = db.transaction(() => applyOrderReturn(db!, order, {
-      returnDate: '2026-09-25', pickupType: 'CUSTOMER_BRING', collectors: [],
+      returnDate: candidate.order_date, pickupType: 'CUSTOMER_BRING', collectors: [],
       lines: returnLines,
       shellsVoi: 0, shellsUp: 0, depositPaymentMethod: 'CASH',
       refundPaymentMethod: 'CASH', returnWarehouseId: null,
@@ -69,12 +69,13 @@ test('existing 105-order database migrates and a paid sale return reconciles on 
     });
     try {
       const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`;
+      const period = `from=${candidate.order_date}&to=${candidate.order_date}`;
       for (const endpoint of [
-        '/dashboard', '/reports/revenue?from=2026-09-01&to=2026-09-30',
-        '/reports/revenue-detail?from=2026-09-01&to=2026-09-30',
-        '/reports/revenue-borrowed?from=2026-09-01&to=2026-09-30',
-        '/reports/revenue-gross?from=2026-09-01&to=2026-09-30',
-        '/reports/cash-audit?from=2026-09-01&to=2026-09-30',
+        '/dashboard', `/reports/revenue?${period}`,
+        `/reports/revenue-detail?${period}`,
+        `/reports/revenue-borrowed?${period}`,
+        `/reports/revenue-gross?${period}`,
+        `/reports/cash-audit?${period}`,
       ]) {
         const response = await fetch(base + endpoint);
         assert.equal(response.status, 200, `${endpoint}: ${await response.text()}`);

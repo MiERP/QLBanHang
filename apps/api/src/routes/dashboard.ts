@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getDb } from '../db.js';
-import { handle } from '../lib/http.js';
+import { today } from '../lib/codes.js';
+import { badRequest, handle } from '../lib/http.js';
 
 export function dashboardRouter(): Router {
   const router = Router();
@@ -9,9 +10,13 @@ export function dashboardRouter(): Router {
   router.get(
     '/dashboard',
     handle((req, res) => {
-      const month = (req.query.month as string) || new Date().toISOString().slice(0, 7);
-      const todayStr = new Date().toISOString().slice(0, 10);
-      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      const todayStr = today();
+      const month = String(req.query.month || todayStr.slice(0, 7));
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw badRequest('Tháng không hợp lệ');
+      const yearStart = `${month.slice(0, 4)}-01-01`;
+      const [year, monthNumber] = month.split('-').map(Number);
+      const yearEnd = monthNumber === 12 ? `${year + 1}-01-01` : `${year}-${String(monthNumber + 1).padStart(2, '0')}-01`;
+      const yesterday = today(new Date(Date.now() - 86400000).toISOString());
       // DOANH THU = giá trị đơn hàng đã bán, tức đơn ở trạng thái HOÀN TẤT.
       // Đơn đã ghi nhận HÀNG HOÀN vẫn tính đủ doanh thu gộp và KPI (đơn đã hoàn thành nghĩa vụ);
       // phần hàng hoàn được trừ riêng thành "doanh thu thuần".
@@ -37,6 +42,25 @@ export function dashboardRouter(): Router {
         `SELECT COALESCE(SUM(subtotal_amount),0) as total FROM orders WHERE strftime('%Y-%m', order_date) = ? AND ${completed} AND ${own}`,
         month
       ).total;
+      const revenueYear = one<{ total: number }>(
+        `SELECT COALESCE(SUM(subtotal_amount),0) as total FROM orders
+         WHERE order_date >= ? AND order_date < ? AND ${completed} AND ${own}`,
+        yearStart, yearEnd
+      ).total;
+      // Công nợ theo ngày đơn: phần còn phải thu hiện tại, sau thu tiền và hàng hoàn.
+      const debtFor = (periodWhere: string, ...params: unknown[]): number => one<{ total: number }>(
+        `SELECT COALESCE(SUM(CASE WHEN balance > 0.5 THEN balance ELSE 0 END),0) AS total
+         FROM (SELECT o.total_amount - COALESCE(ret.returned_amount,0) - COALESCE(o.paid_amount,0)
+                      + COALESCE(ret.refund_amount,0) AS balance
+               FROM orders o JOIN customers c ON c.id = o.customer_id AND c.is_active = 1
+               LEFT JOIN (SELECT order_id, SUM(returned_amount) AS returned_amount,
+                                 SUM(refund_amount) AS refund_amount FROM order_returns GROUP BY order_id) ret
+                 ON ret.order_id = o.id
+               WHERE o.${completed} AND o.${own} AND ${periodWhere})`, ...params
+      ).total;
+      const debtToday = debtFor('o.order_date = ?', todayStr);
+      const debtMonth = debtFor("strftime('%Y-%m', o.order_date) = ?", month);
+      const debtYear = debtFor('o.order_date >= ? AND o.order_date < ?', yearStart, yearEnd);
       const ordersMonth = one<{ total: number }>(
         `SELECT COUNT(*) as total FROM orders WHERE strftime('%Y-%m', order_date) = ? AND ${completed} AND ${own}`,
         month
@@ -83,6 +107,38 @@ export function dashboardRouter(): Router {
          GROUP BY order_date ORDER BY order_date ASC`,
         month
       );
+      const scopeRows = all<{ scope: string; revenue: number }>(
+        `SELECT COALESCE(target_scope, 'ENTERPRISE') AS scope, COALESCE(SUM(subtotal_amount),0) AS revenue
+         FROM orders WHERE strftime('%Y-%m', order_date) = ? AND ${completed} AND ${own}
+         GROUP BY COALESCE(target_scope, 'ENTERPRISE')`, month
+      );
+      const scopeRevenue = new Map(scopeRows.map((row) => [row.scope, row.revenue]));
+      const revenueByScope = (['COMPANY', 'ENTERPRISE'] as const).map((scope) =>
+        ({ scope, revenue: scopeRevenue.get(scope) ?? 0 }));
+
+      const warehouses = all<{ id: number; code: string; name: string }>(
+        `SELECT id, code, name FROM warehouses
+         WHERE is_active = 1 AND type IN ('CENTRAL', 'STORE', 'VEHICLE', 'STATION') ORDER BY name, id`
+      );
+      const stockRows = all<{ warehouse_id: number; product_id: number; product_name: string; unit: string; quantity: number }>(
+        `SELECT w.id AS warehouse_id, p.id AS product_id, p.name AS product_name, p.unit,
+                COALESCE(s.quantity,0) AS quantity
+         FROM warehouses w CROSS JOIN products p
+         LEFT JOIN categories c ON c.id = p.category_id
+         LEFT JOIN inventory_stock s ON s.warehouse_id = w.id AND s.product_id = p.id
+         WHERE w.is_active = 1 AND w.type IN ('CENTRAL', 'STORE', 'VEHICLE', 'STATION')
+           AND p.is_active = 1 AND p.product_type = 'GOODS'
+           AND (c.type IS NULL OR c.type <> 'SERVICE_DVGT')
+         ORDER BY w.name, p.name`
+      );
+      const stockByWarehouse = warehouses.map((warehouse) => {
+        const items = stockRows.filter((row) => row.warehouse_id === warehouse.id)
+          .map(({ product_id, product_name, unit, quantity }) => ({ product_id, product_name, unit, quantity }));
+        return {
+          warehouse_id: warehouse.id, code: warehouse.code, name: warehouse.name,
+          items,
+        };
+      });
 
       // Doanh thu theo kho + sản lượng bình: tách 2 nhánh con để tránh SUM(DISTINCT) làm đếm thiếu.
       const revenueByWarehouse = all<{ name: string; revenue: number; bottles: number }>(
@@ -206,6 +262,11 @@ export function dashboardRouter(): Router {
           revenueToday,
           revenueYesterday,
           revenueMonth,
+          revenueYear,
+          debtToday,
+          debtMonth,
+          debtYear,
+          warehouseCount: stockByWarehouse.length,
           revenueReturnedMonth,
           revenueNetMonth: revenueMonth - revenueReturnedMonth,
           ordersMonth,
@@ -218,6 +279,8 @@ export function dashboardRouter(): Router {
           alertCount,
         },
         revenueByDay,
+        revenueByScope,
+        stockByWarehouse,
         revenueByWarehouse,
         productMix,
         paymentStatus,

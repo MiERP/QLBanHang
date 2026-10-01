@@ -221,16 +221,12 @@ Vỏ bình gắn với **sản phẩm** (`products.bottle_type`: Vòi / Úp), **
 ## 5. Đơn Hàng (`/api/orders`)
 
 ### 5.1. GET `/api/orders?from=&to=&status=&limit=`
-Trả về đơn hàng kèm `items`, tên khách hàng, seller, shipper, kho.
+Trả về đơn hàng kèm `items`, tên khách hàng, seller, shipper, kho và `outstanding_amount` (số còn phải thu, không âm).
 
 ### 5.2. POST `/api/orders`
-Tạo đơn trong **một giao dịch** với đầy đủ hiệu ứng:
-1. **Kiểm tra đủ tồn** tại kho xuất → thiếu hàng trả `400`.
-2. Trừ kho và ghi `stock_movements` (`EXPORT_ORDER`, gồm cả số lượng KM).
-3. Cập nhật nợ vỏ khách hàng + ghi `customer_bottle_ledgers`.
-4. Ghi `revenue_transactions` nếu thu tiền.
-5. Tạo `delivery_dispatches` nếu có shipper.
-6. Tính lại tiền phía server (không tin số tiền client gửi).
+Tạo đơn ở trạng thái **DRAFT**. Kho, doanh thu và nợ vỏ chỉ phát sinh theo các bước chuyển trạng thái giao hàng. API luôn tính lại tiền phía server.
+
+Phí vận chuyển được tính bằng `phí tuyến × số lượng sản phẩm bán`; `quantity_promo` vẫn xuất kho nhưng không tính phí vận chuyển.
 
 ```json
 {
@@ -248,11 +244,15 @@ Tạo đơn trong **một giao dịch** với đầy đủ hiệu ứng:
   "is_vat_invoice": 1,
   "note": "Giao cổng số 2",
   "items": [
-    { "product_id": 1, "quantity": 20, "quantity_promo": 2, "unit_price": 48000 }
+    { "product_id": 1, "quantity": 20, "unit_price": 48000 }
   ]
 }
 → 200 { "success": true, "orderId": 5, "orderCode": "DH-20260912-01", "total": 1010000 }
 ```
+
+Với đơn `SALE` và `BORROW_IN`, API tự tính `quantity_promo` theo chương trình đang bật vào `order_date` và tổng số mua của từng mã sản phẩm trong đơn. Hàng tặng luôn cùng mã sản phẩm; khai báo số tặng vượt mức được hưởng sẽ trả 400. Khi gộp đơn, API tính lại số tặng theo số lượng mua của đơn gộp.
+
+Phiếu giao nhận thủ công `POST /api/stock-tickets` và `PUT /api/stock-tickets/:id` cũng tự tính `quantity_promo` theo `ticket_date` và tổng số của từng mã hàng. Áp dụng cho phiếu nhập `PARENT_RECEIVE` / `TRANSFER_IN` / `OTHER_IN`, phiếu xuất `OTHER_OUT` và điều chuyển `TRANSFER`. Phiếu điều chỉnh, kiểm kê, hủy, hoàn trả và phiếu tự sinh từ đơn không nhận thêm khuyến mãi. Khi xác nhận phiếu, tồn kho thay đổi theo `quantity + quantity_promo`.
 
 ### 5.3. PUT `/api/orders/:id`
 Cập nhật một phần: `order_status`, `payment_status`, `payment_method`, `shipper_employee_id`, `warehouse_id`, `delivery_date`, các trường VAT, `shipping_fee`, `discount_amount`, `paid_amount`, `note`.
@@ -340,14 +340,14 @@ tiền công trả nhân viên giao hàng nên **tách khỏi doanh thu**. Cả 
 | GET | `/api/inventory/stock?warehouse_id=` | Tồn kho + `urgency_level`, `days_left` |
 | GET | `/api/inventory/alerts` | Mặt hàng dưới ngưỡng cảnh báo |
 | GET | `/api/inventory/movements?product_id=&warehouse_id=&movement_type=&limit=` | Nhật ký kho (có tên kho, người thực hiện) |
-| POST | `/api/inventory/transfer` | Điều chuyển kho (kiểm tra tồn nguồn, ghi cả `TRANSFER_OUT` + `TRANSFER_IN`) |
 | PUT | `/api/inventory/stock/:id` | Điều chỉnh tồn (`quantity`, `min_stock_alert`, `avg_daily_sales`) + ghi `ADJUSTMENT` |
 
 **Ví dụ điều chuyển:**
 ```json
-POST /api/inventory/transfer
-{ "source_warehouse_id": 1, "target_warehouse_id": 3, "product_id": 1, "quantity": 30, "employee_id": 19, "note": "Bổ sung ca chiều" }
+POST /api/stock-tickets
+{ "ticket_type": "TRANSFER", "ticket_date": "2026-09-12", "warehouse_id": 1, "target_warehouse_id": 3, "reason": "TRANSFER", "items": [{ "product_id": 1, "quantity": 50 }], "note": "Bổ sung ca chiều" }
 ```
+Phiếu tạo ở trạng thái nháp. Gọi `POST /api/stock-tickets/:id/status` với `{ "status": "CONFIRMED" }` để ghi sổ. Với chương trình 10 tặng 1, dòng 50 tự có `quantity_promo = 5`: kho xuất giảm 55, kho nhận tăng 55.
 
 ---
 
@@ -495,6 +495,8 @@ Thưởng = `commission_rate × actual_water_revenue`.
 
 ### GET `/api/dashboard?month=YYYY-MM`
 Trả về toàn bộ dữ liệu tổng hợp cho Dashboard trong một lần gọi:
+
+Dashboard điều hành còn trả `kpis.revenueYear`, `debtToday`, `debtMonth`, `debtYear`, `warehouseCount`; `revenueByScope` gồm hai phạm vi `COMPANY` và `ENTERPRISE`; `stockByWarehouse` gồm mọi kho vật lý đang hoạt động và tồn theo từng mã hàng (kể cả tồn 0). Doanh thu và công nợ theo năm lũy kế từ 01/01 đến hết tháng chọn. Công nợ kỳ là phần còn chưa thu **hiện tại** của các đơn hoàn tất có ngày đơn trong kỳ, sau thu tiền và hàng hoàn; nợ đầu kỳ không được gán vào kỳ. KPI nhân viên/đơn vị dùng `GET /api/targets?period=YYYY-MM`.
 
 ```json
 {

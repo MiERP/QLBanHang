@@ -15,19 +15,21 @@ const emptyDb = new Database(process.env.DB_PATH);
 emptyDb.exec(readFileSync(new URL('../src/schema.sql', import.meta.url), 'utf8'));
 emptyDb.close();
 
-const [{ getDb }, { ordersRouter }, { loansRouter }, { stockTicketsRouter }, { reportsRouter }, { errorMiddleware }] =
+const [{ getDb }, { ordersRouter }, { loansRouter }, { stockTicketsRouter }, { reportsRouter }, { masterDataRouter }, { dashboardRouter }, { errorMiddleware }] =
   await Promise.all([
     import('../src/db.js'),
     import('../src/routes/orders.js'),
     import('../src/routes/loans.js'),
     import('../src/routes/stockTickets.js'),
     import('../src/routes/reports.js'),
+    import('../src/routes/masterData.js'),
+    import('../src/routes/dashboard.js'),
     import('../src/lib/http.js'),
   ]);
 const db = getDb();
 const app = express();
 app.use(express.json());
-for (const router of [ordersRouter(), loansRouter(), stockTicketsRouter(), reportsRouter()]) app.use('/api', router);
+for (const router of [ordersRouter(), loansRouter(), stockTicketsRouter(), reportsRouter(), masterDataRouter(), dashboardRouter()]) app.use('/api', router);
 app.use(errorMiddleware);
 const server = await new Promise<ReturnType<typeof app.listen>>((resolve) => {
   const listener = app.listen(0, '127.0.0.1', () => resolve(listener));
@@ -88,7 +90,10 @@ async function finish(id: number) {
 
 test('fresh sale: pending ticket, competing stock, cancellation, full return and promotion', async () => {
   const f = fixture(3);
+  db.prepare(`INSERT INTO promotions (code, name, product_id, buy_quantity, free_quantity, is_active)
+              VALUES (?, ?, ?, 2, 1, 1)`).run(`KM-AUD-${f.product}`, 'Mua 2 tặng 1', f.product);
   const id = await f.order({ items: [{ product_id: f.product, quantity: 2, quantity_promo: 1 }] });
+  db.prepare('UPDATE promotions SET is_active = 0 WHERE product_id = ?').run(f.product);
   assert.equal(f.stock(), 3);
   await status(id, 'CONFIRMED');
   assert.deepEqual(one<{ status: string; quantity: number; quantity_promo: number }>(
@@ -116,6 +121,189 @@ test('fresh sale: pending ticket, competing stock, cancellation, full return and
   assert.equal(f.stock(), 3);
   assert.equal(one<{ order_status: string }>('SELECT order_status FROM orders WHERE id = ?', id).order_status, 'RETURNED');
   assert.equal((await api('POST', `/orders/${id}/return`, { items: [{ order_item_id: item, quantity: 2, quantity_promo: 1 }] })).status, 400);
+});
+
+test('same-product 10+1 promotion requires the purchase threshold and posts 11 units', async () => {
+  const f = fixture(22);
+  const freeProduct = fixture().product;
+  const rejectedRule = await api('POST', '/promotions', {
+    name: 'Tặng sản phẩm khác', product_id: f.product, buy_quantity: 10, free_quantity: 1,
+    free_product_id: freeProduct, is_active: 1,
+  });
+  assert.equal(rejectedRule.status, 400);
+  db.prepare(`INSERT INTO promotions (code, name, product_id, buy_quantity, free_quantity, start_date, is_active)
+              VALUES (?, ?, ?, 10, 1, '2027-03-01', 1)`).run(`KM-AUD-${f.product}`, 'Mua 10 tặng 1', f.product);
+
+  const tooFew = await api('POST', '/orders', {
+    customer_id: f.customer, seller_employee_id: f.employee, shipper_employee_id: f.shipper,
+    warehouse_id: f.warehouse, shipping_fee_id: f.fee, order_date: '2027-03-02',
+    items: [{ product_id: f.product, quantity: 9, quantity_promo: 1 }],
+  });
+  assert.equal(tooFew.status, 400);
+
+  const id = await f.order({ items: [{ product_id: f.product, quantity: 10 }] });
+  assert.deepEqual(one<{ quantity: number; quantity_promo: number; total_price: number }>(
+    'SELECT quantity, quantity_promo, total_price FROM order_items WHERE order_id = ?', id),
+    { quantity: 10, quantity_promo: 1, total_price: 200000 });
+  assert.deepEqual(one<{ subtotal_amount: number; shipping_fee: number }>(
+    'SELECT subtotal_amount, shipping_fee FROM orders WHERE id = ?', id),
+    { subtotal_amount: 200000, shipping_fee: 50000 });
+  const detail = await api('GET', `/orders/${id}`);
+  assert.equal(detail.status, 200, JSON.stringify(detail.data));
+  assert.equal(detail.data.outstanding_amount, detail.data.total_amount, 'Còn nợ phải bằng tổng phải thu khi chưa thanh toán');
+  await status(id, 'CONFIRMED');
+  await status(id, 'SHIPPING');
+  assert.equal(f.stock(), 11);
+
+  const dated = await f.order({ order_date: '2027-02-28', items: [{ product_id: f.product, quantity: 10 }] });
+  assert.equal(one<{ quantity_promo: number }>('SELECT quantity_promo FROM order_items WHERE order_id = ?', dated).quantity_promo, 0);
+  const movedDate = await api('PUT', `/orders/${dated}`, { order_date: '2027-03-02' });
+  assert.equal(movedDate.status, 200, JSON.stringify(movedDate.data));
+  assert.equal(one<{ quantity_promo: number }>('SELECT quantity_promo FROM order_items WHERE order_id = ?', dated).quantity_promo, 1);
+
+  const split = await f.order({ items: [
+    { product_id: f.product, quantity: 5 }, { product_id: f.product, quantity: 5 },
+  ] });
+  assert.deepEqual(db.prepare('SELECT quantity_promo FROM order_items WHERE order_id = ? ORDER BY id')
+    .all(split).map((line) => (line as { quantity_promo: number }).quantity_promo), [1, 0]);
+  const mixed = await f.order({ items: [
+    { product_id: f.product, quantity: 5 }, { product_id: freeProduct, quantity: 5 },
+  ] });
+  assert.deepEqual(db.prepare('SELECT quantity_promo FROM order_items WHERE order_id = ? ORDER BY id')
+    .all(mixed).map((line) => (line as { quantity_promo: number }).quantity_promo), [0, 0]);
+});
+
+test('merging two five-unit sales recalculates one same-product gift', async () => {
+  const f = fixture(11);
+  db.prepare(`INSERT INTO promotions (code, name, product_id, buy_quantity, free_quantity, is_active)
+              VALUES (?, ?, ?, 10, 1, 1)`).run(`KM-AUD-${f.product}`, 'Mua 10 tặng 1', f.product);
+  const a = await f.order({ items: [{ product_id: f.product, quantity: 5 }] });
+  const b = await f.order({ items: [{ product_id: f.product, quantity: 5 }] });
+  const merged = await api('POST', '/orders/merge', { ids: [a, b] });
+  assert.equal(merged.status, 200, JSON.stringify(merged.data));
+  assert.deepEqual(one<{ quantity: number; quantity_promo: number }>(
+    'SELECT quantity, quantity_promo FROM order_items WHERE order_id = ?', merged.data.orderId),
+    { quantity: 10, quantity_promo: 1 });
+});
+
+test('manual receipt and transfer apply 10+1 to the same product on both warehouse sides', async () => {
+  const f = fixture();
+  const destination = fixture().warehouse;
+  db.prepare(`INSERT INTO promotions (code, name, product_id, buy_quantity, free_quantity, is_active)
+              VALUES (?, ?, ?, 10, 1, 1)`).run(`KM-AUD-${f.product}`, 'Mua 10 tặng 1', f.product);
+  const receipt = await api('POST', '/stock-tickets', {
+    ticket_type: 'IN', ticket_date: '2027-03-02', warehouse_id: f.warehouse, reason: 'PARENT_RECEIVE',
+    items: [{ product_id: f.product, quantity: 100 }],
+  });
+  assert.equal(receipt.status, 200, JSON.stringify(receipt.data));
+  assert.deepEqual(one<{ quantity: number; quantity_promo: number }>(
+    'SELECT quantity, quantity_promo FROM stock_ticket_items WHERE ticket_id = ?', receipt.data.id),
+    { quantity: 100, quantity_promo: 10 });
+  assert.equal(f.stock(), 0);
+  assert.equal((await api('POST', `/stock-tickets/${receipt.data.id}/status`, { status: 'CONFIRMED' })).status, 200);
+  assert.equal(f.stock(), 110);
+
+  const transfer = await api('POST', '/stock-tickets', {
+    ticket_type: 'TRANSFER', ticket_date: '2027-03-02', warehouse_id: f.warehouse,
+    target_warehouse_id: destination, reason: 'TRANSFER',
+    items: [{ product_id: f.product, quantity: 50 }],
+  });
+  assert.equal(transfer.status, 200, JSON.stringify(transfer.data));
+  assert.deepEqual(one<{ quantity: number; quantity_promo: number }>(
+    'SELECT quantity, quantity_promo FROM stock_ticket_items WHERE ticket_id = ?', transfer.data.id),
+    { quantity: 50, quantity_promo: 5 });
+  assert.equal((await api('POST', `/stock-tickets/${transfer.data.id}/status`, { status: 'CONFIRMED' })).status, 200);
+  assert.equal(f.stock(), 55);
+  assert.equal(one<{ quantity: number }>('SELECT quantity FROM inventory_stock WHERE warehouse_id = ? AND product_id = ?', destination, f.product).quantity, 55);
+
+  const issued = await api('POST', '/stock-tickets', {
+    ticket_type: 'OUT', ticket_date: '2027-03-02', warehouse_id: destination, reason: 'OTHER_OUT',
+    items: [{ product_id: f.product, quantity: 10 }],
+  });
+  assert.equal(issued.status, 200, JSON.stringify(issued.data));
+  assert.equal(one<{ quantity_promo: number }>('SELECT quantity_promo FROM stock_ticket_items WHERE ticket_id = ?', issued.data.id).quantity_promo, 1);
+  assert.equal((await api('POST', `/stock-tickets/${issued.data.id}/status`, { status: 'CONFIRMED' })).status, 200);
+  assert.equal(one<{ quantity: number }>('SELECT quantity FROM inventory_stock WHERE warehouse_id = ? AND product_id = ?', destination, f.product).quantity, 44);
+});
+
+test('stock adjustments do not invent promotional goods', async () => {
+  const f = fixture();
+  db.prepare(`INSERT INTO promotions (code, name, product_id, buy_quantity, free_quantity, is_active)
+              VALUES (?, ?, ?, 10, 1, 1)`).run(`KM-AUD-${f.product}`, 'Mua 10 tặng 1', f.product);
+  const adjustment = await api('POST', '/stock-tickets', {
+    ticket_type: 'IN', ticket_date: '2027-03-02', warehouse_id: f.warehouse, reason: 'ADJUST_IN',
+    items: [{ product_id: f.product, quantity: 100 }],
+  });
+  assert.equal(adjustment.status, 200, JSON.stringify(adjustment.data));
+  assert.equal(one<{ quantity_promo: number }>('SELECT quantity_promo FROM stock_ticket_items WHERE ticket_id = ?', adjustment.data.id).quantity_promo, 0);
+  const invalid = await api('POST', '/stock-tickets', {
+    ticket_type: 'IN', ticket_date: '2027-03-02', warehouse_id: f.warehouse, reason: 'ADJUST_IN',
+    items: [{ product_id: f.product, quantity: 100, quantity_promo: 10 }],
+  });
+  assert.equal(invalid.status, 400);
+});
+
+test('editing a delivery ticket recalculates its gift and rejects gifts above entitlement', async () => {
+  const f = fixture();
+  db.prepare(`INSERT INTO promotions (code, name, product_id, buy_quantity, free_quantity, is_active)
+              VALUES (?, ?, ?, 10, 1, 1)`).run(`KM-AUD-${f.product}`, 'Mua 10 tặng 1', f.product);
+  const base = {
+    ticket_type: 'IN', ticket_date: '2027-03-02', warehouse_id: f.warehouse, reason: 'OTHER_IN',
+  };
+  const invalid = await api('POST', '/stock-tickets', {
+    ...base, items: [{ product_id: f.product, quantity: 10, quantity_promo: 2 }],
+  });
+  assert.equal(invalid.status, 400);
+  const created = await api('POST', '/stock-tickets', {
+    ...base, items: [{ product_id: f.product, quantity: 10 }],
+  });
+  assert.equal(created.status, 200, JSON.stringify(created.data));
+  const updated = await api('PUT', `/stock-tickets/${created.data.id}`, {
+    ...base, items: [{ product_id: f.product, quantity: 20, quantity_promo: 1 }],
+  });
+  assert.equal(updated.status, 200, JSON.stringify(updated.data));
+  assert.deepEqual(one<{ quantity: number; quantity_promo: number }>(
+    'SELECT quantity, quantity_promo FROM stock_ticket_items WHERE ticket_id = ?', created.data.id),
+    { quantity: 20, quantity_promo: 2 });
+});
+
+test('dashboard reports period revenue and unpaid debt, scope split, and every physical warehouse', async () => {
+  const f = fixture(7);
+  const second = fixture();
+  const service = fixture();
+  const serviceCategory = Number(db.prepare("INSERT INTO categories (code, name, type) VALUES (?, ?, 'SERVICE_DVGT')")
+    .run(`DB-AUD-C-${service.product}`, 'Dịch vụ').lastInsertRowid);
+  db.prepare('UPDATE products SET category_id = ? WHERE id = ?').run(serviceCategory, service.product);
+  const insert = db.prepare(`INSERT INTO orders
+    (order_code, customer_id, seller_employee_id, warehouse_id, order_date, order_status,
+     order_type, target_scope, subtotal_amount, total_amount, paid_amount)
+    VALUES (?, ?, ?, ?, ?, 'COMPLETED', 'SALE', ?, ?, ?, ?)`);
+  const make = (code: string, date: string, scope: string, revenue: number, total: number, paid: number) =>
+    insert.run(code, f.customer, f.employee, f.warehouse, date, scope, revenue, total, paid);
+  make(`DB-AUD-${f.product}-1`, '2041-03-02', 'COMPANY', 100, 120, 20);
+  make(`DB-AUD-${f.product}-2`, '2041-03-03', 'ENTERPRISE', 30, 30, 30);
+  make(`DB-AUD-${f.product}-3`, '2041-01-15', 'ENTERPRISE', 50, 50, 10);
+  const currentDay = new Date();
+  const today = `${currentDay.getFullYear()}-${String(currentDay.getMonth() + 1).padStart(2, '0')}-${String(currentDay.getDate()).padStart(2, '0')}`;
+  make(`DB-AUD-${f.product}-4`, today, 'COMPANY', 25, 25, 0);
+
+  const response = await api('GET', '/dashboard?month=2041-03');
+  assert.equal(response.status, 200, JSON.stringify(response.data));
+  assert.equal(response.data.kpis.revenueToday, 25);
+  assert.equal(response.data.kpis.debtToday, 25);
+  assert.equal(response.data.kpis.revenueMonth, 130);
+  assert.equal(response.data.kpis.debtMonth, 100);
+  assert.equal(response.data.kpis.revenueYear, 180);
+  assert.equal(response.data.kpis.debtYear, 140);
+  assert.deepEqual(response.data.revenueByScope, [
+    { scope: 'COMPANY', revenue: 100 }, { scope: 'ENTERPRISE', revenue: 30 },
+  ]);
+  const warehouse = response.data.stockByWarehouse.find((w: { warehouse_id: number }) => w.warehouse_id === f.warehouse);
+  assert.equal(warehouse.items.find((i: { product_id: number }) => i.product_id === f.product).quantity, 7);
+  assert.equal(warehouse.items.find((i: { product_id: number }) => i.product_id === second.product).quantity, 0);
+  assert.ok(!warehouse.items.some((i: { product_id: number }) => i.product_id === service.product));
+  assert.ok(response.data.stockByWarehouse.some((w: { warehouse_id: number }) => w.warehouse_id === second.warehouse));
+  assert.equal((await api('GET', '/dashboard?month=2041-13')).status, 400);
 });
 
 test('fresh borrowed sale: no own stock out, customer return to physical warehouse, then goods repayment', async () => {

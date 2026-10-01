@@ -22,6 +22,7 @@ export interface CrudConfig {
   listSql?: string;
   orderBy?: string;
   autoCode?: { column: string; prefix: string; width?: number };
+  validate?: (body: Record<string, unknown>) => void;
 }
 
 function coerce(value: unknown, type: FieldType): unknown {
@@ -47,6 +48,7 @@ function registerCrud(router: Router, db: Database.Database, cfg: CrudConfig) {
     base,
     handle((req, res) => {
       const body = { ...(req.body ?? {}) } as Record<string, unknown>;
+      cfg.validate?.(body);
       if (cfg.autoCode && !body[cfg.autoCode.column]) {
         body[cfg.autoCode.column] = nextCode(db, {
           table,
@@ -82,6 +84,7 @@ function registerCrud(router: Router, db: Database.Database, cfg: CrudConfig) {
     handle((req, res) => {
       const id = Number(req.params.id);
       const body = (req.body ?? {}) as Record<string, unknown>;
+      cfg.validate?.(body);
       const sets: string[] = [];
       const values: unknown[] = [];
       for (const field of fields) {
@@ -315,6 +318,16 @@ export const MASTER_DATA_CONFIGS: CrudConfig[] = [
     required: ['name', 'buy_quantity', 'free_quantity'],
     softDelete: true,
     autoCode: { column: 'code', prefix: 'KM-', width: 3 },
+    validate: (body) => {
+      if (body.free_product_id !== undefined && body.free_product_id !== null && body.free_product_id !== '') {
+        throw badRequest('Khuyến mãi chỉ được tặng cùng sản phẩm đang mua');
+      }
+      for (const key of ['buy_quantity', 'free_quantity']) {
+        if (body[key] !== undefined && (!Number.isSafeInteger(Number(body[key])) || Number(body[key]) <= 0)) {
+          throw badRequest(`Trường "${key}" phải là số nguyên dương`);
+        }
+      }
+    },
     listSql: `SELECT pr.*, p.name as product_name, c.name as category_name, fp.name as free_product_name
               FROM promotions pr
               LEFT JOIN products p ON pr.product_id = p.id

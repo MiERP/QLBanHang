@@ -14,7 +14,7 @@ const ORDER_TYPE_LABEL: Record<string, string> = {
   BORROW_IN: 'Mượn về bán',
   HIRED_LOAD: 'Bốc xếp',
 };
-const PAYMENT_LABEL: Record<string, string> = { CASH: 'Tiền mặt', BANK_TRANSFER: 'Chuyển khoản', DEBT: 'Ghi nợ' };
+const PAYMENT_LABEL: Record<string, string> = { CASH: 'Tiền mặt', BANK_TRANSFER: 'Chuyển khoản', DEBT: 'Công nợ' };
 
 // Lệch âm = sổ quỹ thiếu so với số đã thu trên đơn (đã thu mà chưa ghi sổ quỹ).
 const diffCell = (v: number) => (

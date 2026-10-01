@@ -3,6 +3,7 @@ import { getDb, loanWarehouseId } from '../db.js';
 import { dispatchCode, orderCode, revenueCode, today } from '../lib/codes.js';
 import { ApiError, badRequest, handle } from '../lib/http.js';
 import { createOrder, insertItems, normalizeShippers, replaceShippers, type RawItem } from '../lib/orderCreate.js';
+import { applyOrderPromotions } from '../lib/promotions.js';
 import {
   applyOrderReturn,
   assertPhysicalOrderWarehouse,
@@ -100,7 +101,14 @@ function attachOrderDetails(db: ReturnType<typeof getDb>, orders: Record<string,
         returned_value: lineValue,
       };
     });
-    const returnHistory = getReturnInfo.all(o.id as number) as { returned_amount?: number }[];
+    const returnHistory = getReturnInfo.all(o.id as number) as { returned_amount?: number; refund_amount?: number }[];
+    const returnedAmount = returnHistory.reduce((sum, row) => sum + Number(row.returned_amount || 0), 0) || returnedValue;
+    const refundedAmount = returnHistory.reduce((sum, row) => sum + Number(row.refund_amount || 0), 0);
+    const freightOnly = o.order_type === 'LEND_OUT' || o.order_type === 'HIRED_LOAD';
+    const collectible = freightOnly
+      ? Number(o.shipping_fee) || 0
+      : Math.max(0, (Number(o.total_amount) || 0) - returnedAmount);
+    const outstandingAmount = Math.max(0, collectible - ((Number(o.paid_amount) || 0) - refundedAmount));
     return {
       ...o,
       items,
@@ -109,7 +117,9 @@ function attachOrderDetails(db: ReturnType<typeof getDb>, orders: Record<string,
       merged_from: getMergedFrom.all(o.id as number),
       return_info: returnHistory.at(-1) ?? null,
       return_history: returnHistory,
-      returned_value: returnHistory.reduce((sum, row) => sum + Number(row.returned_amount || 0), 0) || returnedValue,
+      returned_value: returnedAmount,
+      // Số còn phải thu = số phải thanh toán sau hoàn − tiền đã thu ròng; không bao giờ âm.
+      outstanding_amount: outstandingAmount,
     };
   });
 }
@@ -329,12 +339,13 @@ export function ordersRouter(): Router {
           `INSERT INTO order_items (order_id, product_id, quantity, quantity_promo, unit_price, total_price, note)
            VALUES (?, ?, ?, ?, ?, ?, '')`
         );
-        // Giữ số lượng khuyến mãi và giá đã chốt trên từng đơn nguồn.
+        // Giữ giá đã chốt; số tặng được tính lại theo tổng số mua của đơn gộp.
         for (const m of merged.values()) {
           // Đơn bốc xếp không có giá trị hàng của mình.
           const unitPrice = first.order_type === 'HIRED_LOAD' ? 0 : m.unit_price;
           itemStmt.run(orderId, m.product_id, m.quantity, m.quantity_promo, unitPrice, m.quantity * unitPrice);
         }
+        applyOrderPromotions(db, orderId, false);
 
         // Gộp danh sách người giao của mọi đơn nguồn rồi chia phí của đơn mới.
         const mergedShippers = db.prepare(`SELECT DISTINCT employee_id FROM order_shippers WHERE order_id IN (${placeholders}) AND COALESCE(kind, 'DELIVERY') = 'DELIVERY'`)
@@ -492,6 +503,8 @@ export function ordersRouter(): Router {
         if (Array.isArray(body.items)) {
           db.prepare('DELETE FROM order_items WHERE order_id = ?').run(id);
           insertItems(db, id, body.items as RawItem[], String(body.order_type ?? order.order_type));
+        } else if (body.order_date !== undefined || body.order_type !== undefined) {
+          applyOrderPromotions(db, id, false);
         }
         // Đơn mượn / đơn bốc xếp không dùng kho của mình → luôn trỏ về kho ảo của đối tác.
         const fresh = getOrder(db, id)!;

@@ -51,7 +51,7 @@ Dựa trên dữ liệu thực tế, hệ thống đã chuẩn hóa danh mục s
 | 10 | `DVGT_VS_TEC` | DV Súc rửa bể chứa nước, téc nước | Lần / Bể | **250.000₫** | 0₫ | Dịch vụ gia tăng tính KPI |
 
 > **Chính Sách Khuyến Mại (10 + 1 / KM):**
-> Trong các đợt phát động thị trường, đơn vị thường xuyên áp dụng chính sách mua 10 bình tặng 1 vỉ hoặc mua 10 vỉ tặng 1 vỉ (`10+1`).
+> Trong các đợt phát động thị trường, chương trình `10+1` chỉ tặng đúng mã sản phẩm đã mua khi số lượng mua của mã đó trong đơn đạt 10. Không tặng sản phẩm khác loại.
 > - Số lượng hàng tặng (`quantity_promo`) được **trừ trực tiếp vào tồn kho thực tế** tại kho xuất.
 > - Số lượng này **không tính tiền doanh thu** (đơn giá = 0₫), đảm bảo số liệu kế toán và thủ kho khớp 100%.
 

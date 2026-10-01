@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { dateKey, nextCode } from './codes.js';
 import { badRequest } from './http.js';
+import { promotionQuantityFor } from './promotions.js';
 import { applyStockDelta, getStockQuantity, recordMovement, type MovementType } from './stock.js';
 
 export type TicketType = 'IN' | 'OUT' | 'TRANSFER';
@@ -71,6 +72,13 @@ const REASON_MOVEMENT: Record<string, MovementType> = {
 export const IN_REASONS = ['PARENT_RECEIVE', 'TRANSFER_IN', 'ADJUST_IN', 'OTHER_IN'];
 export const OUT_REASONS = ['WRITE_OFF', 'ADJUST_OUT', 'OTHER_OUT'];
 
+// Chỉ phiếu giao/nhận lập tay được hưởng khuyến mãi; phiếu điều chỉnh và phiếu tự sinh giữ nguyên số thực tế.
+const PROMOTION_REASONS: Record<TicketType, string[]> = {
+  IN: ['PARENT_RECEIVE', 'TRANSFER_IN', 'OTHER_IN'],
+  OUT: ['OTHER_OUT'],
+  TRANSFER: ['TRANSFER'],
+};
+
 export function assertTicketTransition(from: string, to: TicketStatus) {
   const allowed = TICKET_TRANSITIONS[from as TicketStatus] ?? [];
   if (!allowed.includes(to)) throw badRequest(`Không thể chuyển phiếu từ "${from}" sang "${to}"`);
@@ -94,6 +102,34 @@ function validItems(items: TicketItemInput[]) {
   const nonempty = clean.filter((i) => i.product_id && (i.quantity > 0 || i.quantity_promo > 0));
   if (!nonempty.length) throw badRequest('Phiếu phải có ít nhất một mặt hàng với số lượng > 0');
   return nonempty;
+}
+
+function withManualTicketPromotions(db: Database.Database, items: ReturnType<typeof validItems>,
+  ticketType: TicketType, reason: string, ticketDate: string, auto: boolean, orderId?: number | null) {
+  if (auto || orderId) return items;
+  if (!PROMOTION_REASONS[ticketType].includes(reason)) {
+    if (items.some((item) => item.quantity_promo > 0)) {
+      throw badRequest('Phiếu điều chỉnh, hủy hoặc hoàn trả không được có hàng khuyến mãi');
+    }
+    return items;
+  }
+  const byProduct = new Map<number, typeof items>();
+  for (const item of items) {
+    const group = byProduct.get(item.product_id) ?? [];
+    group.push(item);
+    byProduct.set(item.product_id, group);
+  }
+  const productQuery = db.prepare('SELECT name, category_id FROM products WHERE id = ?');
+  for (const [productId, group] of byProduct) {
+    const product = productQuery.get(productId) as { name: string; category_id: number | null } | undefined;
+    if (!product) throw badRequest(`Không tìm thấy sản phẩm #${productId}`);
+    const purchased = group.reduce((sum, item) => sum + item.quantity, 0);
+    const entitled = promotionQuantityFor(db, productId, product.category_id, ticketDate, purchased);
+    const requested = group.reduce((sum, item) => sum + item.quantity_promo, 0);
+    if (requested > entitled) throw badRequest(`Số lượng khuyến mãi của "${product.name}" vượt điều kiện chương trình`);
+    group.forEach((item, index) => { item.quantity_promo = index === 0 ? entitled : 0; });
+  }
+  return items;
 }
 
 function assertHeader(input: TicketHeaderInput) {
@@ -134,7 +170,8 @@ function replaceItems(db: Database.Database, ticketId: number, items: TicketItem
 
 // Tạo phiếu. Mặc định là NHÁP (chưa sinh bút toán); status 'CONFIRMED' thì ghi sổ ngay.
 export function createTicket(db: Database.Database, input: CreateTicketInput): { id: number; code: string } {
-  const items = validItems(input.items);
+  const items = withManualTicketPromotions(db, validItems(input.items), input.ticketType,
+    input.reason, input.ticketDate, !!input.auto, input.orderId);
   assertHeader(input);
   const status: TicketStatus = input.status ?? 'DRAFT';
 
@@ -279,7 +316,8 @@ export function updateTicket(db: Database.Database, ticketId: number, input: Tic
   const ticket = getTicket(db, ticketId);
   if (!ticket) throw badRequest('Không tìm thấy phiếu kho');
   if (ticket.status === 'CONFIRMED') throw badRequest('Phiếu đã xác nhận (đã cộng/trừ tồn kho) — không sửa được');
-  const items = validItems(input.items);
+  const items = withManualTicketPromotions(db, validItems(input.items), input.ticketType,
+    input.reason, input.ticketDate, !!ticket.auto, ticket.order_id);
   assertHeader(input);
   db.prepare(
     `UPDATE stock_tickets SET ticket_date = ?, warehouse_id = ?, target_warehouse_id = ?, partner_unit_id = ?,

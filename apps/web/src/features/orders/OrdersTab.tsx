@@ -143,6 +143,7 @@ export function OrdersTab({ openOrderId, onOpened }: { openOrderId?: number | nu
     { key: 'seller_name', header: 'Người bán', render: (r) => r.seller_name ?? '—' },
     { key: 'warehouse_name', header: 'Kho', render: (r) => r.warehouse_name ?? '—' },
     { key: 'total_amount', header: 'Tổng tiền', align: 'right', render: (r) => formatCurrency(r.total_amount), sortValue: (r) => r.total_amount },
+    { key: 'outstanding_amount', header: 'Còn nợ', align: 'right', render: (r) => formatCurrency(r.outstanding_amount ?? 0), sortValue: (r) => r.outstanding_amount ?? 0 },
     {
       key: 'payment_status',
       header: 'Thanh toán',

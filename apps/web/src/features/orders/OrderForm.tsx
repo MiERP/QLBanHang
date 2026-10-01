@@ -8,9 +8,10 @@ import { useToast } from '../../components/ui/Toast';
 import { useReference } from '../../context/ReferenceContext';
 import { useApi } from '../../lib/hooks';
 import { formatCurrency, formatNumber, todayISO } from '../../lib/format';
+import { withPromotions } from '../../lib/promotions';
 import { freeShipWithoutShipper } from '../../lib/settings';
 import { stockWarehouses } from '../../lib/warehouses';
-import type { Customer, Order, PriceListEntry, Product, Promotion } from '../../types';
+import type { Customer, Order, PriceListEntry, Product } from '../../types';
 import { CustomerFields, emptyCustomerForm } from '../customers/CustomerFields';
 import { splitShippingFee } from './orderStatus';
 
@@ -143,6 +144,10 @@ export function OrderForm({ order, readOnly = false, showActions = true, onSaved
   };
 
   const orderType = String(form.order_type ?? 'SALE');
+  const isSaleLike = orderType === 'SALE' || orderType === 'BORROW_IN';
+  const shownItems = useMemo(() => readOnly || !isSaleLike ? items :
+    withPromotions(items, products, promotionsApi.data ?? [], String(form.order_date ?? todayISO())),
+  [readOnly, isSaleLike, items, products, promotionsApi.data, form.order_date]);
   const isLend = orderType === 'LEND_OUT';
   const isBorrow = orderType === 'BORROW_IN';
   const isHired = orderType === 'HIRED_LOAD';
@@ -174,21 +179,6 @@ export function OrderForm({ order, readOnly = false, showActions = true, onSaved
     const byCategory = active.find((x) => x.category_id === p.category_id && (x.customer_group_id ?? null) === (groupId ?? null));
     if (byCategory) return byCategory.unit_price;
     return p.standard_price;
-  };
-
-  const resolvePromo = (p: Product, qty: number, list: Promotion[]): number => {
-    const today = todayISO();
-    const active = list.find(
-      (x) =>
-        !!x.is_active &&
-        !x.free_product_id &&
-        // Không chỉ định sản phẩm/nhóm = áp dụng cho TẤT CẢ sản phẩm.
-        (!x.product_id && !x.category_id ? true : x.product_id === p.id || x.category_id === p.category_id) &&
-        (!x.start_date || x.start_date <= today) &&
-        (!x.end_date || x.end_date >= today)
-    );
-    if (!active || !active.buy_quantity || qty < active.buy_quantity) return 0;
-    return Math.floor(qty / active.buy_quantity) * (active.free_quantity || 0);
   };
 
   // Nhận thẳng dữ liệu khách hàng thay vì tra lại danh sách tham chiếu — khách vừa tạo nhanh chưa kịp có trong danh sách.
@@ -226,7 +216,7 @@ export function OrderForm({ order, readOnly = false, showActions = true, onSaved
               ...it,
               product_id: productId,
               unit_price: resolvePrice(p, customerGroupId, priceListApi.data ?? []),
-              quantity_promo: resolvePromo(p, Number(it.quantity) || 0, promotionsApi.data ?? []),
+              quantity_promo: 0,
             }
           : it
       )
@@ -237,22 +227,20 @@ export function OrderForm({ order, readOnly = false, showActions = true, onSaved
     updateItems((prev) =>
       prev.map((it, i) => {
         if (i !== index) return it;
-        const p = products.find((x) => x.id === Number(it.product_id));
-        const promo = p ? resolvePromo(p, Number(qty) || 0, promotionsApi.data ?? []) : 0;
-        return { ...it, quantity: qty, quantity_promo: promo };
+        return { ...it, quantity: qty };
       })
     );
   };
 
-  // Phí ship tính theo toàn bộ hàng thực giao, gồm cả hàng khuyến mãi.
-  const billableUnits = items.reduce((a, it) => Number(it.product_id) > 0
-    ? a + (Number(it.quantity) || 0) + (Number(it.quantity_promo) || 0) : a, 0);
+  // Phí ship chỉ tính theo sản phẩm bán; hàng khuyến mãi vẫn giao và trừ kho nhưng miễn phí ship.
+  const billableUnits = shownItems.reduce((a, it) => Number(it.product_id) > 0
+    ? a + (Number(it.quantity) || 0) : a, 0);
   const selectedFee = activeShippingFees.find((f) => f.id === Number(form.shipping_fee_id));
   const routeShippingFee = selectedFee
     ? (selectedFee.fee_per_unit || 0) * billableUnits
     : 0;
   const shippingFee = feeAuto ? (shippers.length ? routeShippingFee : 0) : Number(form.shipping_fee) || 0;
-  const subtotal = items.reduce((a, it) => a + (Number(it.quantity) || 0) * (Number(it.unit_price) || 0), 0);
+  const subtotal = shownItems.reduce((a, it) => a + (Number(it.quantity) || 0) * (Number(it.unit_price) || 0), 0);
   const discountAmount = Number(form.discount_amount) || 0;
   const total = (isFreightOnly ? 0 : subtotal - discountAmount) + shippingFee;
 
@@ -288,7 +276,7 @@ export function OrderForm({ order, readOnly = false, showActions = true, onSaved
   };
 
   const save = async () => {
-    const valid = items.filter((it) => it.product_id && Number(it.quantity) > 0);
+    const valid = shownItems.filter((it) => it.product_id && Number(it.quantity) > 0);
     const err = validate(valid);
     if (err) return toast.error(err);
     setSaving(true);
@@ -508,7 +496,7 @@ export function OrderForm({ order, readOnly = false, showActions = true, onSaved
                   </Select>
                 </Field>
                 <Field label="Ngày đơn">
-                  <Input dense type="date" value={String(form.order_date ?? '')} onChange={(e) => setForm({ ...form, order_date: e.target.value })} />
+                  <Input dense type="date" value={String(form.order_date ?? '')} onChange={(e) => { setForm({ ...form, order_date: e.target.value }); setFeeAuto(true); }} />
                 </Field>
                 <Field label="Ngày giao">
                   <Input dense type="date" value={String(form.delivery_date ?? '')} onChange={(e) => setForm({ ...form, delivery_date: e.target.value })} />
@@ -568,14 +556,14 @@ export function OrderForm({ order, readOnly = false, showActions = true, onSaved
                     >
                       <option value="CASH">Tiền mặt</option>
                       <option value="BANK_TRANSFER">Chuyển khoản</option>
-                      <option value="DEBT">Ghi nợ</option>
+                      <option value="DEBT">Công nợ</option>
                     </Select>
                   </Field>
                   <Field label="Thanh toán">
                     <Select dense value={String(form.payment_status ?? 'UNPAID')} onChange={(e) => setForm({ ...form, payment_status: e.target.value })}>
                       <option value="PAID">Đã thanh toán</option>
                       <option value="PARTIAL">Một phần</option>
-                      <option value="UNPAID">Công nợ</option>
+                      <option value="UNPAID">Chưa thanh toán</option>
                     </Select>
                   </Field>
                   {/* Đơn cho mượn / bốc xếp không bán hàng nên không có giảm giá và vỏ bình thu hồi. */}
@@ -622,7 +610,7 @@ export function OrderForm({ order, readOnly = false, showActions = true, onSaved
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {items.map((it, i) => {
+                  {shownItems.map((it, i) => {
                     const p = products.find((x) => x.id === Number(it.product_id));
                     const available = stockByProduct.get(Number(it.product_id)) ?? 0;
                     const need = (Number(it.quantity) || 0) + (Number(it.quantity_promo) || 0);
@@ -645,7 +633,8 @@ export function OrderForm({ order, readOnly = false, showActions = true, onSaved
                           <Input dense type="number" value={String(it.quantity)} onChange={(e) => onQuantityChange(i, e.target.value)} />
                         </td>
                         <td className="px-2 py-1.5">
-                          <Input dense type="number" value={String(it.quantity_promo)} onChange={(e) => updateItems((prev) => prev.map((x, j) => (j === i ? { ...x, quantity_promo: e.target.value } : x)))} />
+                          {isSaleLike ? <span className="block text-right font-semibold text-amber-600">{formatNumber(Number(it.quantity_promo) || 0)}</span> :
+                            <Input dense type="number" value={String(it.quantity_promo)} onChange={(e) => updateItems((prev) => prev.map((x, j) => (j === i ? { ...x, quantity_promo: e.target.value } : x)))} />}
                         </td>
                         <td className="px-2 py-1.5">
                           <Input dense type="number" value={String(it.unit_price)} onChange={(e) => updateItems((prev) => prev.map((x, j) => (j === i ? { ...x, unit_price: e.target.value } : x)))} />

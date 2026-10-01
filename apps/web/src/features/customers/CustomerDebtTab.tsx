@@ -146,7 +146,7 @@ export function CustomerDebtTab() {
     <>
       <PageHeader
         title="Công nợ khách hàng"
-        subtitle="Tiền khách còn nợ = nợ đầu kỳ + phần chưa thu của các đơn đã hoàn thành — luỹ kế tới nay."
+        subtitle="Công nợ = nợ đầu kỳ + số còn phải thu của đơn ở trạng thái Chưa thanh toán/Công nợ — luỹ kế tới nay."
         actions={
           <Button variant="outline" size="sm" onClick={() => window.open(api.customerDebtExportUrl(), '_blank')}>
             <FileSpreadsheet className="h-4 w-4" /> Xuất Excel
