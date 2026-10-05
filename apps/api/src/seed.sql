@@ -77,13 +77,13 @@ INSERT INTO customers (id, group_id, code, name, tax_code, phone, address, conta
 (7, 3, 'KH007', 'Karaoke Diamond Hạ Long', '', '0912.345.678', 'Cao Xanh, Hạ Long', 'Chế Dung', 5000000.0, 980000.0, 4, 0),
 (8, 3, 'KH008', 'Chung Cư Cẩm Bình', '', '0936.789.012', 'Cẩm Phả, Quảng Ninh', 'Chị Thủy', 5000000.0, 0.0, 0, 1);
 
--- 9. Warehouses
+-- 9. Warehouses (5 kho vật lý mặc định của xí nghiệp + kho ảo trung chuyển)
 INSERT INTO warehouses (id, code, name, type, manager_employee_id, location) VALUES
 (1, 'KHO_TANGAP', 'Kho Trạm Tăng Áp (Trung Tâm Chiết Rót)', 'CENTRAL', 19, 'Trạm Tăng Áp, Hồng Gai'),
 (2, 'KHO_HUE', 'Kho Huế (Tổ Thị Trường & Điểm Bán)', 'STORE', 13, 'Số 42 Cao Xanh, Hạ Long'),
 (3, 'KHO_VP', 'Kho Văn Phòng Xí Nghiệp', 'CENTRAL', 8, 'Trụ Sở Xí Nghiệp Nước Hồng Gai'),
 (4, 'KHO_XEDIEN', 'Kho Xe Tải Điện (Phương Lái Xe)', 'VEHICLE', 12, 'Xe Tải Điện Lưu Động 14D-0123'),
-(5, 'KHO_DATRANG', 'Kho Trạm Đá Trắng', 'STATION', 17, 'Trạm Nước Đá Trắng, Hạ Long'),
+(5, 'KHO_HALAM', 'Kho Hà Lầm', 'STATION', 17, 'Hà Lầm, Hạ Long'),
 (6, 'KHO_XN', 'Kho Xí nghiệp (trung chuyển)', 'VIRTUAL', NULL, 'Điểm điều phối nhập hàng từ Công ty');
 
 -- 10. Initial Inventory

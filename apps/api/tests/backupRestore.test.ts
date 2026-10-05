@@ -132,6 +132,10 @@ test('Xoá dữ liệu về mặc định: xoá nghiệp vụ, giữ danh mục 
   assert.equal(count('categories'), categoriesBefore, 'Nhóm hàng giữ nguyên');
   assert.equal(count('warehouses'), warehousesBefore, 'Kho giữ nguyên (kể cả kho vật lý hiện tại)');
   assert.ok(count('warehouses', `WHERE code = 'KHO_TANGAP'`) > 0, 'Kho vật lý của xí nghiệp vẫn còn');
+  // 5 kho vật lý mặc định luôn có, kể cả kho vừa bị xoá trước khi reset.
+  for (const code of ['KHO_TANGAP', 'KHO_HUE', 'KHO_VP', 'KHO_XEDIEN', 'KHO_HALAM']) {
+    assert.ok(count('warehouses', `WHERE code = '${code}'`) > 0, `Kho mặc định ${code} phải tồn tại sau reset`);
+  }
   assert.equal(count('price_list'), 1, 'Bảng giá giữ nguyên');
   assert.equal(count('promotions'), 1, 'Khuyến mãi giữ nguyên');
   assert.ok(count('customer_groups') > 0, 'Nhóm khách hàng giữ nguyên');
@@ -166,4 +170,14 @@ test('Xoá dữ liệu về mặc định: xoá nghiệp vụ, giữ danh mục 
   // CSDL vẫn dùng được bình thường sau khi reset.
   db.prepare(`INSERT INTO customers (code, name, address) VALUES ('KH-SAU', 'Khách sau reset', '')`).run();
   assert.equal(count('customers', `WHERE code = 'KH-SAU'`), 1);
+});
+
+test('Kho vật lý mặc định bị xoá thì được tạo lại khi reset', async () => {
+  // Xoá một kho mặc định để chứng minh reset đảm bảo danh sách 5 kho luôn có.
+  db.prepare(`DELETE FROM warehouses WHERE code = 'KHO_HALAM'`).run();
+  assert.equal(count('warehouses', `WHERE code = 'KHO_HALAM'`), 0);
+
+  const res = await fetch(`${base}/system/reset-database`, { method: 'POST' });
+  assert.equal(res.status, 200);
+  assert.equal(count('warehouses', `WHERE code = 'KHO_HALAM'`), 1, 'Kho Hà Lầm phải được tạo lại');
 });

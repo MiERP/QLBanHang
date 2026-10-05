@@ -237,6 +237,28 @@ function ensureCustomerWarehouse(db: Database.Database): void {
   ).run();
 }
 
+// 5 kho vật lý mặc định của xí nghiệp — nút "Xóa dữ liệu nghiệp vụ" đảm bảo các kho này luôn có
+// (như danh mục nền), bên cạnh việc giữ nguyên các kho vật lý khác do người dùng tự tạo.
+const DEFAULT_PHYSICAL_WAREHOUSES: { code: string; name: string; type: string }[] = [
+  { code: 'KHO_TANGAP', name: 'Kho Trạm Tăng Áp (Trung Tâm Chiết Rót)', type: 'CENTRAL' },
+  { code: 'KHO_HUE', name: 'Kho Huế (Tổ Thị Trường & Điểm Bán)', type: 'STORE' },
+  { code: 'KHO_VP', name: 'Kho Văn Phòng Xí Nghiệp', type: 'CENTRAL' },
+  { code: 'KHO_XEDIEN', name: 'Kho Xe Tải Điện (Phương Lái Xe)', type: 'VEHICLE' },
+  { code: 'KHO_HALAM', name: 'Kho Hà Lầm', type: 'STATION' },
+];
+
+function ensureDefaultPhysicalWarehouses(db: Database.Database): void {
+  for (const wh of DEFAULT_PHYSICAL_WAREHOUSES) {
+    if (db.prepare('SELECT id FROM warehouses WHERE code = ?').get(wh.code)) continue;
+    db.prepare('INSERT INTO warehouses (code, name, type, location, is_active) VALUES (?, ?, ?, ?, 1)').run(
+      wh.code,
+      wh.name,
+      wh.type,
+      ''
+    );
+  }
+}
+
 // Đồng bộ tổng tiền trên đầu đơn với chính các dòng hàng của nó (dữ liệu nhập ngoài app
 // hoặc seed cũ có thể lệch khiến các báo cáo doanh thu không khớp nhau). Idempotent.
 function normalizeOrderTotals(db: Database.Database): void {
@@ -784,6 +806,8 @@ export function resetDatabase(): void {
   }
   db.pragma('foreign_keys = ON');
   initializeDatabase(db, false);
+  // Đảm bảo 5 kho vật lý mặc định luôn có sau khi đưa về mặc định (bên cạnh các kho vật lý khác đã giữ).
+  ensureDefaultPhysicalWarehouses(db);
 }
 
 // Khởi tạo/khôi phục CSDL: áp schema (idempotent), seed dữ liệu gốc khi cần, rồi chạy migration.
@@ -878,6 +902,18 @@ function initializeDatabase(dbInstance: Database.Database, forceSeed: boolean): 
     `UPDATE products SET cost_price = ROUND(standard_price / (1 + ? / 100.0)) WHERE code = ? AND cost_price = ?`
   );
   for (const [code, legacyValue] of legacyCostPrices) fixLegacyCostPrice.run(vatRate, code, legacyValue);
+
+  // Kho vật lý mặc định: danh sách chuẩn của xí nghiệp gồm "Kho Hà Lầm". CSDL cũ có thể đang dùng
+  // tên cũ "Kho Trạm Đá Trắng" (KHO_DATRANG) — đổi sang "Kho Hà Lầm" cho khớp danh sách chuẩn.
+  if (!dbInstance.prepare(`SELECT 1 FROM warehouses WHERE code = 'KHO_HALAM'`).get()) {
+    dbInstance
+      .prepare(
+        `UPDATE warehouses SET code = 'KHO_HALAM', name = 'Kho Hà Lầm', location = 'Hà Lầm, Hạ Long'
+         WHERE code = 'KHO_DATRANG'`
+      )
+      .run();
+  }
+
   // Chuyển dữ liệu từ cột cũ order_owner_type (OWN/PARTNER) sang order_type rồi bỏ cột cũ.
   const orderCols = dbInstance.prepare('PRAGMA table_info(orders)').all() as { name: string }[];
   if (orderCols.some((c) => c.name === 'order_owner_type')) {
