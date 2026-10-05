@@ -41,18 +41,20 @@ INSERT INTO categories (id, code, name, type) VALUES
 (3, 'CAT_DVGT', 'Dịch Vụ Gia Tăng (Bình NL, Bể Téc)', 'SERVICE_DVGT');
 
 -- 5. Products
+-- cost_price là GIÁ TRƯỚC THUẾ (giá bán đã gồm VAT 8% → trước thuế = giá bán ÷ 1,08, làm tròn đến đồng),
+-- không phải giá vốn. Đây là giá trị phần mềm dùng để suy tiền hàng chưa thuế và lập hóa đơn.
 INSERT INTO products (id, category_id, code, name, unit, bottle_type, standard_price, wholesale_price, cost_price, deposit_fee) VALUES
-(1, 1, 'RO_19L_VOI', 'Nước Tinh Khiết RO QAROMI 19L (Bình Vòi)', 'Bình', 'VOI', 48000.0, 43000.0, 18000.0, 50000.0),
-(2, 1, 'RO_19L_UP', 'Nước Tinh Khiết RO QAROMI 19L (Bình Úp)', 'Bình', 'UP', 48000.0, 43000.0, 18000.0, 50000.0),
-(3, 1, 'KIEM_19L_VOI', 'Nước Ion Kiềm QAROMI 19L (Bình Vòi)', 'Bình', 'VOI', 52000.0, 47000.0, 21000.0, 50000.0),
-(4, 1, 'KIEM_19L_UP', 'Nước Ion Kiềm QAROMI 19L (Bình Úp)', 'Bình', 'UP', 52000.0, 47000.0, 21000.0, 50000.0),
-(5, 2, 'VI_350ML', 'Nước Chai QAROMI 350ml (Vỉ 6 chai)', 'Vỉ', 'NONE', 85000.0, 78000.0, 42000.0, 0.0),
-(6, 2, 'HOP_350ML', 'Nước Chai QAROMI 350ml (Hộp 24 chai)', 'Hộp', 'NONE', 93000.0, 85000.0, 50000.0, 0.0),
-(7, 2, 'VI_500ML', 'Nước Chai QAROMI 500ml (Vỉ 6 chai)', 'Vỉ', 'NONE', 98000.0, 90000.0, 48000.0, 0.0),
-(8, 2, 'HOP_500ML', 'Nước Chai QAROMI 500ml (Hộp 24 chai)', 'Hộp', 'NONE', 106000.0, 98000.0, 56000.0, 0.0),
-(9, 3, 'DV_BINH_NL', 'Vệ Sinh & Bảo Dưỡng Bình Nóng Lạnh', 'Bình', 'NONE', 230000.0, 230000.0, 60000.0, 0.0),
-(10, 3, 'DV_BE_TEC', 'Súc Rửa & Vệ Sinh Bể Ngầm / Téc Nước HTCN', 'Hệ thống', 'NONE', 350000.0, 350000.0, 90000.0, 0.0),
-(11, 3, 'DV_MAY_GIAT', 'Bảo Dưỡng & Vệ Sinh Máy Giặt', 'Máy', 'NONE', 250000.0, 250000.0, 70000.0, 0.0);
+(1, 1, 'RO_19L_VOI', 'Nước Tinh Khiết RO QAROMI 19L (Bình Vòi)', 'Bình', 'VOI', 48000.0, 43000.0, 44444.0, 50000.0),
+(2, 1, 'RO_19L_UP', 'Nước Tinh Khiết RO QAROMI 19L (Bình Úp)', 'Bình', 'UP', 48000.0, 43000.0, 44444.0, 50000.0),
+(3, 1, 'KIEM_19L_VOI', 'Nước Ion Kiềm QAROMI 19L (Bình Vòi)', 'Bình', 'VOI', 52000.0, 47000.0, 48148.0, 50000.0),
+(4, 1, 'KIEM_19L_UP', 'Nước Ion Kiềm QAROMI 19L (Bình Úp)', 'Bình', 'UP', 52000.0, 47000.0, 48148.0, 50000.0),
+(5, 2, 'VI_350ML', 'Nước Chai QAROMI 350ml (Vỉ 6 chai)', 'Vỉ', 'NONE', 85000.0, 78000.0, 78704.0, 0.0),
+(6, 2, 'HOP_350ML', 'Nước Chai QAROMI 350ml (Hộp 24 chai)', 'Hộp', 'NONE', 93000.0, 85000.0, 86111.0, 0.0),
+(7, 2, 'VI_500ML', 'Nước Chai QAROMI 500ml (Vỉ 6 chai)', 'Vỉ', 'NONE', 98000.0, 90000.0, 90741.0, 0.0),
+(8, 2, 'HOP_500ML', 'Nước Chai QAROMI 500ml (Hộp 24 chai)', 'Hộp', 'NONE', 106000.0, 98000.0, 98148.0, 0.0),
+(9, 3, 'DV_BINH_NL', 'Vệ Sinh & Bảo Dưỡng Bình Nóng Lạnh', 'Bình', 'NONE', 230000.0, 230000.0, 212963.0, 0.0),
+(10, 3, 'DV_BE_TEC', 'Súc Rửa & Vệ Sinh Bể Ngầm / Téc Nước HTCN', 'Hệ thống', 'NONE', 350000.0, 350000.0, 324074.0, 0.0),
+(11, 3, 'DV_MAY_GIAT', 'Bảo Dưỡng & Vệ Sinh Máy Giặt', 'Máy', 'NONE', 250000.0, 250000.0, 231481.0, 0.0);
 
 -- Sản phẩm thuộc nhóm Dịch Vụ Gia Tăng là DỊCH VỤ: không có tồn kho, không lên đơn hàng.
 UPDATE products SET product_type = 'SERVICE'
@@ -119,6 +121,9 @@ INSERT INTO order_items (order_id, product_id, quantity, quantity_promo, unit_pr
 (4, 1, 3, 0, 48000.0, 144000.0),
 (4, 2, 6, 0, 48000.0, 288000.0);
 
+-- Đơn có yêu cầu hóa đơn VAT thì ghi thuế suất đang hiệu lực (8%) để hóa đơn tách được tiền trước thuế.
+UPDATE orders SET vat_rate = 8 WHERE is_vat_invoice = 1;
+
 -- Phiếu thu tương ứng cho các đơn đã thanh toán (để sổ quỹ khớp với số đã thu trên đơn).
 INSERT INTO revenue_transactions (transaction_code, transaction_type, order_id, customer_id, amount, payment_method, collected_by, transaction_date, note) VALUES
 ('PT-20260907-001', 'WATER_SALE', 1, 1, 1030000.0, 'BANK_TRANSFER', 12, '2026-09-07', 'Thu tiền đơn DH-20260907-01'),
@@ -144,12 +149,20 @@ SELECT 'HD-20260907-0' || o.id,
        c.tax_code,
        c.address,
        o.vat_rate,
-       0,
-       o.subtotal_amount,
+       -- Tiền thuế = tiền hàng theo giá bán (đã gồm VAT) - tiền hàng chưa thuế.
+       CASE WHEN o.vat_rate > 0 THEN o.subtotal_amount - net.amount_net ELSE 0 END,
+       -- Tiền hàng trước thuế: làm tròn đơn giá chưa thuế từng dòng rồi mới nhân số lượng.
+       CASE WHEN o.vat_rate > 0 THEN net.amount_net ELSE o.subtotal_amount END,
        o.total_amount,
        o.seller_employee_id,
        'Hóa đơn cho đơn ' || o.order_code
-FROM orders o JOIN customers c ON c.id = o.customer_id
+FROM orders o
+JOIN customers c ON c.id = o.customer_id
+LEFT JOIN (
+  SELECT oi.order_id, SUM(oi.quantity * ROUND(oi.unit_price / (1 + oo.vat_rate / 100.0))) AS amount_net
+  FROM order_items oi JOIN orders oo ON oo.id = oi.order_id
+  GROUP BY oi.order_id
+) net ON net.order_id = o.id
 WHERE o.order_status = 'COMPLETED' AND o.payment_status = 'PAID';
 
 UPDATE orders SET invoice_status = 'INVOICED' WHERE id IN (SELECT order_id FROM invoices);

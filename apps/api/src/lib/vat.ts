@@ -18,3 +18,16 @@ export function vatRateAt(db: Database.Database, date: string = today()): number
 export function netPrice(grossPrice: number, rate: number): number {
   return Math.round(Number(grossPrice || 0) / (1 + rate / 100));
 }
+
+// Tiền hàng TRƯỚC THUẾ của một đơn: đơn giá trên đơn là giá bán đã gồm VAT nên phải suy ngược
+// về đơn giá chưa thuế (làm tròn đến đồng) rồi mới nhân số lượng — đúng bằng cách báo cáo
+// thương mại tính, nhờ vậy hóa đơn và báo cáo không lệch nhau vài đồng.
+export function orderGoodsNet(db: Database.Database, orderId: number, rate: number): number {
+  const row = db
+    .prepare(
+      `SELECT COALESCE(SUM(quantity * ROUND(unit_price / (1 + ? / 100.0))), 0) AS net
+       FROM order_items WHERE order_id = ?`
+    )
+    .get(rate, orderId) as { net: number } | undefined;
+  return Math.round(Number(row?.net) || 0);
+}

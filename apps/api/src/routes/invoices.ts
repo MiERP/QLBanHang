@@ -3,6 +3,7 @@ import ExcelJS from 'exceljs';
 import { getDb } from '../db.js';
 import { dateKey, nextCode, today } from '../lib/codes.js';
 import { ApiError, badRequest, handle } from '../lib/http.js';
+import { orderGoodsNet } from '../lib/vat.js';
 
 // Danh sách hóa đơn theo ĐƠN (đã xuất / chưa xuất): chỉ lấy đơn đã HOÀN TẤT, kèm sản phẩm và tổng số lượng.
 function invoiceOrderRows(db: ReturnType<typeof getDb>, invoiceStatus: 'INVOICED' | 'NOT_INVOICED') {
@@ -193,10 +194,14 @@ export function invoicesRouter(): Router {
           width: 2,
         });
 
-        const subtotal = Number(order.subtotal_amount) || 0;
+        // Giá bán trên đơn ĐÃ gồm VAT, nên tiền hàng trước thuế phải suy ngược từ đơn giá
+        // (làm tròn từng đơn giá rồi mới nhân số lượng) và tiền thuế = tiền hàng - tiền trước thuế.
+        // Trước đây lấy thẳng tiền hàng nhân thuế suất nên vừa thừa thuế vừa không khớp tổng.
+        const goodsGross = Number(order.subtotal_amount) || 0;
         const discount = Number(order.discount_amount) || 0;
         const vatRate = order.is_vat_invoice ? Number(order.vat_rate) || 0 : 0;
-        const taxAmount = vatRate > 0 ? Math.round(subtotal * vatRate) / 100 : 0;
+        const goodsNet = vatRate > 0 ? orderGoodsNet(db, orderId, vatRate) : goodsGross;
+        const taxAmount = goodsGross - goodsNet;
         const total = Number(order.total_amount) || 0;
 
         const insert = db
@@ -222,7 +227,7 @@ export function invoicesRouter(): Router {
             order.budget_relation_code_vat || order.customer_budget_relation_code,
             vatRate,
             taxAmount,
-            subtotal,
+            goodsNet,
             discount,
             total,
             body.issued_by ? Number(body.issued_by) : null,

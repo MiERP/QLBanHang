@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { FREE_SHIP_FOR_CUSTOMER, FREE_SHIP_WITHOUT_SHIPPER, SETTING_DEFS } from './lib/appSettings.js';
 import { dateKey, nextCode } from './lib/codes.js';
+import { vatRateAt } from './lib/vat.js';
 import { recalcTotals } from './lib/orderStatus.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -855,6 +856,28 @@ function initializeDatabase(dbInstance: Database.Database, forceSeed: boolean): 
        ELSE 'GOODS' END`
   );
   rebuildOrdersIfNeeded(dbInstance);
+
+  // Giá trước thuế của sản phẩm: seed cũ ghi cột cost_price bằng giá vốn (bình 48.000đ ghi 18.000đ)
+  // trong khi toàn bộ phần mềm hiểu cost_price là GIÁ TRƯỚC THUẾ. Chỉ sửa những dòng còn giữ đúng
+  // giá trị cũ của seed, không đụng vào giá người dùng đã tự nhập.
+  const legacyCostPrices: [string, number][] = [
+    ['RO_19L_VOI', 18000],
+    ['RO_19L_UP', 18000],
+    ['KIEM_19L_VOI', 21000],
+    ['KIEM_19L_UP', 21000],
+    ['VI_350ML', 42000],
+    ['HOP_350ML', 50000],
+    ['VI_500ML', 48000],
+    ['HOP_500ML', 56000],
+    ['DV_BINH_NL', 60000],
+    ['DV_BE_TEC', 90000],
+    ['DV_MAY_GIAT', 70000],
+  ];
+  const vatRate = vatRateAt(dbInstance);
+  const fixLegacyCostPrice = dbInstance.prepare(
+    `UPDATE products SET cost_price = ROUND(standard_price / (1 + ? / 100.0)) WHERE code = ? AND cost_price = ?`
+  );
+  for (const [code, legacyValue] of legacyCostPrices) fixLegacyCostPrice.run(vatRate, code, legacyValue);
   // Chuyển dữ liệu từ cột cũ order_owner_type (OWN/PARTNER) sang order_type rồi bỏ cột cũ.
   const orderCols = dbInstance.prepare('PRAGMA table_info(orders)').all() as { name: string }[];
   if (orderCols.some((c) => c.name === 'order_owner_type')) {

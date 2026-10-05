@@ -10,14 +10,20 @@ import type { AddressInfo } from 'node:net';
 
 const sourcePath = resolve(dirname(fileURLToPath(import.meta.url)), '../../../qaromi_erp.db');
 
-test('current test database migrates and a paid sale return reconciles on a copy', { skip: !existsSync(sourcePath) }, async () => {
+test('current test database migrates and a paid sale return reconciles on a copy', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'qaromi-real-flow-'));
   const copyPath = join(directory, 'real-copy.db');
-  const source = new Database(sourcePath, { readonly: true, fileMustExist: true });
-  try {
-    await source.backup(copyPath);
-  } finally {
+  // CSDL dev có thể đã bị "Xóa dữ liệu nghiệp vụ" nên không còn đơn nào. Khi đó chạy trên CSDL mới
+  // nạp dữ liệu mẫu (db.ts tự seed) để test vẫn kiểm tra được luồng thật thay vì bỏ qua.
+  let source: Database.Database | undefined;
+  if (existsSync(sourcePath)) {
+    source = new Database(sourcePath, { readonly: true, fileMustExist: true });
+    const orders = (source.prepare('SELECT COUNT(*) AS count FROM orders').get() as { count: number }).count;
+    if (orders > 0) {
+      await source.backup(copyPath);
+    }
     source.close();
+    source = undefined;
   }
   process.env.DB_PATH = copyPath;
   let db: Database.Database | undefined;
