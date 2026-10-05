@@ -9,6 +9,80 @@ import { useToast } from '../../components/ui/Toast';
 import { useReference } from '../../context/ReferenceContext';
 import { FREE_SHIP_FOR_CUSTOMER, FREE_SHIP_WITHOUT_SHIPPER, REPORT_PERIOD_FROM, REPORT_PERIOD_TO } from '../../lib/settings';
 
+// TẠM ẨN sao lưu/khôi phục bằng Excel: đổi thành true để hiện lại hai nút Xuất/Nhập.
+// Phần API phía sau (/api/system/export.xlsx, /api/system/import) vẫn giữ nguyên.
+const EXCEL_BACKUP_ENABLED = false;
+
+// Khối xuất/nhập TOÀN BỘ dữ liệu qua Excel — tách riêng để bật/tắt bằng một dòng.
+function ExcelBackupBlock() {
+  const toast = useToast();
+  const confirm = useConfirm();
+  const [busy, setBusy] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const exportBackup = () => {
+    window.open(api.backupExportUrl(), '_blank');
+  };
+
+  const importBackup = async (file: File) => {
+    const ok = await confirm({
+      title: 'Khôi phục dữ liệu từ Excel',
+      message: `Dữ liệu trong tệp "${file.name}" sẽ được ghi vào hệ thống: dòng có cùng ID thì cập nhật, dòng chưa có ID thì thêm mới. Dữ liệu hiện có không nằm trong tệp vẫn được giữ nguyên.`,
+      confirmLabel: 'Khôi phục dữ liệu',
+      danger: true,
+    });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      const result = await api.importBackupExcel(file);
+      const partial = result.results.filter((r) => r.missing.length);
+      const summary = `Đã cập nhật ${result.updated} dòng, thêm mới ${result.inserted} dòng từ ${result.results.length} bảng.`;
+      if (partial.length) {
+        toast.warning(
+          `${summary} Lưu ý: ${partial.length} bảng thiếu cột so với phiên bản hiện tại (${partial
+            .map((r) => r.table)
+            .join(', ')}) — dữ liệu các cột đó về mặc định. Đang tải lại trang...`
+        );
+      } else {
+        toast.success(`${summary} Đang tải lại trang...`);
+      }
+      setTimeout(() => window.location.reload(), partial.length ? 5000 : 1200);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Không nhập được tệp sao lưu');
+    } finally {
+      setBusy(false);
+      if (inputRef.current) inputRef.current.value = '';
+    }
+  };
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="outline" onClick={exportBackup} disabled={busy}>
+          <DownloadCloud className="h-3.5 w-3.5" /> Xuất toàn bộ dữ liệu (Excel)
+        </Button>
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".xlsx"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) void importBackup(file);
+          }}
+        />
+        <Button size="sm" variant="outline" onClick={() => inputRef.current?.click()} disabled={busy}>
+          <Upload className="h-3.5 w-3.5" /> {busy ? 'Đang xử lý...' : 'Nhập lại dữ liệu từ Excel'}
+        </Button>
+      </div>
+      <p className="mt-2 text-xs text-slate-500">
+        Tệp xuất ra gồm toàn bộ bảng dữ liệu (mỗi bảng một sheet) và nhập lại được nguyên trạng. Nên sao lưu vào cuối mỗi ngày làm
+        việc.
+      </p>
+    </>
+  );
+}
+
 // Cấu hình chung: các quy tắc nghiệp vụ của hệ thống.
 // Lưu ngay và nạp lại dữ liệu tham chiếu để mọi màn hình dùng giá trị mới.
 export function GeneralSettingsTab() {
@@ -17,7 +91,6 @@ export function GeneralSettingsTab() {
   const confirm = useConfirm();
   const [saving, setSaving] = useState(false);
   const [dbBusy, setDbBusy] = useState(false);
-  const backupInputRef = useRef<HTMLInputElement>(null);
   const freeShip = settings[FREE_SHIP_WITHOUT_SHIPPER] === '1';
   const freeShipCustomer = settings[FREE_SHIP_FOR_CUSTOMER] === '1';
 
@@ -64,41 +137,6 @@ export function GeneralSettingsTab() {
       toast.error(e instanceof Error ? e.message : 'Không lưu được kỳ báo cáo');
     } finally {
       setSaving(false);
-    }
-  };
-
-  const exportBackup = () => {
-    window.open(api.backupExportUrl(), '_blank');
-  };
-
-  const importBackup = async (file: File) => {
-    const ok = await confirm({
-      title: 'Khôi phục dữ liệu từ Excel',
-      message: `Dữ liệu trong tệp "${file.name}" sẽ được ghi vào hệ thống: dòng có cùng ID thì cập nhật, dòng chưa có ID thì thêm mới. Dữ liệu hiện có không nằm trong tệp vẫn được giữ nguyên.`,
-      confirmLabel: 'Khôi phục dữ liệu',
-      danger: true,
-    });
-    if (!ok) return;
-    setDbBusy(true);
-    try {
-      const result = await api.importBackupExcel(file);
-      const partial = result.results.filter((r) => r.missing.length);
-      const summary = `Đã cập nhật ${result.updated} dòng, thêm mới ${result.inserted} dòng từ ${result.results.length} bảng.`;
-      if (partial.length) {
-        toast.warning(
-          `${summary} Lưu ý: ${partial.length} bảng thiếu cột so với phiên bản hiện tại (${partial
-            .map((r) => r.table)
-            .join(', ')}) — dữ liệu các cột đó về mặc định. Đang tải lại trang...`
-        );
-      } else {
-        toast.success(`${summary} Đang tải lại trang...`);
-      }
-      setTimeout(() => window.location.reload(), partial.length ? 5000 : 1200);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Không nhập được tệp sao lưu');
-    } finally {
-      setDbBusy(false);
-      if (backupInputRef.current) backupInputRef.current.value = '';
     }
   };
 
@@ -202,42 +240,22 @@ export function GeneralSettingsTab() {
 
       <Card>
         <CardHeader
-          title="Sao lưu & khôi phục dữ liệu"
-          subtitle="Xuất toàn bộ dữ liệu ra Excel để sao lưu hằng ngày; nếu phần mềm gặp sự cố, nhập lại tệp đó để khôi phục."
+          title={EXCEL_BACKUP_ENABLED ? 'Sao lưu & khôi phục dữ liệu' : 'Dữ liệu hệ thống'}
+          subtitle={
+            EXCEL_BACKUP_ENABLED
+              ? 'Xuất toàn bộ dữ liệu ra Excel để sao lưu hằng ngày; nếu phần mềm gặp sự cố, nhập lại tệp đó để khôi phục.'
+              : 'Các thao tác ảnh hưởng đến toàn bộ dữ liệu của phần mềm.'
+          }
         />
         <CardBody>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="outline" onClick={exportBackup} disabled={dbBusy}>
-              <DownloadCloud className="h-3.5 w-3.5" /> Xuất toàn bộ dữ liệu (Excel)
-            </Button>
-            <input
-              ref={backupInputRef}
-              type="file"
-              accept=".xlsx"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) void importBackup(file);
-              }}
-            />
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => backupInputRef.current?.click()}
-              disabled={dbBusy}
-            >
-              <Upload className="h-3.5 w-3.5" /> {dbBusy ? 'Đang xử lý...' : 'Nhập lại dữ liệu từ Excel'}
-            </Button>
-          </div>
-          <p className="mt-2 text-xs text-slate-500">
-            Tệp xuất ra gồm toàn bộ bảng dữ liệu (mỗi bảng một sheet) và nhập lại được nguyên trạng. Nên sao lưu vào cuối mỗi ngày làm việc.
-          </p>
+          {EXCEL_BACKUP_ENABLED && <ExcelBackupBlock />}
 
-          <div className="mt-4 border-t border-slate-100 pt-4">
+          <div className={EXCEL_BACKUP_ENABLED ? 'mt-4 border-t border-slate-100 pt-4' : ''}>
             <div className="text-sm font-semibold text-brand-red">Vùng nguy hiểm</div>
             <p className="mt-1 text-xs text-slate-500">
               Xóa sạch toàn bộ dữ liệu nghiệp vụ: kho, nhân viên, sản phẩm, khách hàng, tồn kho, đơn hàng, sổ quỹ, hóa đơn...
-              Chỉ giữ lại cấu hình chung và vài danh mục nền do phần mềm tự tạo. Hãy xuất Excel sao lưu trước khi thực hiện.
+              Chỉ giữ lại cấu hình chung và vài danh mục nền do phần mềm tự tạo.
+              {EXCEL_BACKUP_ENABLED ? ' Hãy xuất Excel sao lưu trước khi thực hiện.' : ' Thao tác này KHÔNG THỂ hoàn tác.'}
             </p>
             <Button size="sm" variant="danger" className="mt-2" onClick={resetAll} disabled={dbBusy}>
               <RotateCcw className="h-3.5 w-3.5" /> Xóa toàn bộ dữ liệu
