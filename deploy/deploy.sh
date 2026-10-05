@@ -9,6 +9,12 @@
 #   4. Chạy TOÀN BỘ test nghiệp vụ + smoke test bản build
 #   5. Chỉ khi mọi bước trên đạt mới khởi động lại service
 # Nếu bước 2-4 lỗi, script dừng ngay (set -e) và service cũ vẫn đang chạy bình thường.
+#
+# LƯU Ý: cập nhật phần mềm KHÔNG động đến dữ liệu. CSDL nằm ngoài thư mục git
+# (data/qaromi_erp.db, đã nằm trong .gitignore) nên git pull không đụng tới; các bước
+# npm ci/build/test/smoke đều dùng CSDL tạm hoặc chỉ ghi vào dist/node_modules; khi
+# service khởi động lại chỉ chạy migration BỔ SUNG (thêm cột, tự chữa dữ liệu cũ) —
+# không seed, không xóa, không reset.
 set -euo pipefail
 
 APP_DIR="/opt/qaromi-erp"
