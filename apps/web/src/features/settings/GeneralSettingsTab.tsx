@@ -11,7 +11,7 @@ import { FREE_SHIP_FOR_CUSTOMER, FREE_SHIP_WITHOUT_SHIPPER, REPORT_PERIOD_FROM, 
 
 // Cờ bật/tắt khối sao lưu/khôi phục bằng Excel trong Cấu hình chung.
 // Đặt false để tạm ẩn hai nút Xuất/Nhập (API phía sau vẫn giữ nguyên).
-const EXCEL_BACKUP_ENABLED = true;
+const EXCEL_BACKUP_ENABLED = false;
 
 // Khối xuất/nhập TOÀN BỘ dữ liệu qua Excel — tách riêng để bật/tắt bằng một dòng.
 function ExcelBackupBlock() {
