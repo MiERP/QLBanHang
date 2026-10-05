@@ -9,9 +9,9 @@ import { useToast } from '../../components/ui/Toast';
 import { useReference } from '../../context/ReferenceContext';
 import { FREE_SHIP_FOR_CUSTOMER, FREE_SHIP_WITHOUT_SHIPPER, REPORT_PERIOD_FROM, REPORT_PERIOD_TO } from '../../lib/settings';
 
-// TẠM ẨN sao lưu/khôi phục bằng Excel: đổi thành true để hiện lại hai nút Xuất/Nhập.
-// Phần API phía sau (/api/system/export.xlsx, /api/system/import) vẫn giữ nguyên.
-const EXCEL_BACKUP_ENABLED = false;
+// Cờ bật/tắt khối sao lưu/khôi phục bằng Excel trong Cấu hình chung.
+// Đặt false để tạm ẩn hai nút Xuất/Nhập (API phía sau vẫn giữ nguyên).
+const EXCEL_BACKUP_ENABLED = true;
 
 // Khối xuất/nhập TOÀN BỘ dữ liệu qua Excel — tách riêng để bật/tắt bằng một dòng.
 function ExcelBackupBlock() {
