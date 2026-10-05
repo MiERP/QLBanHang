@@ -152,7 +152,46 @@ echo "0 * * * * /opt/qaromi-erp/deploy/backup.sh" | crontab -
 sudo bash /opt/qaromi-erp/deploy/deploy.sh
 ```
 
-`deploy.sh` sẽ: `git pull` → `npm ci` → `npm run build` → restart service → check health.
+`deploy.sh` chạy theo thứ tự an toàn cho go-live:
+
+1. **Sao lưu CSDL** vào `/opt/qaromi-erp/backups/` (giữ 15 bản gần nhất)
+2. `git pull --ff-only` + in ra commit đang chạy
+3. `npm ci --include=dev`
+4. `npm run build` (API + Web)
+5. **`npm test`** (76 test nghiệp vụ) và **`npm run smoke`** (smoke test bản build: 34 mục)
+6. `systemctl restart qaromi-erp` + health check
+
+> Nếu bước 2–5 lỗi, script **dừng ngay** và service cũ vẫn chạy bình thường — không có bản lỗi nào lên production.
+> Khi health check lỗi, script in ra đường dẫn bản sao lưu CSDL để khôi phục.
+
+---
+
+## 9. CI/CD trên GitHub Actions
+
+| Workflow | Khi nào chạy | Nội dung |
+| :--- | :--- | :--- |
+| **CI** (`.github/workflows/ci.yml`) | Mọi push và pull request | Chặn file `.db` lọt vào repo → `npm ci` → `npm run build` → `npm test` (76 test) → `npm run smoke` |
+| **Deploy VPS** (`.github/workflows/deploy.yml`) | **Bấm tay** trong tab Actions | SSH vào VPS, checkout nhánh rồi chạy `deploy.sh` |
+
+### Bật nút triển khai từ GitHub (tuỳ chọn)
+
+Vào **Settings → Secrets and variables → Actions** của repo, thêm 3 secrets:
+
+| Secret | Ví dụ | Ghi chú |
+| :--- | :--- | :--- |
+| `VPS_HOST` | `103.20.102.229` | IP hoặc tên miền VPS |
+| `VPS_USER` | `root` | User SSH có quyền `sudo` |
+| `VPS_SSH_KEY` | nội dung `~/.ssh/id_ed25519` | Khoá **riêng**, gồm cả dòng `BEGIN/END OPENSSH PRIVATE KEY` |
+
+Sau đó vào **Actions → Deploy VPS → Run workflow**, chọn nhánh cần triển khai.
+Không cấu hình secrets cũng không sao — workflow này chỉ chạy khi bấm tay, CI vẫn hoạt động bình thường.
+
+### Chạy kiểm tra trên máy trước khi đẩy code
+
+```bash
+npm ci --include=dev
+npm run verify     # build + 76 test + smoke test bản build
+```
 
 ---
 

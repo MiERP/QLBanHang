@@ -1,0 +1,48 @@
+name: CI
+
+# Chạy cho mọi lần push và pull request. Đây là "cổng chặn" trước khi go-live:
+# biên dịch → 76 test nghiệp vụ → smoke test trên bản build thật.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Kiểm tra & kiểm thử
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Lấy mã nguồn
+        uses: actions/checkout@v4
+
+      - name: Cài Node.js 22 (giống VPS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Chặn file CSDL lọt vào mã nguồn
+        run: |
+          if git ls-files | grep -E '\.db$|\.db-wal$|\.db-shm$'; then
+            echo "::error::Có file CSDL trong repo — không được đẩy database lên GitHub"
+            exit 1
+          fi
+          echo "Không có file CSDL trong repo"
+
+      - name: Cài dependencies
+        run: npm ci --include=dev
+
+      - name: Biên dịch (typecheck + build API & Web)
+        run: npm run build
+
+      - name: Chạy toàn bộ test nghiệp vụ
+        run: npm test
+
+      - name: Smoke test bản build (API + SPA + CSDL mới)
+        run: npm run smoke

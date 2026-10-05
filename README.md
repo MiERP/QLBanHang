@@ -135,6 +135,19 @@ Quy trình tự kiểm tra, không cần làm tay:
 - `desktop:prepare` chạy `desktop/scripts/ensure-electron.mjs` (thiếu Electron runtime thì tự tải, thiếu devDependencies thì báo đúng lệnh `npm install --include=dev`) rồi copy `node.exe` vào `desktop/runtime`.
 - Sau khi pack, hook `desktop/scripts/after-pack.cjs` **chặn build** nếu: gói bật asar, thiếu runtime/API/web/icon, lẫn dependency chỉ dùng lúc build (vite, typescript, tsx, electron...), có CSDL nằm trong thư mục cài, hoặc `better-sqlite3` không mở được bằng `node.exe` đi kèm (lệch ABI). Đây đều là lỗi nếu bỏ qua chỉ lộ ra khi mở app trên máy khác.
 
+### 6. Kiểm thử & CI/CD
+
+```powershell
+npm ci --include=dev
+npm test        # 76 test nghiệp vụ + bất biến dữ liệu (chạy trên CSDL tạm, không đụng CSDL thật)
+npm run smoke   # khởi động bản build từ dist, gọi 27 endpoint + 4 tệp Excel + trang chủ SPA
+npm run verify  # build + test + smoke — chạy đủ bộ trước khi phát hành
+```
+
+- **CI** (`.github/workflows/ci.yml`) chạy đúng chuỗi trên cho mọi push/pull request, kèm bước chặn file `.db` lọt vào repo.
+- **Deploy VPS** (`.github/workflows/deploy.yml`) bấm tay trong tab Actions để SSH vào VPS và chạy `deploy/deploy.sh`.
+- `deploy/deploy.sh` **sao lưu CSDL → pull → build → test → smoke → mới restart service**, nên bản lỗi không lên được production. Chi tiết xem [deploy/README.md](deploy/README.md).
+
 ---
 
 ## 💼 12 Phân Hệ Nghiệp Vụ

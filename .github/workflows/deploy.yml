@@ -1,0 +1,54 @@
+name: Deploy VPS
+
+# Triển khai thủ công (bấm Run workflow trong tab Actions), KHÔNG tự chạy khi push
+# để tránh deploy ngoài ý muốn. Cần cấu hình 3 secrets trong repo:
+#   VPS_HOST     — IP hoặc tên miền VPS (ví dụ 103.20.102.229)
+#   VPS_USER     — user SSH có quyền sudo (ví dụ root)
+#   VPS_SSH_KEY  — khoá SSH riêng (nội dung file id_ed25519, có cả dòng BEGIN/END)
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Nhánh cần triển khai trên VPS'
+        required: true
+        default: '14-09-2026'
+
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Triển khai lên VPS
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Kiểm tra secrets đã cấu hình chưa
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          missing=0
+          [ -n "$VPS_HOST" ] || { echo "::error::Thiếu secret VPS_HOST"; missing=1; }
+          [ -n "$VPS_USER" ] || { echo "::error::Thiếu secret VPS_USER"; missing=1; }
+          [ -n "$VPS_SSH_KEY" ] || { echo "::error::Thiếu secret VPS_SSH_KEY"; missing=1; }
+          exit $missing
+
+      - name: Cài khoá SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 700 ~/.ssh
+          chmod 600 ~/.ssh/id_ed25519
+
+      - name: Chuyển nhánh rồi chạy deploy.sh trên VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
+            "sudo -u qaromi git -C /opt/qaromi-erp checkout ${{ github.event.inputs.branch }} && sudo bash /opt/qaromi-erp/deploy/deploy.sh"
