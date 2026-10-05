@@ -338,6 +338,9 @@ tiền công trả nhân viên giao hàng nên **tách khỏi doanh thu**. Cả 
 | Method | Endpoint | Mô tả |
 | :--- | :--- | :--- |
 | GET | `/api/inventory/stock?warehouse_id=` | Tồn kho + `urgency_level`, `days_left` |
+| GET | `/api/inventory/stock-daily?from=&to=` | Nhật ký tồn: tồn CUỐI mỗi ngày của từng kho × mặt hàng (tối đa 120 ngày) |
+| GET | `/api/inventory/stock.xlsx` | Xuất tồn kho ra Excel: mỗi kho một dòng, mỗi mặt hàng một cột, kèm dòng TỔNG |
+| GET | `/api/inventory/stock.xlsx?from=&to=` | Xuất NHẬT KÝ theo ngày: thêm cột NGÀY gộp theo khối ngày (như sheet TỒN TỔNG) |
 | GET | `/api/inventory/alerts` | Mặt hàng dưới ngưỡng cảnh báo |
 | GET | `/api/inventory/movements?product_id=&warehouse_id=&movement_type=&limit=` | Nhật ký kho (có tên kho, người thực hiện) |
 | PUT | `/api/inventory/stock/:id` | Điều chỉnh tồn (`quantity`, `min_stock_alert`, `avg_daily_sales`) + ghi `ADJUSTMENT` |
@@ -575,3 +578,40 @@ Quy ước dữ liệu:
 }
 ```
 Lỗi khác: `400` thiếu tệp / sai định dạng tệp, `404` kind không hợp lệ.
+
+---
+
+## 14. Quản Trị CSDL (`/api/system`)
+
+Dùng cho màn **Danh mục hệ thống → Cấu hình chung → Sao lưu & khôi phục dữ liệu**.
+
+| Method | Endpoint | Mô tả |
+| :--- | :--- | :--- |
+| GET | `/api/system/export.xlsx` | Xuất TOÀN BỘ dữ liệu: mỗi bảng một sheet (tên sheet = tên bảng, dòng 1 là tên cột) |
+| POST | `/api/system/import` | Khôi phục từ tệp đã xuất — **upsert theo khoá chính**, không xoá dữ liệu ngoài tệp |
+| POST | `/api/system/reset-database` | Xoá sạch dữ liệu nghiệp vụ, đưa CSDL về mặc định ban đầu (giữ cấu hình chung) |
+
+**`POST /api/system/import`** — body là tệp `.xlsx` nhị phân (`Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`), giới hạn 50MB.
+
+Cách ghi dữ liệu (theo khoá chính của từng bảng — `id`, hoặc `key`/`notification_id` với bảng khoá chữ):
+
+| Trường hợp | Hành động |
+| :--- | :--- |
+| Khoá chính đã tồn tại trong CSDL | **Cập nhật** các cột còn lại của dòng đó |
+| Khoá chính chưa có | **Thêm mới** đúng với khoá đó (giữ nguyên liên kết) |
+| Ô khoá chính để trống | **Thêm mới** với khoá do hệ thống cấp |
+| Dòng có trong CSDL nhưng không có trong tệp | **Giữ nguyên** (không xoá) |
+
+Toàn bộ nằm trong một transaction (lỗi giữa chừng thì không ghi gì) và tạm tắt kiểm tra khoá ngoại nên thứ tự bảng trong tệp không quan trọng. Nhập cùng một tệp nhiều lần không sinh dòng trùng.
+
+**Thành công — `200`:**
+```json
+{ "success": true, "inserted": 0, "updated": 175,
+  "results": [{ "table": "customers", "inserted": 0, "updated": 10, "missing": [] }] }
+```
+`missing` là các cột có trong CSDL nhưng thiếu trong tệp — dữ liệu cột đó về mặc định/NULL, giao diện sẽ cảnh báo.
+
+Lỗi: `400` tệp không đọc được / không có bảng nào khớp với hệ thống / thiếu tệp.
+
+**`POST /api/system/reset-database`** — xoá sạch mọi bảng nghiệp vụ rồi nạp lại schema + danh mục nền do phần mềm tự tạo (chức vụ, đơn vị gốc, nguồn nhập, đối tác mặc định, thuế GTGT, phí ship mặc định, 3 kho ảo). **Không** nạp `seed.sql` (không có dữ liệu mẫu) và **giữ nguyên** giá trị cấu hình chung trong `app_settings`. Giao diện yêu cầu xác nhận 2 lần trước khi gọi.
+

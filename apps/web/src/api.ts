@@ -166,6 +166,21 @@ export const mergeOrders = (ids: number[], data: Record<string, unknown>) =>
 // Inventory
 export const fetchStock = (warehouseId?: number) => request<StockItem[]>(`/inventory/stock${qs({ warehouse_id: warehouseId })}`);
 export const fetchAlerts = () => request<StockItem[]>('/inventory/alerts');
+
+// Nhật ký tồn kho: tồn CUỐI mỗi ngày của từng kho × mặt hàng (mỗi ngày × kho một dòng).
+export interface StockDailyRow {
+  date: string;
+  warehouse_id: number;
+  product_id: number;
+  quantity: number;
+}
+export const fetchStockDaily = (from: string, to: string) =>
+  request<{ from: string; to: string; rows: StockDailyRow[] }>(`/inventory/stock-daily${qs({ from, to })}`);
+
+// Bảng tổng hợp tồn kho (mỗi kho một dòng, mỗi mặt hàng một cột).
+// Có from/to → xuất nhật ký theo ngày kèm cột NGÀY; không có → tồn hiện tại.
+export const stockExportUrl = (params: { from?: string; to?: string } = {}) =>
+  `${API_BASE}/inventory/stock.xlsx${qs(params)}`;
 export const fetchNotifications = () => request<NotificationsResponse>('/notifications');
 export const markNotificationRead = (id: string) =>
   request<{ ok: boolean }>(`/notifications/${encodeURIComponent(id)}/read`, { method: 'POST' });
@@ -333,6 +348,41 @@ export interface ImportResult {
 export type ImportMode = 'strict' | 'upsert';
 
 export const importTemplateUrl = (kind: ImportKind) => `${API_BASE}/imports/templates/${kind}.xlsx`;
+
+// --- Quản trị CSDL: sao lưu toàn bộ ra Excel / khôi phục lại / đưa về mặc định ---
+
+export const backupExportUrl = () => `${API_BASE}/system/export.xlsx`;
+
+export interface BackupImportResult {
+  success: boolean;
+  inserted: number;
+  updated: number;
+  results: { table: string; inserted: number; updated: number; missing: string[] }[];
+}
+
+export async function importBackupExcel(file: File): Promise<BackupImportResult> {
+  const res = await fetch(`${API_BASE}/system/import`, {
+    method: 'POST',
+    headers: { 'Content-Type': XLSX_MIME },
+    body: file,
+  });
+  const text = await res.text();
+  let data: unknown = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = null;
+    }
+  }
+  if (!res.ok) {
+    const payload = data as { error?: string; details?: unknown } | null;
+    throw new ApiError(payload?.error ?? `Lỗi hệ thống (${res.status})`, res.status, payload?.details);
+  }
+  return data as BackupImportResult;
+}
+
+export const resetDatabase = () => request<{ success: boolean }>('/system/reset-database', { method: 'POST' });
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 

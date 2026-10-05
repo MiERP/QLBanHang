@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { DownloadCloud, RotateCcw, Upload } from 'lucide-react';
 import * as api from '../../api';
 import { Button } from '../../components/ui/Button';
 import { Card, CardBody, CardHeader } from '../../components/ui/Card';
+import { useConfirm } from '../../components/ui/ConfirmDialog';
 import { Field, Input } from '../../components/ui/Field';
 import { useToast } from '../../components/ui/Toast';
 import { useReference } from '../../context/ReferenceContext';
@@ -12,7 +14,10 @@ import { FREE_SHIP_FOR_CUSTOMER, FREE_SHIP_WITHOUT_SHIPPER, REPORT_PERIOD_FROM, 
 export function GeneralSettingsTab() {
   const { settings, reload } = useReference();
   const toast = useToast();
+  const confirm = useConfirm();
   const [saving, setSaving] = useState(false);
+  const [dbBusy, setDbBusy] = useState(false);
+  const backupInputRef = useRef<HTMLInputElement>(null);
   const freeShip = settings[FREE_SHIP_WITHOUT_SHIPPER] === '1';
   const freeShipCustomer = settings[FREE_SHIP_FOR_CUSTOMER] === '1';
 
@@ -59,6 +64,69 @@ export function GeneralSettingsTab() {
       toast.error(e instanceof Error ? e.message : 'Không lưu được kỳ báo cáo');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const exportBackup = () => {
+    window.open(api.backupExportUrl(), '_blank');
+  };
+
+  const importBackup = async (file: File) => {
+    const ok = await confirm({
+      title: 'Khôi phục dữ liệu từ Excel',
+      message: `Dữ liệu trong tệp "${file.name}" sẽ được ghi vào hệ thống: dòng có cùng ID thì cập nhật, dòng chưa có ID thì thêm mới. Dữ liệu hiện có không nằm trong tệp vẫn được giữ nguyên.`,
+      confirmLabel: 'Khôi phục dữ liệu',
+      danger: true,
+    });
+    if (!ok) return;
+    setDbBusy(true);
+    try {
+      const result = await api.importBackupExcel(file);
+      const partial = result.results.filter((r) => r.missing.length);
+      const summary = `Đã cập nhật ${result.updated} dòng, thêm mới ${result.inserted} dòng từ ${result.results.length} bảng.`;
+      if (partial.length) {
+        toast.warning(
+          `${summary} Lưu ý: ${partial.length} bảng thiếu cột so với phiên bản hiện tại (${partial
+            .map((r) => r.table)
+            .join(', ')}) — dữ liệu các cột đó về mặc định. Đang tải lại trang...`
+        );
+      } else {
+        toast.success(`${summary} Đang tải lại trang...`);
+      }
+      setTimeout(() => window.location.reload(), partial.length ? 5000 : 1200);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Không nhập được tệp sao lưu');
+    } finally {
+      setDbBusy(false);
+      if (backupInputRef.current) backupInputRef.current.value = '';
+    }
+  };
+
+  const resetAll = async () => {
+    const first = await confirm({
+      title: 'Xóa toàn bộ dữ liệu',
+      message:
+        'Toàn bộ dữ liệu nghiệp vụ (kho, nhân viên, sản phẩm, khách hàng, tồn kho, đơn hàng, phiếu kho, sổ quỹ, hóa đơn, cọc vỏ...) sẽ bị xóa sạch. Chỉ giữ lại cấu hình chung. Thao tác này KHÔNG THỂ hoàn tác.',
+      confirmLabel: 'Tiếp tục',
+      danger: true,
+    });
+    if (!first) return;
+    const second = await confirm({
+      title: 'Xác nhận lần cuối',
+      message: 'Bạn có chắc chắn muốn xóa sạch toàn bộ dữ liệu? Nếu chưa sao lưu ra Excel, hãy hủy bỏ và sao lưu trước.',
+      confirmLabel: 'Xóa sạch dữ liệu',
+      danger: true,
+    });
+    if (!second) return;
+    setDbBusy(true);
+    try {
+      await api.resetDatabase();
+      toast.success('Đã đưa dữ liệu về mặc định ban đầu. Đang tải lại trang...');
+      setTimeout(() => window.location.reload(), 1200);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Không xóa được dữ liệu');
+    } finally {
+      setDbBusy(false);
     }
   };
 
@@ -129,6 +197,52 @@ export function GeneralSettingsTab() {
               </span>
             </span>
           </label>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="Sao lưu & khôi phục dữ liệu"
+          subtitle="Xuất toàn bộ dữ liệu ra Excel để sao lưu hằng ngày; nếu phần mềm gặp sự cố, nhập lại tệp đó để khôi phục."
+        />
+        <CardBody>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="outline" onClick={exportBackup} disabled={dbBusy}>
+              <DownloadCloud className="h-3.5 w-3.5" /> Xuất toàn bộ dữ liệu (Excel)
+            </Button>
+            <input
+              ref={backupInputRef}
+              type="file"
+              accept=".xlsx"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void importBackup(file);
+              }}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => backupInputRef.current?.click()}
+              disabled={dbBusy}
+            >
+              <Upload className="h-3.5 w-3.5" /> {dbBusy ? 'Đang xử lý...' : 'Nhập lại dữ liệu từ Excel'}
+            </Button>
+          </div>
+          <p className="mt-2 text-xs text-slate-500">
+            Tệp xuất ra gồm toàn bộ bảng dữ liệu (mỗi bảng một sheet) và nhập lại được nguyên trạng. Nên sao lưu vào cuối mỗi ngày làm việc.
+          </p>
+
+          <div className="mt-4 border-t border-slate-100 pt-4">
+            <div className="text-sm font-semibold text-brand-red">Vùng nguy hiểm</div>
+            <p className="mt-1 text-xs text-slate-500">
+              Xóa sạch toàn bộ dữ liệu nghiệp vụ: kho, nhân viên, sản phẩm, khách hàng, tồn kho, đơn hàng, sổ quỹ, hóa đơn...
+              Chỉ giữ lại cấu hình chung và vài danh mục nền do phần mềm tự tạo. Hãy xuất Excel sao lưu trước khi thực hiện.
+            </p>
+            <Button size="sm" variant="danger" className="mt-2" onClick={resetAll} disabled={dbBusy}>
+              <RotateCcw className="h-3.5 w-3.5" /> Xóa toàn bộ dữ liệu
+            </Button>
+          </div>
         </CardBody>
       </Card>
     </div>

@@ -720,7 +720,32 @@ export function getDb(): Database.Database {
   const isNew = !fs.existsSync(dbPath) || fs.statSync(dbPath).size === 0;
   dbInstance = new Database(dbPath);
   dbInstance.pragma('foreign_keys = ON');
+  initializeDatabase(dbInstance, isNew);
+  return dbInstance;
+}
 
+// Đưa CSDL về mặc định ban đầu: xoá sạch dữ liệu nghiệp vụ (giữ cấu hình hệ thống) rồi nạp lại
+// danh mục nền do phần mềm tự tạo — KHÔNG nạp seed.sql nên không còn dữ liệu mẫu.
+export function resetDatabase(): void {
+  const db = getDb();
+  db.pragma('foreign_keys = OFF');
+  const tables = db
+    .prepare(
+      `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name <> 'app_settings'`
+    )
+    .all() as { name: string }[];
+  db.transaction(() => {
+    for (const table of tables) db.prepare(`DELETE FROM "${table.name}"`).run();
+  })();
+  if (db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sqlite_sequence'`).get()) {
+    db.prepare('DELETE FROM sqlite_sequence').run();
+  }
+  db.pragma('foreign_keys = ON');
+  initializeDatabase(db, false);
+}
+
+// Khởi tạo/khôi phục CSDL: áp schema (idempotent), seed dữ liệu gốc khi cần, rồi chạy migration.
+function initializeDatabase(dbInstance: Database.Database, forceSeed: boolean): void {
   // Luôn áp schema (idempotent) để cả DB cũ lẫn DB mới đều có đủ bảng mới.
   const schemaPath = findSqlPath('schema.sql');
   if (fs.existsSync(schemaPath)) {
@@ -730,15 +755,10 @@ export function getDb(): Database.Database {
     console.error('[API Database] ERROR: schema.sql not found!');
   }
 
-  let hasTables = false;
-  try {
-    const tableCheck = dbInstance.prepare("SELECT count(*) as count FROM sqlite_master WHERE type='table' AND name='products'").get() as any;
-    hasTables = Boolean(tableCheck && tableCheck.count > 0);
-  } catch {
-    hasTables = false;
-  }
-
-  if (isNew || !hasTables) {
+  // Chỉ nạp dữ liệu mẫu cho CSDL MỚI (file chưa có / rỗng) hoặc khi reset có yêu cầu.
+  // KHÔNG tự nạp khi bảng đang trống: nút "Xóa toàn bộ dữ liệu" cố ý để lại CSDL trống,
+  // tự nạp lại sẽ làm dữ liệu mẫu sống dậy sau mỗi lần khởi động.
+  if (forceSeed) {
     console.log('[API Database] Seeding initial data from seed.sql...');
     const seedPath = findSqlPath('seed.sql');
     if (fs.existsSync(seedPath)) {
@@ -783,15 +803,16 @@ export function getDb(): Database.Database {
   ensureColumn(dbInstance, 'order_shippers', 'kind', "TEXT DEFAULT 'DELIVERY'");
 
   // Phân loại sản phẩm: hàng bán (có tồn kho) vs dịch vụ (không tồn kho, không lên đơn).
-  const productColsBefore = (dbInstance.prepare('PRAGMA table_info(products)').all() as { name: string }[]).map((c) => c.name);
+  // Nhóm Dịch Vụ Gia Tăng luôn là dịch vụ — seed cũ và DB cũ có thể đang gán nhầm GOODS.
   ensureColumn(dbInstance, 'products', 'product_type', "TEXT DEFAULT 'GOODS'");
-  if (!productColsBefore.includes('product_type')) {
-    dbInstance.exec(
-      `UPDATE products SET product_type = CASE
-         WHEN category_id IN (SELECT id FROM categories WHERE type = 'SERVICE_DVGT') THEN 'SERVICE'
-         ELSE 'GOODS' END`
-    );
-  }
+  dbInstance.exec(
+    `UPDATE products SET product_type = CASE
+       WHEN category_id IN (SELECT id FROM categories WHERE type = 'SERVICE_DVGT') THEN 'SERVICE'
+       ELSE 'GOODS' END
+     WHERE COALESCE(product_type, '') <> CASE
+       WHEN category_id IN (SELECT id FROM categories WHERE type = 'SERVICE_DVGT') THEN 'SERVICE'
+       ELSE 'GOODS' END`
+  );
   rebuildOrdersIfNeeded(dbInstance);
   // Chuyển dữ liệu từ cột cũ order_owner_type (OWN/PARTNER) sang order_type rồi bỏ cột cũ.
   const orderCols = dbInstance.prepare('PRAGMA table_info(orders)').all() as { name: string }[];
@@ -935,6 +956,4 @@ export function getDb(): Database.Database {
   if (backfilledShippers.changes) {
     console.log(`[API Database] Bổ sung ${backfilledShippers.changes} dòng phân bổ phí vận chuyển từ người giao trên đơn.`);
   }
-
-  return dbInstance;
 }

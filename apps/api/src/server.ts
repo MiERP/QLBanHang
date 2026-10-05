@@ -24,6 +24,7 @@ import { dashboardRouter } from './routes/dashboard.js';
 import { notificationsRouter } from './routes/notifications.js';
 import { importsRouter } from './routes/imports.js';
 import { auditLogsRouter } from './routes/auditLogs.js';
+import { systemRouter } from './routes/system.js';
 
 const app = express();
 const port = Number(process.env.PORT || 4325);
@@ -65,6 +66,7 @@ const apiRouters = [
   dashboardRouter(),
   notificationsRouter(),
   importsRouter(),
+  systemRouter(),
   auditLogsRouter(),
 ];
 

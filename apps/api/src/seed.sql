@@ -54,6 +54,10 @@ INSERT INTO products (id, category_id, code, name, unit, bottle_type, standard_p
 (10, 3, 'DV_BE_TEC', 'Súc Rửa & Vệ Sinh Bể Ngầm / Téc Nước HTCN', 'Hệ thống', 'NONE', 350000.0, 350000.0, 90000.0, 0.0),
 (11, 3, 'DV_MAY_GIAT', 'Bảo Dưỡng & Vệ Sinh Máy Giặt', 'Máy', 'NONE', 250000.0, 250000.0, 70000.0, 0.0);
 
+-- Sản phẩm thuộc nhóm Dịch Vụ Gia Tăng là DỊCH VỤ: không có tồn kho, không lên đơn hàng.
+UPDATE products SET product_type = 'SERVICE'
+WHERE category_id IN (SELECT id FROM categories WHERE type = 'SERVICE_DVGT');
+
 -- 7. Customer groups
 INSERT INTO customer_groups (id, code, name) VALUES
 (1, 'GRP_CORP', 'Doanh Nghiệp / Cơ Quan'),
@@ -125,4 +129,44 @@ INSERT INTO revenue_transactions (transaction_code, transaction_type, order_id, 
 INSERT INTO partner_units (id, code, name, contact_person, phone, address, is_active, note) VALUES
 (1, 'DT_CAM_PHA', 'Xí Nghiệp Nước Cẩm Phả', 'Anh Tuấn', '0203.3861.222', 'Cẩm Phả, Quảng Ninh', 1, 'Đơn vị bạn cùng công ty mẹ'),
 (2, 'DT_BAI_CHAY', 'Xí Nghiệp Nước Bãi Cháy', 'Chị Hạnh', '0203.3846.555', 'Bãi Cháy, Hạ Long', 1, 'Đơn vị bạn cùng công ty mẹ');
+
+-- 36. Số dư vỏ đầu kỳ của khách: khách đang giữ vỏ từ trước nên xí nghiệp phải giữ
+--     đúng số vỏ ÂM tương ứng (số âm = vỏ đang nằm ngoài thị trường) và đã thu tiền cọc của số vỏ đó.
+--     Thiếu các nhóm dòng dưới đây thì báo cáo "Đối chiếu vỏ" và "Cọc vỏ" sẽ báo lệch ngay từ dữ liệu gốc.
+--     Mức cọc lấy theo sản phẩm (danh mục Cọc vỏ bình được tạo sau bước seed).
+INSERT INTO shell_stock (bottle_type, quantity) VALUES
+('VOI', -(SELECT COALESCE(SUM(bottle_debt_voi), 0) FROM customers)),
+('UP', -(SELECT COALESCE(SUM(bottle_debt_up), 0) FROM customers));
+
+INSERT INTO shell_movements (movement_type, bottle_type, quantity, customer_id, note, created_at)
+SELECT 'OUT', 'VOI', bottle_debt_voi, id, 'Vỏ Vòi khách đang giữ đầu kỳ', '2026-09-01 00:00:00'
+FROM customers WHERE bottle_debt_voi <> 0;
+
+INSERT INTO shell_movements (movement_type, bottle_type, quantity, customer_id, note, created_at)
+SELECT 'OUT', 'UP', bottle_debt_up, id, 'Vỏ Úp khách đang giữ đầu kỳ', '2026-09-01 00:00:00'
+FROM customers WHERE bottle_debt_up <> 0;
+
+INSERT INTO customer_bottle_ledgers
+  (customer_id, transaction_date, borrowed_voi, borrowed_up, deposit_amount, remaining_balance_voi, remaining_balance_up, note)
+SELECT id,
+       '2026-09-01',
+       bottle_debt_voi,
+       bottle_debt_up,
+       bottle_debt_voi * (SELECT deposit_fee FROM products WHERE bottle_type = 'VOI' AND deposit_fee > 0 ORDER BY id LIMIT 1)
+         + bottle_debt_up * (SELECT deposit_fee FROM products WHERE bottle_type = 'UP' AND deposit_fee > 0 ORDER BY id LIMIT 1),
+       bottle_debt_voi,
+       bottle_debt_up,
+       'Số dư vỏ khách đang giữ đầu kỳ'
+FROM customers WHERE bottle_debt_voi <> 0 OR bottle_debt_up <> 0;
+
+INSERT INTO deposit_transactions (transaction_code, transaction_type, customer_id, amount, payment_method, transaction_date, note)
+SELECT 'COC-DK-' || code,
+       'COLLECT',
+       id,
+       bottle_debt_voi * (SELECT deposit_fee FROM products WHERE bottle_type = 'VOI' AND deposit_fee > 0 ORDER BY id LIMIT 1)
+         + bottle_debt_up * (SELECT deposit_fee FROM products WHERE bottle_type = 'UP' AND deposit_fee > 0 ORDER BY id LIMIT 1),
+       'CASH',
+       '2026-09-01',
+       'Tiền cọc vỏ khách đang giữ đầu kỳ'
+FROM customers WHERE bottle_debt_voi <> 0 OR bottle_debt_up <> 0;
 
