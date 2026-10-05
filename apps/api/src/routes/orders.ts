@@ -136,7 +136,9 @@ function attachOrderDetails(db: ReturnType<typeof getDb>, orders: Record<string,
       merged_from: getMergedFrom.all(o.id as number),
       return_info: returnHistory.at(-1) ?? null,
       return_history: returnHistory,
-      returned_value: returnedAmount,
+      // Giá trị hàng hoàn theo giá BÁN (gộp): cộng lại giảm giá của đơn để màn "doanh thu của khách"
+      // và "giảm doanh thu" trừ đúng phần đã bán (đơn hoàn toàn bộ có giảm giá → doanh thu còn 0).
+      returned_value: returnedAmount + (Number(o.discount_amount) || 0),
       // Số còn phải thu = số phải thanh toán sau hoàn − tiền đã thu ròng; không bao giờ âm.
       outstanding_amount: outstandingAmount,
     };

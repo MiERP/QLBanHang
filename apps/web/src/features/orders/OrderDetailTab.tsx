@@ -48,7 +48,9 @@ export function OrderDetailTab({ order, onBack, onChanged }: { order: Order; onB
   const canAssignShippers = (order.order_type !== 'BORROW_IN' || Number(order.shipping_fee) > 0) && (order.order_status === 'SHIPPING' || isCompleted);
   const freightOnly = order.order_type === 'LEND_OUT' || order.order_type === 'HIRED_LOAD';
   const refunded = (order.return_history ?? []).reduce((sum, r) => sum + (Number(r.refund_amount) || 0), 0);
-  const collectible = freightOnly ? Number(order.shipping_fee) || 0 : Math.max(0, (Number(order.total_amount) || 0) - (Number(order.returned_value) || 0));
+  // Số còn phải thu dùng total_amount cho mọi loại đơn (đơn cho mượn/bốc xếp đã có total = phí ship, bằng 0 khi miễn ship).
+  const returnedNet = (order.return_history ?? []).reduce((sum, r) => sum + (Number(r.returned_amount) || 0), 0);
+  const collectible = Math.max(0, (Number(order.total_amount) || 0) - returnedNet);
   const remaining = Math.max(0, collectible - ((Number(order.paid_amount) || 0) - refunded));
   const canCollect = (isCompleted || order.order_status === 'RETURNED') && remaining > 0.5;
 

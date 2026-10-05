@@ -495,7 +495,7 @@ export function reportsRouter(): Router {
     const returnLineValue = `(CASE WHEN (SELECT SUM(ti2.quantity * oi2.unit_price)
       FROM stock_ticket_items ti2 JOIN order_items oi2 ON oi2.id = ti2.order_item_id
       WHERE ti2.ticket_id = t.id) > 0
-      THEN r.returned_amount * ti.quantity * oi.unit_price /
+      THEN (r.returned_amount + o.discount_amount) * ti.quantity * oi.unit_price /
         (SELECT SUM(ti2.quantity * oi2.unit_price) FROM stock_ticket_items ti2
          JOIN order_items oi2 ON oi2.id = ti2.order_item_id WHERE ti2.ticket_id = t.id)
       ELSE 0 END)`;
@@ -655,7 +655,9 @@ export function reportsRouter(): Router {
     );
 
     // Sổ chi tiết: từng đơn hàng đã hoàn tất tạo ra doanh thu (kèm phần đã hoàn của đơn).
-    const detailLimit = 500;
+    // Giới hạn chỉ là hàng rào an toàn cho bảng lớn; đủ xa để tệp Excel không bao giờ bị cắt cụt
+    // (tổng vẫn tính trọn kỳ nên nếu cắt, tổng và chi tiết sẽ lệch nhau).
+    const detailLimit = 5000;
     const detailCount = (db.prepare(`SELECT COUNT(*) as c FROM orders o ${where}`).get(...params) as { c: number }).c;
     const orderDetail = db
       .prepare(
@@ -769,7 +771,9 @@ export function reportsRouter(): Router {
     return { where: clauses.join(' AND '), params };
   };
   const RETURN_JOIN = `FROM order_returns r JOIN orders o ON o.id = r.order_id`;
-  const RETURN_VALUE = `COALESCE(SUM(r.returned_amount),0)`;
+  // Giá trị hoàn tính theo giá BÁN (đã trừ giảm giá của đơn) — cộng lại discount để khớp doanh thu gộp,
+  // nếu không đơn hoàn toàn bộ có giảm giá sẽ để lại phần doanh thu ảo đúng bằng mức giảm giá.
+  const RETURN_VALUE = `COALESCE(SUM(r.returned_amount + o.discount_amount),0)`;
 
   interface RevenueGroupRow {
     key: string | number;

@@ -85,9 +85,10 @@ export function dashboardRouter(): Router {
         `SELECT COUNT(*) as total FROM orders WHERE ${inPeriod('order_date')} AND ${completed} AND ${own} AND ${invoiced}`,
         from, to
       ).total;
-      // Hàng hoàn trong kỳ: lấy từ phiếu nhập "Hàng hoàn" của các đơn, trừ ra khỏi doanh thu gộp.
+      // Hàng hoàn trong kỳ: trừ theo GIÁ TRỊ GỘP đã bán (đã cộng lại giảm giá của đơn), để đơn hoàn
+      // toàn bộ có giảm giá trả về doanh thu đúng bằng 0 thay vì để lại phần bằng mức giảm giá.
       const revenueReturnedMonth = one<{ total: number }>(
-        `SELECT COALESCE(SUM(r.returned_amount),0) as total
+        `SELECT COALESCE(SUM(r.returned_amount + o.discount_amount),0) as total
          FROM order_returns r JOIN orders o ON o.id = r.order_id
          WHERE ${inPeriod('r.return_date')} AND o.invoice_status = 'INVOICED'`,
         from, to

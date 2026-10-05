@@ -5,10 +5,53 @@ import { customerCode, revenueCode, today } from '../lib/codes.js';
 import { ORDER_DEBT_EXPR, TOTAL_DEBT_EXPR } from '../lib/customerDebt.js';
 import { ApiError, badRequest, handle } from '../lib/http.js';
 import { returnCustomerShells, shellDepositFees, writeOffCustomerShells } from '../lib/shells.js';
+import { recordShellMovement } from '../lib/shellStock.js';
 
 export function customersRouter(): Router {
   const router = Router();
   const db = getDb();
+
+  // Khai/sửa nợ vỏ trực tiếp cho khách phải đi qua một cửa duy nhất để pool vỏ, sổ vỏ khách và cột
+  // nợ vỏ luôn khớp nhau: tăng nợ = xuất vỏ cho khách, giảm nợ = thu hồi vỏ về xí nghiệp.
+  function recordBottleDebtAdjustment(
+    customerId: number,
+    oldVoi: number,
+    oldUp: number,
+    newVoi: number,
+    newUp: number,
+    date: string,
+    note: string
+  ) {
+    const dVoi = newVoi - oldVoi;
+    const dUp = newUp - oldUp;
+    if (dVoi === 0 && dUp === 0) return;
+    if (dVoi !== 0) {
+      recordShellMovement(db, {
+        movementType: dVoi > 0 ? 'OUT' : 'RETURN',
+        bottleType: 'VOI',
+        quantity: Math.abs(dVoi),
+        customerId,
+        note,
+        movementDate: date,
+      });
+    }
+    if (dUp !== 0) {
+      recordShellMovement(db, {
+        movementType: dUp > 0 ? 'OUT' : 'RETURN',
+        bottleType: 'UP',
+        quantity: Math.abs(dUp),
+        customerId,
+        note,
+        movementDate: date,
+      });
+    }
+    db.prepare(
+      `INSERT INTO customer_bottle_ledgers
+        (customer_id, order_id, transaction_date, borrowed_voi, borrowed_up, returned_voi, returned_up,
+         remaining_balance_voi, remaining_balance_up, deposit_amount, refund_deposit_amount, handled_by, note)
+       VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, 0, 0, NULL, ?)`
+    ).run(customerId, date, dVoi > 0 ? dVoi : 0, dUp > 0 ? dUp : 0, dVoi < 0 ? -dVoi : 0, dUp < 0 ? -dUp : 0, newVoi, newUp, note);
+  }
 
   router.get(
     '/customers',
@@ -53,6 +96,8 @@ export function customersRouter(): Router {
         throw badRequest('Tên và địa chỉ khách hàng là bắt buộc');
       }
       const code = body.code || customerCode(db);
+      const openVoi = Math.max(0, Number(body.bottle_debt_voi) || 0);
+      const openUp = Math.max(0, Number(body.bottle_debt_up) || 0);
       const insert = db
         .prepare(
           `INSERT INTO customers
@@ -70,10 +115,15 @@ export function customersRouter(): Router {
           body.personal_id || '',
           body.budget_relation_code || '',
           Number(body.max_debt_limit) || 10000000,
-          Number(body.bottle_debt_voi) || 0,
-          Number(body.bottle_debt_up) || 0
+          openVoi,
+          openUp
         );
-      res.json({ success: true, id: Number(insert.lastInsertRowid), code });
+      const customerId = Number(insert.lastInsertRowid);
+      // Khách mới khai sẵn nợ vỏ: ghi sổ vỏ + xuất vỏ ra ngoài để pool và nợ luôn khớp.
+      if (openVoi || openUp) {
+        recordBottleDebtAdjustment(customerId, 0, 0, openVoi, openUp, String(body.date || today()), 'Nợ vỏ đầu kỳ (khai khi tạo khách hàng)');
+      }
+      res.json({ success: true, id: customerId, code });
     })
   );
 
@@ -105,9 +155,31 @@ export function customersRouter(): Router {
         values.push(body[key]);
       }
       if (sets.length === 0) throw badRequest('Không có trường nào để cập nhật');
+      // Chụp nợ vỏ TRƯỚC khi sửa để ghi đúng chênh lệch vào sổ vỏ và pool.
+      const editDebt = body.bottle_debt_voi !== undefined || body.bottle_debt_up !== undefined;
+      const before = editDebt
+        ? (db.prepare('SELECT bottle_debt_voi, bottle_debt_up FROM customers WHERE id = ?').get(id) as
+            | { bottle_debt_voi: number; bottle_debt_up: number }
+            | undefined)
+        : undefined;
       values.push(id);
       const result = db.prepare(`UPDATE customers SET ${sets.join(', ')} WHERE id = ?`).run(...values);
       if (result.changes === 0) throw new ApiError(404, 'Không tìm thấy khách hàng');
+      // Sửa nợ vỏ trực tiếp: ghi sổ vỏ + dịch chuyển vỏ trong pool để số liệu không bị lệch.
+      if (before) {
+        const after = db.prepare('SELECT bottle_debt_voi, bottle_debt_up FROM customers WHERE id = ?').get(id) as
+          | { bottle_debt_voi: number; bottle_debt_up: number }
+          | undefined;
+        recordBottleDebtAdjustment(
+          id,
+          Number(before.bottle_debt_voi) || 0,
+          Number(before.bottle_debt_up) || 0,
+          Math.max(0, Number(after?.bottle_debt_voi) || 0),
+          Math.max(0, Number(after?.bottle_debt_up) || 0),
+          String(body.date || today()),
+          'Điều chỉnh nợ vỏ thủ công'
+        );
+      }
       res.json({ success: true, id });
     })
   );

@@ -22,6 +22,7 @@ const [
   { inventoryRouter },
   { reportsRouter },
   { invoicesRouter },
+  { customersRouter },
   { applyStockDelta, recordMovement },
   { dateKey, nowStamp, today },
   { errorMiddleware },
@@ -33,6 +34,7 @@ const [
   import('../src/routes/inventory.js'),
   import('../src/routes/reports.js'),
   import('../src/routes/invoices.js'),
+  import('../src/routes/customers.js'),
   import('../src/lib/stock.js'),
   import('../src/lib/codes.js'),
   import('../src/lib/http.js'),
@@ -40,7 +42,7 @@ const [
 const db = getDb();
 const app = express();
 app.use(express.json());
-for (const router of [ordersRouter(), stockTicketsRouter(), settingsRouter(), inventoryRouter(), reportsRouter(), invoicesRouter()]) app.use('/api', router);
+for (const router of [ordersRouter(), stockTicketsRouter(), settingsRouter(), inventoryRouter(), reportsRouter(), invoicesRouter(), customersRouter()]) app.use('/api', router);
 app.use(errorMiddleware);
 const server = await new Promise<ReturnType<typeof app.listen>>((resolve) => {
   const listener = app.listen(0, '127.0.0.1', () => resolve(listener));
@@ -313,4 +315,38 @@ test('Hóa đơn đơn có giảm giá: trước thuế + thuế đúng bằng t
     `Thuế ${invoice.tax_amount} phải xấp xỉ VAT của ${goodsAfterDiscount} là ${Math.round(vatInside)}`
   );
   assert.ok(invoice.tax_amount < Math.round((order.subtotal_amount * 8) / 100), 'Không được tính thuế trên phần đã giảm giá');
+});
+
+test('Khai/sửa nợ vỏ của khách luôn khớp pool vỏ và sổ vỏ khách', async () => {
+  const shellStock = () => one<{ quantity: number }>('SELECT quantity FROM shell_stock WHERE bottle_type = ?', 'VOI')?.quantity ?? 0;
+  const before = shellStock();
+  // Tạo khách khai sẵn 5 vỏ Vòi.
+  const created = await api('POST', '/customers', {
+    name: 'Khách nợ vỏ', address: 'Hạ Long', bottle_debt_voi: 5,
+  });
+  assert.equal(created.status, 200, JSON.stringify(created.data));
+  const id = Number(created.data.id);
+  assert.equal(shellStock(), before - 5, 'Tạo khách nợ 5 vỏ phải xuất 5 vỏ ra khỏi pool');
+  assert.equal(
+    one<{ c: number }>(`SELECT COUNT(*) AS c FROM customer_bottle_ledgers WHERE customer_id = ? AND remaining_balance_voi = 5`, id).c,
+    1,
+    'Phải có dòng sổ vỏ khớp số dư 5'
+  );
+
+  // Tăng nợ 5 → 8.
+  const up = await api('PUT', `/customers/${id}`, { bottle_debt_voi: 8 });
+  assert.equal(up.status, 200, JSON.stringify(up.data));
+  assert.equal(shellStock(), before - 8, 'Tăng nợ thêm 3 phải xuất thêm 3 vỏ');
+
+  // Giảm nợ 8 → 3.
+  const down = await api('PUT', `/customers/${id}`, { bottle_debt_voi: 3 });
+  assert.equal(down.status, 200, JSON.stringify(down.data));
+  assert.equal(shellStock(), before - 3, 'Giảm nợ 5 phải thu hồi 5 vỏ về pool');
+  assert.equal(
+    one<{ remaining_balance_voi: number }>(
+      'SELECT remaining_balance_voi FROM customer_bottle_ledgers WHERE customer_id = ? ORDER BY id DESC LIMIT 1', id
+    ).remaining_balance_voi,
+    3,
+    'Dòng sổ mới nhất phải khớp số dư mới'
+  );
 });
