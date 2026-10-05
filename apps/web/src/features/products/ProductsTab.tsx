@@ -118,6 +118,7 @@ export function ProductsTab() {
 
   const save = async () => {
     if (!form.name || !form.standard_price) return toast.error('Nhập tên và giá bán sản phẩm');
+    if (!form.category_id) return toast.error('Chọn nhóm hàng cho sản phẩm (khai ở Danh mục hệ thống → Nhóm hàng)');
     try {
       const payload = { ...form, has_shell_cycle: form.has_shell_cycle ? 1 : 0 };
       if (editing) {
@@ -241,7 +242,11 @@ export function ProductsTab() {
             <Field label="Mã vạch">
               <Input value={String(form.barcode ?? '')} onChange={(e) => setForm({ ...form, barcode: e.target.value })} />
             </Field>
-            <Field label="Nhóm hàng">
+            <Field
+              label="Nhóm hàng"
+              required
+              error={categories.length === 0 ? 'Chưa có nhóm hàng nào — khai ở Danh mục hệ thống → Nhóm hàng trước khi tạo sản phẩm' : undefined}
+            >
               <Select value={String(form.category_id ?? '')} onChange={(e) => changeCategory(e.target.value)}>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>

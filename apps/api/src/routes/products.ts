@@ -41,10 +41,13 @@ export function productsRouter(): Router {
           ? netPrice(standardPrice, vatRateAt(db))
           : providedCost;
       const result = db.transaction(() => {
-        const category = db
-          .prepare(`SELECT type FROM categories WHERE id = ?`)
-          .get(Number(body.category_id) || 1) as { type: string } | undefined;
-        const categoryType = category?.type ?? '';
+        // Nhóm hàng là bắt buộc và phải tồn tại: không đoán bừa id 1 vì CSDL có thể chưa khai nhóm nào
+        // (lỗi khoá ngoại khi đó rất khó hiểu với người dùng).
+        const categoryId = Number(body.category_id) || 0;
+        if (!categoryId) throw badRequest('Chọn nhóm hàng cho sản phẩm (khai ở Danh mục hệ thống → Nhóm hàng)');
+        const category = db.prepare(`SELECT type FROM categories WHERE id = ?`).get(categoryId) as { type: string } | undefined;
+        if (!category) throw badRequest('Nhóm hàng đã chọn không còn tồn tại — chọn lại nhóm hàng cho sản phẩm');
+        const categoryType = category.type;
         const unit = body.unit || (categoryType === 'PACK_WATER' ? 'Vỉ' : 'Bình');
         // Phân loại: GOODS = hàng bán (có tồn kho, lên đơn được); SERVICE = dịch vụ (không tồn kho, không lên đơn).
         const productType = body.product_type === 'SERVICE' ? 'SERVICE' : 'GOODS';
@@ -66,7 +69,7 @@ export function productsRouter(): Router {
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`
           )
           .run(
-            Number(body.category_id) || 1,
+            categoryId,
             code,
             body.barcode || null,
             body.name,
@@ -79,9 +82,15 @@ export function productsRouter(): Router {
             depositFee
           );
         const productId = Number(insert.lastInsertRowid);
-        const warehouseId = Number(body.warehouse_id) || 1;
         const initialQty = isService ? 0 : Number(body.initial_stock) || 0;
         if (initialQty > 0) {
+          // Kho nhập hàng cũng phải tồn tại thật (kho có thể vừa bị xoá ở màn khác).
+          const warehouseId = Number(body.warehouse_id) || 0;
+          const warehouse = warehouseId
+            ? (db.prepare(`SELECT id FROM warehouses WHERE id = ?`).get(warehouseId) as { id: number } | undefined)
+            : undefined;
+          if (!warehouse) throw badRequest('Chọn kho nhập hàng cho sản phẩm (kho đã chọn không còn tồn tại)');
+
           applyStockDelta(db, { warehouseId, productId, delta: initialQty, allowNegative: true });
           const prodSource = (db.prepare(`SELECT id FROM import_sources WHERE code = 'SRC_PARENT'`).get() ??
             db.prepare(`SELECT id FROM import_sources WHERE code = 'SRC_PRODUCTION'`).get()) as { id: number } | undefined;
@@ -122,6 +131,15 @@ export function productsRouter(): Router {
         'deposit_fee',
         'is_active',
       ];
+      // Đổi nhóm hàng thì nhóm mới phải tồn tại thật (tránh lỗi khoá ngoại khó hiểu).
+      if (body.category_id !== undefined) {
+        const categoryId = Number(body.category_id) || 0;
+        if (!categoryId) throw badRequest('Chọn nhóm hàng cho sản phẩm');
+        if (!db.prepare(`SELECT 1 FROM categories WHERE id = ?`).get(categoryId)) {
+          throw badRequest('Nhóm hàng đã chọn không còn tồn tại — chọn lại nhóm hàng cho sản phẩm');
+        }
+        body.category_id = categoryId;
+      }
       const sets: string[] = [];
       const values: unknown[] = [];
       for (const key of allowed) {
