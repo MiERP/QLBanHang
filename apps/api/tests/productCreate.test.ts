@@ -68,7 +68,12 @@ test('Tồn kho ban đầu với kho không tồn tại: báo rõ kho thay vì l
   });
   assert.equal(res.status, 400);
   assert.match(res.body.error ?? '', /chọn kho nhập hàng/i);
-  assert.equal((db.prepare('SELECT COUNT(*) AS c FROM products').get() as { c: number }).c, 0, 'Không tạo sản phẩm khi kho sai');
+  // Danh mục nền luôn có sẵn nên đếm theo tên sản phẩm vừa gửi để chắc chắn không tạo thêm dòng nào.
+  assert.equal(
+    (db.prepare(`SELECT COUNT(*) AS c FROM products WHERE name = 'Nước bình'`).get() as { c: number }).c,
+    0,
+    'Không tạo sản phẩm khi kho sai'
+  );
 });
 
 test('Nhóm hàng + kho hợp lệ: tạo được sản phẩm và ghi tồn kho ban đầu', async () => {

@@ -12,6 +12,8 @@ const testDir = mkdtempSync(join(tmpdir(), 'qaromi-roundtrip-'));
 process.env.DB_PATH = join(testDir, 'roundtrip.db');
 const seedDb = new Database(process.env.DB_PATH);
 seedDb.exec(readFileSync(new URL('../src/schema.sql', import.meta.url), 'utf8'));
+// Danh mục nền nạp trước vì dữ liệu mẫu tham chiếu ID của nhóm hàng / sản phẩm / nhóm khách hàng.
+seedDb.exec(readFileSync(new URL('../src/catalog.sql', import.meta.url), 'utf8'));
 seedDb.exec(readFileSync(new URL('../src/seed.sql', import.meta.url), 'utf8'));
 
 // Giá trị dễ mất khi qua Excel: chuỗi rỗng, số 0, số âm, số thực, số lớn, chữ có dấu, xuống dòng, NULL.

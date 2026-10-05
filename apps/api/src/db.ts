@@ -259,6 +259,23 @@ function ensureDefaultPhysicalWarehouses(db: Database.Database): void {
   }
 }
 
+// Danh mục nền mặc định (nhóm hàng, sản phẩm, nhóm khách hàng) nằm ở catalog.sql.
+// CSDL mới nạp cùng seed.sql; CSDL đã dùng mà danh mục bị trống (ví dụ bị xoá bằng bản cũ chưa giữ
+// danh mục) thì tự nạp lại để danh mục nền luôn có. catalog.sql dùng INSERT OR IGNORE nên bản ghi
+// người dùng đã có luôn được giữ nguyên, chỉ bổ sung dòng còn thiếu.
+function applyDefaultCatalog(db: Database.Database): void {
+  const isEmpty = (table: string) =>
+    (db.prepare(`SELECT COUNT(*) AS c FROM ${table}`).get() as { c: number }).c === 0;
+  if (!isEmpty('categories') && !isEmpty('products') && !isEmpty('customer_groups')) return;
+  const catalogPath = findSqlPath('catalog.sql');
+  if (!fs.existsSync(catalogPath)) {
+    console.error('[API Database] ERROR: catalog.sql not found!');
+    return;
+  }
+  db.exec(fs.readFileSync(catalogPath, 'utf-8'));
+  console.log('[API Database] Danh mục nền đã được nạp lại từ:', catalogPath);
+}
+
 // Đồng bộ tổng tiền trên đầu đơn với chính các dòng hàng của nó (dữ liệu nhập ngoài app
 // hoặc seed cũ có thể lệch khiến các báo cáo doanh thu không khớp nhau). Idempotent.
 function normalizeOrderTotals(db: Database.Database): void {
@@ -806,8 +823,6 @@ export function resetDatabase(): void {
   }
   db.pragma('foreign_keys = ON');
   initializeDatabase(db, false);
-  // Đảm bảo 5 kho vật lý mặc định luôn có sau khi đưa về mặc định (bên cạnh các kho vật lý khác đã giữ).
-  ensureDefaultPhysicalWarehouses(db);
 }
 
 // Khởi tạo/khôi phục CSDL: áp schema (idempotent), seed dữ liệu gốc khi cần, rồi chạy migration.
@@ -820,6 +835,9 @@ function initializeDatabase(dbInstance: Database.Database, forceSeed: boolean): 
   } else {
     console.error('[API Database] ERROR: schema.sql not found!');
   }
+
+  // Danh mục nền luôn phải có, và phải nạp TRƯỚC dữ liệu mẫu vì dữ liệu mẫu tham chiếu ID danh mục.
+  applyDefaultCatalog(dbInstance);
 
   // Chỉ nạp dữ liệu mẫu cho CSDL MỚI (file chưa có / rỗng) hoặc khi reset có yêu cầu.
   // KHÔNG tự nạp khi bảng đang trống: nút "Xóa toàn bộ dữ liệu" cố ý để lại CSDL trống,
@@ -834,6 +852,10 @@ function initializeDatabase(dbInstance: Database.Database, forceSeed: boolean): 
       console.error('[API Database] ERROR: seed.sql not found!');
     }
   }
+
+  // 5 kho vật lý mặc định cũng là dữ liệu nền — luôn có mặt (kho người dùng tự tạo vẫn được giữ
+  // nguyên). Chạy SAU seed để không tranh ID với dữ liệu mẫu trên CSDL mới.
+  ensureDefaultPhysicalWarehouses(dbInstance);
 
   // Migration nhẹ: bổ sung cột mới vào các bảng đã tồn tại từ phiên bản cũ.
   ensureColumn(dbInstance, 'products', 'barcode', 'TEXT');

@@ -23,10 +23,15 @@ after(() => {
 
 const count = (table: string) => (db.prepare(`SELECT COUNT(*) AS c FROM "${table}"`).get() as { c: number }).c;
 
-test('CSDL trống sẵn có: không nạp lại dữ liệu mẫu khi mở phần mềm', () => {
-  for (const table of ['products', 'customers', 'orders', 'order_items', 'inventory_stock', 'stock_movements']) {
+test('CSDL trống sẵn có: chỉ nạp danh mục nền, KHÔNG nạp dữ liệu mẫu khi mở phần mềm', () => {
+  // Dữ liệu mẫu (khách hàng, đơn hàng, tồn kho, nhân viên, bút toán...) không được sống dậy sau mỗi lần khởi động.
+  for (const table of ['customers', 'orders', 'order_items', 'inventory_stock', 'stock_movements', 'employees', 'invoices']) {
     assert.equal(count(table), 0, `${table} phải giữ nguyên trống`);
   }
+  // Danh mục nền thì luôn có để dùng được ngay.
+  assert.ok(count('categories') > 0, 'Nhóm hàng mặc định');
+  assert.ok(count('products') > 0, 'Sản phẩm mặc định');
+  assert.ok(count('customer_groups') > 0, 'Nhóm khách hàng mặc định');
 });
 
 test('CSDL trống sẵn có: vẫn được nạp danh mục nền để dùng được ngay', () => {
@@ -35,7 +40,13 @@ test('CSDL trống sẵn có: vẫn được nạp danh mục nền để dùng 
   assert.ok(count('org_units') > 0, 'Đơn vị gốc');
   assert.ok(count('import_sources') > 0, 'Nguồn nhập mặc định');
   assert.ok(count('shipping_fees') > 0, 'Phí vận chuyển mặc định');
-  assert.equal(count('warehouses'), 3, 'Chỉ có 3 kho ảo hệ thống');
+  assert.equal(count('warehouses'), 8, '3 kho ảo hệ thống + 5 kho vật lý mặc định');
+  for (const code of ['KHO_TANGAP', 'KHO_HUE', 'KHO_VP', 'KHO_XEDIEN', 'KHO_HALAM']) {
+    assert.ok(
+      (db.prepare('SELECT COUNT(*) AS c FROM warehouses WHERE code = ?').get(code) as { c: number }).c > 0,
+      `Kho mặc định ${code} phải có`
+    );
+  }
 });
 
 test('Sau khi xóa sạch rồi mở lại, CSDL vẫn dùng được bình thường', () => {

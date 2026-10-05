@@ -34,37 +34,9 @@ INSERT INTO employees (id, station_id, code, full_name, position, phone, commiss
 (19, 1, 'NV019', 'Hoàng Văn Mạnh', 'Thủ Kho Tăng Áp', '0936.111.222', 0.0, 0.0),
 (20, 1, 'NV020', 'Tô Việt Hiên', 'Kỹ Thuật Viên DVGT', '0984.004.100', 0.0, 0.0);
 
--- 4. Categories
-INSERT INTO categories (id, code, name, type) VALUES
-(1, 'CAT_BOTTLE_19L', 'Nước Đóng Bình 19L (Vòng quay cọc vỏ)', 'BOTTLE_WATER'),
-(2, 'CAT_PACK_BOTTLES', 'Nước Đóng Chai Nhỏ (Vỉ & Hộp)', 'PACK_WATER'),
-(3, 'CAT_DVGT', 'Dịch Vụ Gia Tăng (Bình NL, Bể Téc)', 'SERVICE_DVGT');
-
--- 5. Products
--- cost_price là GIÁ TRƯỚC THUẾ (giá bán đã gồm VAT 8% → trước thuế = giá bán ÷ 1,08, làm tròn đến đồng),
--- không phải giá vốn. Đây là giá trị phần mềm dùng để suy tiền hàng chưa thuế và lập hóa đơn.
-INSERT INTO products (id, category_id, code, name, unit, bottle_type, standard_price, wholesale_price, cost_price, deposit_fee) VALUES
-(1, 1, 'RO_19L_VOI', 'Nước Tinh Khiết RO QAROMI 19L (Bình Vòi)', 'Bình', 'VOI', 48000.0, 43000.0, 44444.0, 50000.0),
-(2, 1, 'RO_19L_UP', 'Nước Tinh Khiết RO QAROMI 19L (Bình Úp)', 'Bình', 'UP', 48000.0, 43000.0, 44444.0, 50000.0),
-(3, 1, 'KIEM_19L_VOI', 'Nước Ion Kiềm QAROMI 19L (Bình Vòi)', 'Bình', 'VOI', 52000.0, 47000.0, 48148.0, 50000.0),
-(4, 1, 'KIEM_19L_UP', 'Nước Ion Kiềm QAROMI 19L (Bình Úp)', 'Bình', 'UP', 52000.0, 47000.0, 48148.0, 50000.0),
-(5, 2, 'VI_350ML', 'Nước Chai QAROMI 350ml (Vỉ 6 chai)', 'Vỉ', 'NONE', 85000.0, 78000.0, 78704.0, 0.0),
-(6, 2, 'HOP_350ML', 'Nước Chai QAROMI 350ml (Hộp 24 chai)', 'Hộp', 'NONE', 93000.0, 85000.0, 86111.0, 0.0),
-(7, 2, 'VI_500ML', 'Nước Chai QAROMI 500ml (Vỉ 6 chai)', 'Vỉ', 'NONE', 98000.0, 90000.0, 90741.0, 0.0),
-(8, 2, 'HOP_500ML', 'Nước Chai QAROMI 500ml (Hộp 24 chai)', 'Hộp', 'NONE', 106000.0, 98000.0, 98148.0, 0.0),
-(9, 3, 'DV_BINH_NL', 'Vệ Sinh & Bảo Dưỡng Bình Nóng Lạnh', 'Bình', 'NONE', 230000.0, 230000.0, 212963.0, 0.0),
-(10, 3, 'DV_BE_TEC', 'Súc Rửa & Vệ Sinh Bể Ngầm / Téc Nước HTCN', 'Hệ thống', 'NONE', 350000.0, 350000.0, 324074.0, 0.0),
-(11, 3, 'DV_MAY_GIAT', 'Bảo Dưỡng & Vệ Sinh Máy Giặt', 'Máy', 'NONE', 250000.0, 250000.0, 231481.0, 0.0);
-
--- Sản phẩm thuộc nhóm Dịch Vụ Gia Tăng là DỊCH VỤ: không có tồn kho, không lên đơn hàng.
-UPDATE products SET product_type = 'SERVICE'
-WHERE category_id IN (SELECT id FROM categories WHERE type = 'SERVICE_DVGT');
-
--- 7. Customer groups
-INSERT INTO customer_groups (id, code, name) VALUES
-(1, 'GRP_CORP', 'Doanh Nghiệp / Cơ Quan'),
-(2, 'GRP_AGENCY', 'Đại Lý / Cửa Hàng Phân Phối'),
-(3, 'GRP_RETAIL', 'Hộ Gia Đình / Khách Lẻ');
+-- 4-7. Danh mục nền (nhóm hàng, sản phẩm, nhóm khách hàng) nằm ở catalog.sql: file đó được nạp
+--      TRƯỚC file này, và còn được tự nạp lại khi CSDL mất danh mục. Dữ liệu mẫu bên dưới tham
+--      chiếu đúng ID của danh mục nền nên hai file phải đi cùng nhau.
 
 -- 8. Customers
 INSERT INTO customers (id, group_id, code, name, tax_code, phone, address, contact_person, max_debt_limit, current_debt, bottle_debt_voi, bottle_debt_up) VALUES

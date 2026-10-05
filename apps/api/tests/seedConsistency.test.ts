@@ -10,6 +10,8 @@ const testDir = mkdtempSync(join(tmpdir(), 'qaromi-seed-'));
 process.env.DB_PATH = join(testDir, 'seed.db');
 const seeded = new Database(process.env.DB_PATH);
 seeded.exec(readFileSync(new URL('../src/schema.sql', import.meta.url), 'utf8'));
+// Danh mục nền nạp trước vì dữ liệu mẫu tham chiếu ID của nhóm hàng / sản phẩm / nhóm khách hàng.
+seeded.exec(readFileSync(new URL('../src/catalog.sql', import.meta.url), 'utf8'));
 seeded.exec(readFileSync(new URL('../src/seed.sql', import.meta.url), 'utf8'));
 seeded.close();
 

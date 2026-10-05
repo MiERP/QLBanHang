@@ -13,6 +13,8 @@ const testDir = mkdtempSync(join(tmpdir(), 'qaromi-backup-'));
 process.env.DB_PATH = join(testDir, 'backup.db');
 const emptyDb = new Database(process.env.DB_PATH);
 emptyDb.exec(readFileSync(new URL('../src/schema.sql', import.meta.url), 'utf8'));
+// Danh mục nền nạp trước vì dữ liệu mẫu tham chiếu ID của nhóm hàng / sản phẩm / nhóm khách hàng.
+emptyDb.exec(readFileSync(new URL('../src/catalog.sql', import.meta.url), 'utf8'));
 emptyDb.exec(readFileSync(new URL('../src/seed.sql', import.meta.url), 'utf8'));
 emptyDb.close();
 
@@ -180,4 +182,44 @@ test('Kho vật lý mặc định bị xoá thì được tạo lại khi reset'
   const res = await fetch(`${base}/system/reset-database`, { method: 'POST' });
   assert.equal(res.status, 200);
   assert.equal(count('warehouses', `WHERE code = 'KHO_HALAM'`), 1, 'Kho Hà Lầm phải được tạo lại');
+});
+
+test('Danh mục nền bị mất thì được nạp lại (nhóm hàng, sản phẩm, nhóm khách hàng)', async () => {
+  // Mô phỏng CSDL từng bị xoá bằng bản cũ chưa giữ danh mục: mất sạch danh mục nền.
+  // Tắt kiểm tra khoá ngoại khi xoá vì bảng giá / khuyến mãi còn giữ tham chiếu tới sản phẩm.
+  db.pragma('foreign_keys = OFF');
+  db.prepare('DELETE FROM products').run();
+  db.prepare('DELETE FROM categories').run();
+  db.prepare('DELETE FROM customer_groups').run();
+  db.pragma('foreign_keys = ON');
+  assert.equal(count('categories'), 0);
+  assert.equal(count('products'), 0);
+
+  const res = await fetch(`${base}/system/reset-database`, { method: 'POST' });
+  assert.equal(res.status, 200);
+  assert.ok(count('categories') >= 3, 'Nhóm hàng mặc định phải được nạp lại');
+  assert.ok(count('products') >= 11, 'Sản phẩm mặc định phải được nạp lại');
+  assert.ok(count('customer_groups') >= 3, 'Nhóm khách hàng mặc định phải được nạp lại');
+  assert.equal(
+    count('products', `WHERE code = 'RO_19L_VOI' AND is_active = 1`),
+    1,
+    'Sản phẩm mặc định phải dùng được ngay'
+  );
+});
+
+test('Nạp lại danh mục nền không ghi đè dữ liệu người dùng đã có', async () => {
+  // Người dùng đổi tên một nhóm hàng rồi xoá sản phẩm → buộc phải nạp lại danh mục nền.
+  db.prepare(`UPDATE categories SET name = 'Nhóm hàng tôi đổi tên' WHERE id = 1`).run();
+  db.pragma('foreign_keys = OFF');
+  db.prepare('DELETE FROM products').run();
+  db.pragma('foreign_keys = ON');
+
+  const res = await fetch(`${base}/system/reset-database`, { method: 'POST' });
+  assert.equal(res.status, 200);
+  assert.equal(
+    (db.prepare('SELECT name FROM categories WHERE id = 1').get() as { name: string }).name,
+    'Nhóm hàng tôi đổi tên',
+    'Nhóm hàng người dùng đổi tên phải được giữ nguyên'
+  );
+  assert.ok(count('products') >= 11, 'Sản phẩm mặc định phải được nạp lại');
 });
