@@ -660,7 +660,7 @@ function seedMovementsIfEmpty(db: Database.Database) {
     order_code: string;
   }[];
 
-  const stocks = db.prepare(`SELECT warehouse_id, product_id, quantity FROM inventory_stock WHERE quantity > 0`).all() as {
+  const stocks = db.prepare(`SELECT warehouse_id, product_id, quantity FROM inventory_stock`).all() as {
     warehouse_id: number;
     product_id: number;
     quantity: number;
@@ -671,6 +671,14 @@ function seedMovementsIfEmpty(db: Database.Database) {
       (movement_type, source_warehouse_id, target_warehouse_id, source_id, product_id, quantity, quantity_promo, reference_id, performed_by, note, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
+
+  // Bảng tồn kho là số SAU khi các đơn mẫu đã xuất hàng, nên tồn đầu kỳ trong sổ bút toán
+  // phải cộng lại đúng phần đã xuất — nếu không, báo cáo đối soát kho sẽ báo lệch ngay từ dữ liệu gốc.
+  const exportedByCell = new Map<string, number>();
+  for (const it of items) {
+    const key = `${it.warehouse_id}-${it.product_id}`;
+    exportedByCell.set(key, (exportedByCell.get(key) ?? 0) + (Number(it.quantity) || 0) + (Number(it.qp) || 0));
+  }
 
   db.transaction(() => {
     for (const it of items) {
@@ -689,13 +697,15 @@ function seedMovementsIfEmpty(db: Database.Database) {
       );
     }
     for (const s of stocks) {
+      const opening = (Number(s.quantity) || 0) + (exportedByCell.get(`${s.warehouse_id}-${s.product_id}`) ?? 0);
+      if (opening <= 0) continue;
       ins.run(
         'IMPORT',
         null,
         s.warehouse_id,
         prodSource?.id ?? null,
         s.product_id,
-        s.quantity,
+        opening,
         0,
         null,
         null,

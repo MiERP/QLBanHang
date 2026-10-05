@@ -130,7 +130,31 @@ INSERT INTO partner_units (id, code, name, contact_person, phone, address, is_ac
 (1, 'DT_CAM_PHA', 'Xí Nghiệp Nước Cẩm Phả', 'Anh Tuấn', '0203.3861.222', 'Cẩm Phả, Quảng Ninh', 1, 'Đơn vị bạn cùng công ty mẹ'),
 (2, 'DT_BAI_CHAY', 'Xí Nghiệp Nước Bãi Cháy', 'Chị Hạnh', '0203.3846.555', 'Bãi Cháy, Hạ Long', 1, 'Đơn vị bạn cùng công ty mẹ');
 
--- 36. Số dư vỏ đầu kỳ của khách: khách đang giữ vỏ từ trước nên xí nghiệp phải giữ
+-- 36. Hóa đơn cho các đơn đã hoàn tất và đã thu đủ tiền. Doanh thu chỉ tính đơn ĐÃ XUẤT HÓA ĐƠN,
+--     nên thiếu bước này thì mọi báo cáo doanh thu của dữ liệu mẫu đều bằng 0.
+INSERT INTO invoices
+  (invoice_code, order_id, customer_id, invoice_date, invoice_type, buyer_name, tax_code, address,
+   vat_rate, tax_amount, subtotal_amount, total_amount, issued_by, note)
+SELECT 'HD-20260907-0' || o.id,
+       o.id,
+       o.customer_id,
+       o.delivery_date,
+       CASE WHEN o.is_vat_invoice = 1 THEN 'VAT' ELSE 'RETAIL' END,
+       c.name,
+       c.tax_code,
+       c.address,
+       o.vat_rate,
+       0,
+       o.subtotal_amount,
+       o.total_amount,
+       o.seller_employee_id,
+       'Hóa đơn cho đơn ' || o.order_code
+FROM orders o JOIN customers c ON c.id = o.customer_id
+WHERE o.order_status = 'COMPLETED' AND o.payment_status = 'PAID';
+
+UPDATE orders SET invoice_status = 'INVOICED' WHERE id IN (SELECT order_id FROM invoices);
+
+-- 37. Số dư vỏ đầu kỳ của khách: khách đang giữ vỏ từ trước nên xí nghiệp phải giữ
 --     đúng số vỏ ÂM tương ứng (số âm = vỏ đang nằm ngoài thị trường) và đã thu tiền cọc của số vỏ đó.
 --     Thiếu các nhóm dòng dưới đây thì báo cáo "Đối chiếu vỏ" và "Cọc vỏ" sẽ báo lệch ngay từ dữ liệu gốc.
 --     Mức cọc lấy theo sản phẩm (danh mục Cọc vỏ bình được tạo sau bước seed).
@@ -169,4 +193,11 @@ SELECT 'COC-DK-' || code,
        '2026-09-01',
        'Tiền cọc vỏ khách đang giữ đầu kỳ'
 FROM customers WHERE bottle_debt_voi <> 0 OR bottle_debt_up <> 0;
+
+-- 38. Kỳ báo cáo mặc định của dữ liệu mẫu = đúng tháng phát sinh các đơn mẫu (tháng 9/2026),
+--     để mở phần mềm lần đầu là thấy ngay số liệu thay vì bảng điều khiển trống.
+--     Người dùng đổi lại kỳ của mình ở Danh mục hệ thống → Cấu hình chung → Kỳ báo cáo.
+INSERT INTO app_settings (key, value) VALUES
+('report_period_from', '2026-09-01'),
+('report_period_to', '2026-09-30');
 

@@ -33,10 +33,10 @@ test('current test database migrates and a paid sale return reconciles on a copy
     assert.ok((db.prepare('SELECT COUNT(*) AS count FROM orders').get() as { count: number }).count > 0);
     assert.equal((db.prepare('PRAGMA integrity_check').get() as { integrity_check: string }).integrity_check, 'ok');
     assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
+    // Đơn bán đã hoàn tất và đã thu tiền — hóa đơn không tham gia vòng đời đơn nên không lọc theo hóa đơn.
     const candidate = db.prepare(`SELECT o.id, o.order_date, oi.id AS item_id, oi.quantity, o.paid_amount, o.shipping_fee
       FROM orders o JOIN order_items oi ON oi.order_id = o.id
-      WHERE o.order_type = 'SALE' AND o.order_status = 'COMPLETED' AND o.paid_amount > 0
-        AND COALESCE(o.invoice_status, 'NOT_INVOICED') <> 'INVOICED' AND oi.quantity > 0
+      WHERE o.order_type = 'SALE' AND o.order_status = 'COMPLETED' AND o.paid_amount > 0 AND oi.quantity > 0
       ORDER BY o.id, oi.id LIMIT 1`).get() as
       { id: number; order_date: string; item_id: number; quantity: number; paid_amount: number; shipping_fee: number } | undefined;
     assert.ok(candidate, 'The test database must contain a completed paid sale');

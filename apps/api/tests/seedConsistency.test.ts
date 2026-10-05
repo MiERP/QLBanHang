@@ -111,10 +111,72 @@ test('Mã chứng từ không trùng và khoá ngoại toàn vẹn', () => {
           + (SELECT COUNT(*) FROM (SELECT id FROM products GROUP BY code HAVING COUNT(*) > 1))
           + (SELECT COUNT(*) FROM (SELECT id FROM customers GROUP BY code HAVING COUNT(*) > 1))
           + (SELECT COUNT(*) FROM (SELECT id FROM revenue_transactions GROUP BY transaction_code HAVING COUNT(*) > 1))
-          + (SELECT COUNT(*) FROM (SELECT id FROM deposit_transactions GROUP BY transaction_code HAVING COUNT(*) > 1)) AS c`
+          + (SELECT COUNT(*) FROM (SELECT id FROM deposit_transactions GROUP BY transaction_code HAVING COUNT(*) > 1))
+          + (SELECT COUNT(*) FROM (SELECT id FROM invoices GROUP BY invoice_code HAVING COUNT(*) > 1)) AS c`
   ).c;
   assert.equal(duplicates, 0, 'Không mã nào được trùng');
 
   const broken = db.prepare('PRAGMA foreign_key_check').all();
   assert.deepEqual(broken, [], 'Không có khoá ngoại hỏng');
+});
+
+test('Sổ bút toán kho khớp với bảng tồn kho từng kho × mặt hàng', () => {
+  const mismatches = db
+    .prepare(
+      `SELECT w.name AS warehouse, p.name AS product, s.quantity AS stock, COALESCE(m.net, 0) AS ledger
+       FROM inventory_stock s
+       JOIN warehouses w ON w.id = s.warehouse_id
+       JOIN products p ON p.id = s.product_id
+       LEFT JOIN (
+         SELECT warehouse_id, product_id, SUM(delta) AS net FROM (
+           SELECT target_warehouse_id AS warehouse_id, product_id, quantity + COALESCE(quantity_promo, 0) AS delta
+             FROM stock_movements WHERE target_warehouse_id IS NOT NULL
+           UNION ALL
+           SELECT source_warehouse_id, product_id, -(quantity + COALESCE(quantity_promo, 0))
+             FROM stock_movements WHERE source_warehouse_id IS NOT NULL
+         ) GROUP BY warehouse_id, product_id
+       ) m ON m.warehouse_id = s.warehouse_id AND m.product_id = s.product_id
+       WHERE ABS(s.quantity - COALESCE(m.net, 0)) > 0.001`
+    )
+    .all() as { warehouse: string; product: string; stock: number; ledger: number }[];
+  assert.deepEqual(mismatches, [], 'Tồn kho phải khớp tổng bút toán nhập/xuất');
+});
+
+test('Có đơn đã xuất hóa đơn để doanh thu dữ liệu mẫu không bằng 0', () => {
+  const invoiced = one<{ c: number }>(`SELECT COUNT(*) AS c FROM orders WHERE invoice_status = 'INVOICED'`).c;
+  assert.ok(invoiced > 0, 'Dữ liệu mẫu phải có ít nhất một đơn đã xuất hóa đơn');
+
+  const badInvoice = one<{ c: number }>(
+    `SELECT COUNT(*) AS c FROM orders o
+     WHERE o.invoice_status = 'INVOICED'
+       AND (o.order_status <> 'COMPLETED' OR o.payment_status <> 'PAID')`
+  ).c;
+  assert.equal(badInvoice, 0, 'Chỉ đơn đã hoàn tất và thu đủ tiền mới được xuất hóa đơn');
+
+  const orphanInvoice = one<{ c: number }>(
+    `SELECT COUNT(*) AS c FROM invoices i JOIN orders o ON o.id = i.order_id
+     WHERE o.invoice_status <> 'INVOICED' OR ABS(i.total_amount - o.total_amount) > 0.5`
+  ).c;
+  assert.equal(orphanInvoice, 0, 'Mỗi hóa đơn phải gắn với đơn đã đánh dấu xuất và khớp số tiền');
+
+  const revenue = one<{ total: number }>(
+    `SELECT COALESCE(SUM(subtotal_amount), 0) AS total FROM orders
+     WHERE invoice_status = 'INVOICED' AND order_status = 'COMPLETED' AND order_type IN ('SALE', 'BORROW_IN')`
+  ).total;
+  assert.ok(revenue > 0, `Doanh thu dữ liệu mẫu phải lớn hơn 0 (đang là ${revenue})`);
+
+  // Kỳ báo cáo mặc định phải bao trùm các đơn mẫu, nếu không bảng điều khiển mở lần đầu sẽ trống.
+  const period = one<{ from: string; to: string }>(
+    `SELECT (SELECT value FROM app_settings WHERE key = 'report_period_from') AS "from",
+            (SELECT value FROM app_settings WHERE key = 'report_period_to') AS "to"`
+  );
+  assert.ok(period.from && period.to, 'Dữ liệu mẫu phải đặt kỳ báo cáo mặc định');
+
+  const outside = one<{ c: number }>(
+    `SELECT COUNT(*) AS c FROM orders
+     WHERE order_status = 'COMPLETED' AND invoice_status = 'INVOICED' AND (order_date < ? OR order_date > ?)`,
+    period.from,
+    period.to
+  ).c;
+  assert.equal(outside, 0, 'Mọi đơn mẫu đã xuất hóa đơn phải nằm trong kỳ báo cáo mặc định');
 });
