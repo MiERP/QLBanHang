@@ -137,7 +137,8 @@ export interface ShellDepositReportRow {
 }
 
 export interface ShellDepositReport {
-  month: string;
+  from: string;
+  to: string;
   feeVoi: number;
   feeUp: number;
   rows: ShellDepositReportRow[];
@@ -218,6 +219,8 @@ export interface Order {
   order_type?: OrderType;
   partner_unit_id?: number | null;
   partner_unit_name?: string | null;
+  support_station_id?: number | null;
+  support_station_name?: string | null;
   target_scope?: TargetScope;
   loan_settled_at?: string | null;
   loan_settle_type?: 'RETURN_GOODS' | 'PAYMENT' | null;
@@ -295,6 +298,26 @@ export interface Invoice {
   note?: string;
 }
 
+// Dòng sản phẩm trong danh sách hóa đơn theo đơn.
+export interface InvoiceOrderProduct {
+  name: string;
+  quantity: number;
+}
+
+// Một đơn hàng (đã hoàn tất) trong danh sách hóa đơn đã xuất / chưa xuất.
+export interface InvoiceOrderRow {
+  order_id: number;
+  order_code: string;
+  completed_date: string;
+  customer_name: string;
+  contact_person: string;
+  phone: string;
+  address: string;
+  products: InvoiceOrderProduct[];
+  total_quantity: number;
+  total_amount: number;
+}
+
 export interface Employee {
   id: number;
   code: string;
@@ -356,9 +379,7 @@ export interface ShippingFee {
   id: number;
   code: string;
   name: string;
-  fee_per_trip: number;
   fee_per_unit: number;
-  min_fee: number;
   is_active: number;
   note?: string;
 }
@@ -535,7 +556,9 @@ export interface LoanRow {
 }
 
 export interface DashboardData {
-  month: string;
+  from: string;
+  to: string;
+  label: string;
   kpis: {
     revenueToday: number;
     revenueYesterday: number;
@@ -763,9 +786,9 @@ export interface TradeReportSource {
 }
 
 export interface TradeReport {
-  month: string;
   from: string;
   to: string;
+  label: string;
   vatRate: number;
   current: TradeReportBlock;
   cumulative: TradeReportBlock;
@@ -1015,7 +1038,8 @@ export interface PayrollDetailRow {
 }
 
 export interface PayrollReport {
-  month: string;
+  from: string;
+  to: string;
   year: string;
   detail: PayrollDetailRow[];
   summary: {
@@ -1062,3 +1086,11 @@ export interface AuditLogResponse {
 
 // Cấu hình hệ thống (khoá → giá trị). Danh mục khoá nằm ở apps/api/src/lib/appSettings.ts.
 export type AppSettings = Record<string, string>;
+
+// Kỳ báo cáo hiện tại đã phân giải ở backend (từ ngày → đến ngày).
+export interface ReportPeriod {
+  from: string;
+  to: string;
+  label: string;
+  key: string;
+}

@@ -11,8 +11,8 @@ import { StatCard } from '../../components/ui/StatCard';
 import { Tabs } from '../../components/ui/Tabs';
 import { useToast } from '../../components/ui/Toast';
 import { useApi } from '../../lib/hooks';
-import { formatCurrency, formatMonth } from '../../lib/format';
-import type { TargetBoardRow } from '../../types';
+import { formatCurrency, formatDate } from '../../lib/format';
+import type { ReportPeriod, TargetBoardRow } from '../../types';
 
 const GRADE_LABEL: Record<string, { label: string; tone: 'green' | 'cyan' | 'amber' | 'red' | 'navy' }> = {
   A_PLUS: { label: 'Xuất sắc', tone: 'green' },
@@ -29,8 +29,8 @@ function completionTone(c: number): 'green' | 'cyan' | 'amber' | 'red' {
   return 'red';
 }
 
-export function TargetsTab({ month }: { month: string }) {
-  const { data, loading, reload } = useApi(() => api.fetchTargets(month), [month]);
+export function TargetsTab({ period }: { period: ReportPeriod }) {
+  const { data, loading, reload } = useApi(() => api.fetchTargets(period.key), [period.key]);
   const toast = useToast();
 
   const [tab, setTab] = useState('employees');
@@ -57,7 +57,7 @@ export function TargetsTab({ month }: { month: string }) {
         await api.updateTarget(current.target_id, { target_revenue: Number(value) });
       } else {
         await api.createTarget({
-          period: month,
+          period: period.key,
           scope_type: current.scope_type,
           employee_id: current.employee_id ?? null,
           org_unit_id: current.org_unit_id ?? null,
@@ -112,7 +112,7 @@ export function TargetsTab({ month }: { month: string }) {
     <>
       <PageHeader
         title="Chỉ tiêu"
-        subtitle={`${formatMonth(month)} · giao chỉ tiêu doanh thu cho nhân viên hoặc tổ/trạm`}
+        subtitle={`${formatDate(period.from)} → ${formatDate(period.to)} · giao chỉ tiêu doanh thu cho nhân viên hoặc tổ/trạm`}
         actions={
           <Tabs
             items={[
@@ -146,7 +146,7 @@ export function TargetsTab({ month }: { month: string }) {
         onClose={() => setOpen(false)}
         size="sm"
         title={current ? `Chỉ tiêu: ${current.name}` : ''}
-        subtitle={formatMonth(month)}
+        subtitle={`${formatDate(period.from)} → ${formatDate(period.to)}`}
         footer={
           <>
             <Button variant="outline" size="sm" onClick={() => setOpen(false)}>
@@ -159,7 +159,7 @@ export function TargetsTab({ month }: { month: string }) {
         }
       >
         <div className="space-y-3 p-5">
-          <Field label="Chỉ tiêu doanh thu" required hint="Số tiền nhân viên/đơn vị cần đạt trong tháng">
+          <Field label="Chỉ tiêu doanh thu" required hint="Số tiền nhân viên/đơn vị cần đạt trong kỳ">
             <Input type="number" value={value} onChange={(e) => setValue(e.target.value)} />
           </Field>
         </div>

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import ExcelJS from 'exceljs';
 import { getDb } from '../db.js';
-import { customerCode, today } from '../lib/codes.js';
+import { customerCode, revenueCode, today } from '../lib/codes.js';
 import { ORDER_DEBT_EXPR, TOTAL_DEBT_EXPR } from '../lib/customerDebt.js';
 import { ApiError, badRequest, handle } from '../lib/http.js';
 import { returnCustomerShells, shellDepositFees, writeOffCustomerShells } from '../lib/shells.js';
@@ -315,6 +315,42 @@ export function customersRouter(): Router {
     '/customers/receivables',
     handle((_req, res) => {
       res.json(customerDebtData());
+    })
+  );
+
+  // Thu nợ đầu kỳ của khách hàng: giảm current_debt và ghi phiếu thu vào sổ quỹ (không gắn đơn).
+  router.post(
+    '/customers/:id/collect-debt',
+    handle((req, res) => {
+      const id = Number(req.params.id);
+      const customer = db
+        .prepare('SELECT id, name, COALESCE(current_debt, 0) as current_debt FROM customers WHERE id = ?')
+        .get(id) as { id: number; name: string; current_debt: number } | undefined;
+      if (!customer) throw new ApiError(404, 'Không tìm thấy khách hàng');
+      const debt = Number(customer.current_debt) || 0;
+      if (debt <= 0.5) throw badRequest('Khách hàng không còn nợ đầu kỳ');
+
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const amount = Math.round(Number(body.amount) || 0);
+      if (amount <= 0) throw badRequest('Nhập số tiền thu');
+      if (amount > debt + 0.5) throw badRequest(`Số tiền thu vượt nợ đầu kỳ (${debt})`);
+
+      const paymentMethod = body.payment_method === 'BANK_TRANSFER' ? 'BANK_TRANSFER' : 'CASH';
+      const transactionDate = String(body.transaction_date || today());
+      const collectedBy = body.collected_by ? Number(body.collected_by) : null;
+      const note = String(body.note ?? '').trim() || `Thu nợ đầu kỳ của ${customer.name}`;
+
+      const result = db.transaction(() => {
+        db.prepare(
+          `INSERT INTO revenue_transactions
+            (transaction_code, transaction_type, order_id, customer_id, amount, payment_method, collected_by, transaction_date, note)
+           VALUES (?, 'DEBT_COLLECTION', NULL, ?, ?, ?, ?, ?, ?)`
+        ).run(revenueCode(db, transactionDate), id, amount, paymentMethod, collectedBy, transactionDate, note);
+        const newDebt = debt - amount;
+        db.prepare('UPDATE customers SET current_debt = ? WHERE id = ?').run(newDebt, id);
+        return { remaining: newDebt };
+      })();
+      res.json({ success: true, customerId: id, remaining: result.remaining });
     })
   );
 

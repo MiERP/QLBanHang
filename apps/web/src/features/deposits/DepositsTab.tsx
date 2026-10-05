@@ -1,5 +1,5 @@
 import { Plus } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import * as api from '../../api';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -11,20 +11,15 @@ import { useToast } from '../../components/ui/Toast';
 import { useReference } from '../../context/ReferenceContext';
 import { useApi } from '../../lib/hooks';
 import { formatCurrency, formatDate, todayISO } from '../../lib/format';
-import type { DepositTransaction } from '../../types';
+import type { DepositTransaction, ReportPeriod } from '../../types';
 
-export function DepositsTab({ month }: { month: string }) {
+export function DepositsTab({ period }: { period: ReportPeriod }) {
   const { customers, staff } = useReference();
   const toast = useToast();
 
-  const [from, setFrom] = useState(`${month}-01`);
-  const [to, setTo] = useState(`${month}-31`);
+  const from = period.from;
+  const to = period.to;
   const [type, setType] = useState('');
-
-  useEffect(() => {
-    setFrom(`${month}-01`);
-    setTo(`${month}-31`);
-  }, [month]);
 
   const { data, loading, reload } = useApi(() => api.fetchDeposits({ from, to, type: type || undefined }), [from, to, type]);
 
@@ -87,13 +82,7 @@ export function DepositsTab({ month }: { month: string }) {
         }
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-4">
-        <Field label="Từ ngày">
-          <Input dense type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-        </Field>
-        <Field label="Đến ngày">
-          <Input dense type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-        </Field>
+      <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-3">
         <Field label="Loại phiếu">
           <Select dense value={type} onChange={(e) => setType(e.target.value)}>
             <option value="">Tất cả</option>
@@ -101,6 +90,7 @@ export function DepositsTab({ month }: { month: string }) {
             <option value="REFUND">Hoàn cọc</option>
           </Select>
         </Field>
+        <span className="mb-1 text-xs text-slate-500">Kỳ báo cáo: {formatDate(from)} → {formatDate(to)}</span>
       </div>
 
       <div className="mb-3 flex flex-wrap gap-5 text-sm text-slate-600">

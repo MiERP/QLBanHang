@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import { loanWarehouseId } from '../db.js';
-import { freeShipWithoutShipper } from './appSettings.js';
+import { freeShipForCustomer, freeShipWithoutShipper } from './appSettings.js';
 import { dateKey, dispatchCode, nextCode, revenueCode } from './codes.js';
 import { ApiError, badRequest } from './http.js';
 import { createTicket, deleteTicket, postTicket, ticketsOfOrder } from './stockTickets.js';
@@ -247,7 +247,9 @@ export function recalcTotals(db: Database.Database, orderId: number) {
   const netVoi = borrowedVoi - (Number(row.returned_shells_voi) || 0);
   const netUp = borrowedUp - (Number(row.returned_shells_up) || 0);
   const deposit = Math.max(0, netVoi) * feeVoi + Math.max(0, netUp) * feeUp;
-  const total = (row.order_type === 'LEND_OUT' || row.order_type === 'HIRED_LOAD' ? 0 : subtotal - discount) + shippingFee;
+  // Miễn ship cho khách (cấu hình chung): khách chỉ trả tiền hàng, phí ship vẫn lưu (shipping_fee) để tính công giao hàng.
+  const goodsTotal = row.order_type === 'LEND_OUT' || row.order_type === 'HIRED_LOAD' ? 0 : subtotal - discount;
+  const total = goodsTotal + (freeShipForCustomer(db) ? 0 : shippingFee);
   db.prepare(
     `UPDATE orders SET subtotal_amount = ?, shipping_fee = ?, deposit_amount = ?, total_amount = ? WHERE id = ?`
   ).run(subtotal, shippingFee, deposit, total, orderId);

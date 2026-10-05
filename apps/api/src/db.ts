@@ -770,6 +770,8 @@ export function getDb(): Database.Database {
   ensureColumn(dbInstance, 'orders', 'returned_shells_voi', 'INTEGER DEFAULT 0');
   ensureColumn(dbInstance, 'orders', 'returned_shells_up', 'INTEGER DEFAULT 0');
   ensureColumn(dbInstance, 'orders', 'merged_into_id', 'INTEGER');
+  ensureColumn(dbInstance, 'orders', 'support_station_id', 'INTEGER');
+  dropColumnIfExists(dbInstance, 'orders', 'free_ship_customer');
   ensureColumn(dbInstance, 'stock_movements', 'ticket_id', 'INTEGER');
   ensureColumn(dbInstance, 'stock_tickets', 'status', "TEXT DEFAULT 'DRAFT'");
   ensureColumn(dbInstance, 'stock_tickets', 'check_note', 'TEXT');
@@ -908,6 +910,10 @@ export function getDb(): Database.Database {
 
   seedOrgData(dbInstance);
   seedMovementsIfEmpty(dbInstance);
+
+  // Gỡ 2 cột phí thừa không dùng (chỉ fee_per_unit có tác dụng) — DB cũ còn giữ thì xoá cho sạch.
+  dropColumnIfExists(dbInstance, 'shipping_fees', 'fee_per_trip');
+  dropColumnIfExists(dbInstance, 'shipping_fees', 'min_fee');
 
   // Mức phí mặc định đã chốt: 5.000đ cho mỗi đơn vị hàng thực giao.
   if (!(dbInstance.prepare('SELECT 1 FROM shipping_fees LIMIT 1').get())) {

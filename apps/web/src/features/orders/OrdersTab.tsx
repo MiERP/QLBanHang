@@ -1,10 +1,11 @@
-import { Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { FileSpreadsheet, Trash2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import * as api from '../../api';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
 import { DataTable, type Column } from '../../components/ui/DataTable';
+import { Field, Select } from '../../components/ui/Field';
 import { ImportExcelButton } from '../../components/ui/ImportExcelButton';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { useToast } from '../../components/ui/Toast';
@@ -22,8 +23,16 @@ export function OrdersTab({ openOrderId, onOpened }: { openOrderId?: number | nu
   const [selected, setSelected] = useState<number[]>([]);
   const [detailId, setDetailId] = useState<number | null>(null);
   const [mergeOpen, setMergeOpen] = useState(false);
+  // Lọc nhanh: 'all' | 'pending_invoice' (đơn hoàn tất chưa xuất hóa đơn, chờ đưa vào doanh thu kỳ sau).
+  const [invoiceFilter, setInvoiceFilter] = useState<'all' | 'pending_invoice'>('all');
 
   const orders = ordersApi.data ?? [];
+  // Đơn đã hoàn tất nhưng chưa xuất hóa đơn — cần người dùng xuất HĐ để được tính doanh thu.
+  const pendingInvoiceOrders = useMemo(
+    () => orders.filter((o) => o.order_status === 'COMPLETED' && o.invoice_status !== 'INVOICED'),
+    [orders]
+  );
+  const visibleOrders = invoiceFilter === 'pending_invoice' ? pendingInvoiceOrders : orders;
   // Đơn được chỉ định từ màn khác có thể không nằm trong danh sách đã tải -> tải riêng theo id.
   const externalApi = useApi(() => (openOrderId ? api.fetchOrder(openOrderId) : Promise.resolve(null)), [openOrderId]);
   const detailOrder =
@@ -49,7 +58,7 @@ export function OrdersTab({ openOrderId, onOpened }: { openOrderId?: number | nu
     );
 
   const toggle = (id: number) => setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  const allChecked = orders.length > 0 && selected.length === orders.length;
+  const allChecked = visibleOrders.length > 0 && selected.length === visibleOrders.length;
 
   const bulk = async (status: string) => {
     try {
@@ -113,7 +122,7 @@ export function OrdersTab({ openOrderId, onOpened }: { openOrderId?: number | nu
         <input
           type="checkbox"
           checked={allChecked}
-          onChange={(e) => setSelected(e.target.checked ? orders.map((o) => o.id) : [])}
+          onChange={(e) => setSelected(e.target.checked ? visibleOrders.map((o) => o.id) : [])}
         />
       ),
       render: (r) => (
@@ -142,6 +151,7 @@ export function OrdersTab({ openOrderId, onOpened }: { openOrderId?: number | nu
     },
     { key: 'seller_name', header: 'Người bán', render: (r) => r.seller_name ?? '—' },
     { key: 'warehouse_name', header: 'Kho', render: (r) => r.warehouse_name ?? '—' },
+    { key: 'support_station_name', header: 'Trạm hỗ trợ', render: (r) => r.support_station_name ?? '—', sortValue: (r) => r.support_station_name ?? '' },
     { key: 'total_amount', header: 'Tổng tiền', align: 'right', render: (r) => formatCurrency(r.total_amount), sortValue: (r) => r.total_amount },
     { key: 'outstanding_amount', header: 'Còn nợ', align: 'right', render: (r) => formatCurrency(r.outstanding_amount ?? 0), sortValue: (r) => r.outstanding_amount ?? 0 },
     {
@@ -183,7 +193,7 @@ export function OrdersTab({ openOrderId, onOpened }: { openOrderId?: number | nu
 
       <DataTable
         columns={columns}
-        data={orders}
+        data={visibleOrders}
         rowKey={(r) => r.id}
         loading={ordersApi.loading}
         onRowClick={(r) => setDetailId(r.id)}
@@ -192,6 +202,12 @@ export function OrdersTab({ openOrderId, onOpened }: { openOrderId?: number | nu
         initialSortDir="desc"
         toolbar={
           <div className="flex flex-wrap items-center gap-2">
+            <div className="w-60">
+              <Select dense value={invoiceFilter} onChange={(e) => setInvoiceFilter(e.target.value as 'all' | 'pending_invoice')}>
+                <option value="all">Tất cả đơn</option>
+                <option value="pending_invoice">Chờ xuất hóa đơn ({pendingInvoiceOrders.length})</option>
+              </Select>
+            </div>
             <span className="text-xs font-semibold text-slate-500">Đã chọn {selected.length}</span>
             <Button size="sm" variant="success" disabled={!canBulk('CONFIRMED')} onClick={() => bulk('CONFIRMED')}>
               {ORDER_ACTION_LABEL.CONFIRMED}
@@ -216,6 +232,9 @@ export function OrdersTab({ openOrderId, onOpened }: { openOrderId?: number | nu
               onClick={removeSelected}
             >
               <Trash2 className="h-3.5 w-3.5" /> Xóa
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => window.open(api.dispatchExportUrl(), '_blank')}>
+              <FileSpreadsheet className="h-3.5 w-3.5" /> Xuất Excel điều phối
             </Button>
             <ImportExcelButton
               kind="orders"

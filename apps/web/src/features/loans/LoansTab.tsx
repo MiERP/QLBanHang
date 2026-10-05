@@ -10,9 +10,9 @@ import { Tabs } from '../../components/ui/Tabs';
 import { useToast } from '../../components/ui/Toast';
 import { useReference } from '../../context/ReferenceContext';
 import { useApi } from '../../lib/hooks';
-import { formatDate, formatMonth, formatNumber } from '../../lib/format';
+import { formatDate, formatNumber } from '../../lib/format';
 import { stockWarehouses } from '../../lib/warehouses';
-import type { LoanRow } from '../../types';
+import type { LoanRow, ReportPeriod } from '../../types';
 
 type Tone = 'neutral' | 'navy' | 'cyan' | 'green' | 'amber' | 'red' | 'indigo';
 
@@ -33,8 +33,8 @@ const isOpen = (row: LoanRow) => row.loan_status === 'OUTSTANDING' || row.loan_s
 // Hai chiều mượn ngược nhau: cho đối tác mượn (đối tác nợ mình) và đi mượn (mình nợ đối tác).
 type Direction = 'ALL' | 'LEND_OUT' | 'BORROW_IN';
 
-export function LoansTab({ month }: { month: string }) {
-  const { data, loading, reload } = useApi(() => api.fetchLoans({ month }), [month]);
+export function LoansTab({ period }: { period: ReportPeriod }) {
+  const { data, loading, reload } = useApi(() => api.fetchLoans({ from: period.from, to: period.to }), [period.from, period.to]);
   const { warehouses } = useReference();
   const toast = useToast();
   const physicalWarehouses = stockWarehouses(warehouses);
@@ -190,7 +190,7 @@ export function LoansTab({ month }: { month: string }) {
     <>
       <PageHeader
         title="Quản lý mượn - trả"
-        subtitle={`${formatMonth(month)} · ${openRows.length} đơn đang mở · ${settledRows.length} đơn đã trả`}
+        subtitle={`${formatDate(period.from)} → ${formatDate(period.to)} · ${openRows.length} đơn đang mở · ${settledRows.length} đơn đã trả`}
         actions={
           <Tabs
             items={[

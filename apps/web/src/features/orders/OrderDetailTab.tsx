@@ -37,8 +37,8 @@ export function OrderDetailTab({ order, onBack, onChanged }: { order: Order; onB
   const isCompleted = order.order_status === 'COMPLETED';
   const canEdit = order.order_status === 'DRAFT' || order.order_status === 'CONFIRMED';
   const invoiced = order.invoice_status === 'INVOICED';
-  // Chỉ đơn có bán hàng (bán, mượn vào rồi bán cho khách) mới xuất hóa đơn hàng hóa.
-  const canInvoice = (order.order_type === 'SALE' || order.order_type === 'BORROW_IN') && isCompleted && !invoiced;
+  // Chỉ đơn có bán hàng (bán, mượn vào rồi bán cho khách) mới xuất hóa đơn hàng hóa — và phải thanh toán đủ.
+  const canInvoice = (order.order_type === 'SALE' || order.order_type === 'BORROW_IN') && isCompleted && !invoiced && order.payment_status === 'PAID';
   // Đơn đã xuất kho không sửa được ở form, nhưng vẫn phải gán được người giao để phân bổ phí ship.
   // Đơn đã giao hoàn tất mới ghi nhận hàng hoàn; đơn đã xuất hóa đơn thì không cho hoàn.
   const canReturn =
@@ -202,7 +202,9 @@ export function OrderDetailTab({ order, onBack, onChanged }: { order: Order; onB
           <span className="text-xs text-slate-400">
             {invoiced
               ? 'Đơn đã hoàn tất và đã xuất hóa đơn — không ghi nhận hàng hoàn được.'
-              : 'Đơn đã hoàn tất — có thể xuất hóa đơn nếu khách cần, hoặc ghi nhận hàng hoàn nếu khách trả lại.'}
+              : order.payment_status === 'PAID'
+                ? 'Đơn đã hoàn tất và thanh toán đủ — có thể xuất hóa đơn, hoặc ghi nhận hàng hoàn nếu khách trả lại.'
+                : 'Đơn đã hoàn tất nhưng chưa thanh toán đủ — thu đủ tiền trước khi xuất hóa đơn.'}
           </span>
         )}
         {order.order_status === 'SHIPPING' && (

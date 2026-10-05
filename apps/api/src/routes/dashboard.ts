@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getDb } from '../db.js';
 import { today } from '../lib/codes.js';
+import { currentReportPeriod } from '../lib/reportPeriod.js';
 import { badRequest, handle } from '../lib/http.js';
 
 export function dashboardRouter(): Router {
@@ -10,13 +11,29 @@ export function dashboardRouter(): Router {
   router.get(
     '/dashboard',
     handle((req, res) => {
+      // Kỳ báo cáo: ưu tiên month=YYYY-MM (xem kỳ cũ / test), thiếu thì lấy kỳ báo cáo hiện tại.
+      const q = req.query as Record<string, string | undefined>;
+      const month = String(q.month || '').slice(0, 7);
+      if (q.month && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw badRequest('Tháng không hợp lệ');
+      let from: string;
+      let to: string;
+      if (/^\d{4}-\d{2}$/.test(month)) {
+        const [y, m] = month.split('-').map(Number);
+        const lastDay = new Date(y, m, 0).getDate();
+        from = `${month}-01`;
+        to = `${month}-${String(lastDay).padStart(2, '0')}`;
+      } else {
+        const period = currentReportPeriod(db);
+        from = period.from;
+        to = period.to;
+      }
+      const periodKey = `${from}..${to}`;
       const todayStr = today();
-      const month = String(req.query.month || todayStr.slice(0, 7));
-      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw badRequest('Tháng không hợp lệ');
-      const yearStart = `${month.slice(0, 4)}-01-01`;
-      const [year, monthNumber] = month.split('-').map(Number);
-      const yearEnd = monthNumber === 12 ? `${year + 1}-01-01` : `${year}-${String(monthNumber + 1).padStart(2, '0')}-01`;
       const yesterday = today(new Date(Date.now() - 86400000).toISOString());
+      // Số liệu luỹ kế "theo năm" vẫn theo năm dương lịch chứa ngày cuối kỳ.
+      const year = Number(to.slice(0, 4));
+      const yearStart = `${year}-01-01`;
+      const yearEnd = `${year + 1}-01-01`;
       // DOANH THU = giá trị đơn hàng đã bán, tức đơn ở trạng thái HOÀN TẤT.
       // Đơn đã ghi nhận HÀNG HOÀN vẫn tính đủ doanh thu gộp và KPI (đơn đã hoàn thành nghĩa vụ);
       // phần hàng hoàn được trừ riêng thành "doanh thu thuần".
@@ -24,52 +41,56 @@ export function dashboardRouter(): Router {
       // Giá trị = tiền hàng (subtotal_amount); phí vận chuyển là tiền công trả nhân viên giao hàng nên tách riêng.
       const completed = `order_status IN ('COMPLETED', 'RETURNED')`;
       const own = `order_type IN ('SALE', 'BORROW_IN')`;
+      // Doanh thu chỉ ghi nhận khi đơn đã xuất hóa đơn.
+      const invoiced = `invoice_status = 'INVOICED'`;
       // Đơn đã rời kho (đang giao hoặc hoàn tất, kể cả đơn đã hoàn hàng) — dùng cho phí vận chuyển.
       const shipped = `order_status IN ('SHIPPING', 'COMPLETED', 'RETURNED')`;
+      const inPeriod = (col: string) => `${col} >= ? AND ${col} <= ?`;
 
       const one = <T>(sql: string, ...params: unknown[]): T => db.prepare(sql).get(...params) as T;
       const all = <T>(sql: string, ...params: unknown[]): T[] => db.prepare(sql).all(...params) as T[];
 
       const revenueToday = one<{ total: number }>(
-        `SELECT COALESCE(SUM(subtotal_amount),0) as total FROM orders WHERE order_date = ? AND ${completed} AND ${own}`,
+        `SELECT COALESCE(SUM(subtotal_amount),0) as total FROM orders WHERE order_date = ? AND ${completed} AND ${own} AND ${invoiced}`,
         todayStr
       ).total;
       const revenueYesterday = one<{ total: number }>(
-        `SELECT COALESCE(SUM(subtotal_amount),0) as total FROM orders WHERE order_date = ? AND ${completed} AND ${own}`,
+        `SELECT COALESCE(SUM(subtotal_amount),0) as total FROM orders WHERE order_date = ? AND ${completed} AND ${own} AND ${invoiced}`,
         yesterday
       ).total;
       const revenueMonth = one<{ total: number }>(
-        `SELECT COALESCE(SUM(subtotal_amount),0) as total FROM orders WHERE strftime('%Y-%m', order_date) = ? AND ${completed} AND ${own}`,
-        month
+        `SELECT COALESCE(SUM(subtotal_amount),0) as total FROM orders WHERE ${inPeriod('order_date')} AND ${completed} AND ${own} AND ${invoiced}`,
+        from, to
       ).total;
       const revenueYear = one<{ total: number }>(
         `SELECT COALESCE(SUM(subtotal_amount),0) as total FROM orders
-         WHERE order_date >= ? AND order_date < ? AND ${completed} AND ${own}`,
+         WHERE order_date >= ? AND order_date < ? AND ${completed} AND ${own} AND ${invoiced}`,
         yearStart, yearEnd
       ).total;
       // Công nợ theo ngày đơn: phần còn phải thu hiện tại, sau thu tiền và hàng hoàn.
       const debtFor = (periodWhere: string, ...params: unknown[]): number => one<{ total: number }>(
         `SELECT COALESCE(SUM(CASE WHEN balance > 0.5 THEN balance ELSE 0 END),0) AS total
          FROM (SELECT o.total_amount - COALESCE(ret.returned_amount,0) - COALESCE(o.paid_amount,0)
-                      + COALESCE(ret.refund_amount,0) AS balance
+                       + COALESCE(ret.refund_amount,0) AS balance
                FROM orders o JOIN customers c ON c.id = o.customer_id AND c.is_active = 1
                LEFT JOIN (SELECT order_id, SUM(returned_amount) AS returned_amount,
-                                 SUM(refund_amount) AS refund_amount FROM order_returns GROUP BY order_id) ret
+                                  SUM(refund_amount) AS refund_amount FROM order_returns GROUP BY order_id) ret
                  ON ret.order_id = o.id
                WHERE o.${completed} AND o.${own} AND ${periodWhere})`, ...params
       ).total;
       const debtToday = debtFor('o.order_date = ?', todayStr);
-      const debtMonth = debtFor("strftime('%Y-%m', o.order_date) = ?", month);
+      const debtMonth = debtFor(inPeriod('o.order_date'), from, to);
       const debtYear = debtFor('o.order_date >= ? AND o.order_date < ?', yearStart, yearEnd);
       const ordersMonth = one<{ total: number }>(
-        `SELECT COUNT(*) as total FROM orders WHERE strftime('%Y-%m', order_date) = ? AND ${completed} AND ${own}`,
-        month
+        `SELECT COUNT(*) as total FROM orders WHERE ${inPeriod('order_date')} AND ${completed} AND ${own} AND ${invoiced}`,
+        from, to
       ).total;
-      // Hàng hoàn trong tháng: lấy từ phiếu nhập "Hàng hoàn" của các đơn, trừ ra khỏi doanh thu gộp.
+      // Hàng hoàn trong kỳ: lấy từ phiếu nhập "Hàng hoàn" của các đơn, trừ ra khỏi doanh thu gộp.
       const revenueReturnedMonth = one<{ total: number }>(
-        `SELECT COALESCE(SUM(returned_amount),0) as total
-         FROM order_returns WHERE strftime('%Y-%m', return_date) = ?`,
-        month
+        `SELECT COALESCE(SUM(r.returned_amount),0) as total
+         FROM order_returns r JOIN orders o ON o.id = r.order_id
+         WHERE ${inPeriod('r.return_date')} AND o.invoice_status = 'INVOICED'`,
+        from, to
       ).total;
       const bottlesRow = one<{ total: number; voi: number; up: number }>(
         `SELECT COALESCE(SUM(oi.quantity),0) as total,
@@ -78,8 +99,8 @@ export function dashboardRouter(): Router {
          FROM order_items oi
          JOIN orders o ON oi.order_id = o.id
          LEFT JOIN products p ON oi.product_id = p.id
-         WHERE strftime('%Y-%m', o.order_date) = ? AND o.${completed} AND o.${own}`,
-        month
+         WHERE ${inPeriod('o.order_date')} AND o.${completed} AND o.${own} AND o.${invoiced}`,
+        from, to
       );
       const bottleDebt = one<{ voi: number; up: number }>(
         `SELECT COALESCE(SUM(bottle_debt_voi),0) as voi, COALESCE(SUM(bottle_debt_up),0) as up FROM customers WHERE is_active = 1`
@@ -103,14 +124,14 @@ export function dashboardRouter(): Router {
 
       const revenueByDay = all<{ date: string; revenue: number; orders: number }>(
         `SELECT order_date as date, COALESCE(SUM(subtotal_amount),0) as revenue, COUNT(*) as orders
-         FROM orders WHERE strftime('%Y-%m', order_date) = ? AND ${completed} AND ${own}
+         FROM orders WHERE ${inPeriod('order_date')} AND ${completed} AND ${own} AND ${invoiced}
          GROUP BY order_date ORDER BY order_date ASC`,
-        month
+        from, to
       );
       const scopeRows = all<{ scope: string; revenue: number }>(
         `SELECT COALESCE(target_scope, 'ENTERPRISE') AS scope, COALESCE(SUM(subtotal_amount),0) AS revenue
-         FROM orders WHERE strftime('%Y-%m', order_date) = ? AND ${completed} AND ${own}
-         GROUP BY COALESCE(target_scope, 'ENTERPRISE')`, month
+         FROM orders WHERE ${inPeriod('order_date')} AND ${completed} AND ${own} AND ${invoiced}
+         GROUP BY COALESCE(target_scope, 'ENTERPRISE')`, from, to
       );
       const scopeRevenue = new Map(scopeRows.map((row) => [row.scope, row.revenue]));
       const revenueByScope = (['COMPANY', 'ENTERPRISE'] as const).map((scope) =>
@@ -146,16 +167,16 @@ export function dashboardRouter(): Router {
                 COALESCE(rev.revenue,0) as revenue,
                 COALESCE(bot.bottles,0) as bottles
          FROM (SELECT o.warehouse_id as wid, SUM(o.subtotal_amount) as revenue
-               FROM orders o WHERE strftime('%Y-%m', o.order_date) = ? AND o.${completed} AND o.${own}
+               FROM orders o WHERE ${inPeriod('o.order_date')} AND o.${completed} AND o.${own} AND o.${invoiced}
                GROUP BY o.warehouse_id) rev
          JOIN warehouses w ON rev.wid = w.id
          LEFT JOIN (SELECT o.warehouse_id as wid, SUM(oi.quantity) as bottles
                     FROM order_items oi JOIN orders o ON oi.order_id = o.id
-                    WHERE strftime('%Y-%m', o.order_date) = ? AND o.${completed} AND o.${own}
+                    WHERE ${inPeriod('o.order_date')} AND o.${completed} AND o.${own} AND o.${invoiced}
                     GROUP BY o.warehouse_id) bot ON bot.wid = rev.wid
          ORDER BY revenue DESC`,
-        month,
-        month
+        from, to,
+        from, to
       );
 
       const productMix = all<{ name: string; quantity: number; revenue: number }>(
@@ -163,24 +184,24 @@ export function dashboardRouter(): Router {
          FROM order_items oi
          JOIN orders o ON oi.order_id = o.id
          JOIN products p ON oi.product_id = p.id
-         WHERE strftime('%Y-%m', o.order_date) = ? AND o.${completed} AND o.${own}
+         WHERE ${inPeriod('o.order_date')} AND o.${completed} AND o.${own} AND o.${invoiced}
          GROUP BY p.id ORDER BY quantity DESC LIMIT 8`,
-        month
+        from, to
       );
 
       const paymentStatus = all<{ name: string; value: number }>(
         `SELECT payment_status as name, COUNT(*) as value
-         FROM orders WHERE strftime('%Y-%m', order_date) = ? AND ${completed} AND ${own}
+         FROM orders WHERE ${inPeriod('order_date')} AND ${completed} AND ${own} AND ${invoiced}
          GROUP BY payment_status`,
-        month
+        from, to
       );
 
       const salesBySeller = all<{ name: string; revenue: number }>(
         `SELECT e.full_name as name, COALESCE(SUM(o.subtotal_amount),0) as revenue
          FROM orders o JOIN employees e ON o.seller_employee_id = e.id
-         WHERE strftime('%Y-%m', o.order_date) = ? AND o.${completed} AND o.${own}
+         WHERE ${inPeriod('o.order_date')} AND o.${completed} AND o.${own} AND o.${invoiced}
          GROUP BY e.id ORDER BY revenue DESC LIMIT 8`,
-        month
+        from, to
       );
 
       const shipperPerformance = all<{ name: string; trips: number; bottles: number; shipping_fee: number }>(
@@ -190,16 +211,16 @@ export function dashboardRouter(): Router {
                 COALESCE(t.fee,0) as shipping_fee
          FROM (SELECT o.shipper_employee_id as eid, COUNT(*) as trips, SUM(o.shipping_fee) as fee
                FROM orders o
-               WHERE strftime('%Y-%m', o.order_date) = ? AND o.${shipped} AND o.shipper_employee_id IS NOT NULL
+               WHERE ${inPeriod('o.order_date')} AND o.${shipped} AND o.shipper_employee_id IS NOT NULL
                GROUP BY o.shipper_employee_id) t
          JOIN employees e ON t.eid = e.id
          LEFT JOIN (SELECT o.shipper_employee_id as eid, SUM(oi.quantity) as bottles
                     FROM order_items oi JOIN orders o ON oi.order_id = o.id
-                    WHERE strftime('%Y-%m', o.order_date) = ? AND o.${shipped} AND o.shipper_employee_id IS NOT NULL
+                    WHERE ${inPeriod('o.order_date')} AND o.${shipped} AND o.shipper_employee_id IS NOT NULL
                     GROUP BY o.shipper_employee_id) b ON b.eid = t.eid
          ORDER BY bottles DESC`,
-        month,
-        month
+        from, to,
+        from, to
       );
 
       const bottleDebtByCustomer = all<{ name: string; voi: number; up: number }>(
@@ -217,9 +238,9 @@ export function dashboardRouter(): Router {
       const movementsSummary = all<{ name: string; quantity: number }>(
         `SELECT movement_type as name, COALESCE(SUM(quantity),0) as quantity
          FROM stock_movements
-         WHERE strftime('%Y-%m', created_at) = ?
+         WHERE date(created_at) >= ? AND date(created_at) <= ?
          GROUP BY movement_type ORDER BY quantity DESC`,
-        month
+        from, to
       );
 
       const kpiByEmployee = all<{ name: string; completion: number }>(
@@ -233,13 +254,14 @@ export function dashboardRouter(): Router {
            SELECT seller_employee_id as emp, SUM(subtotal_amount) as actual
            FROM orders
            WHERE order_type IN ('SALE', 'BORROW_IN') AND order_status IN ('COMPLETED', 'RETURNED')
-             AND strftime('%Y-%m', order_date) = ?
+             AND invoice_status = 'INVOICED'
+             AND ${inPeriod('order_date')}
            GROUP BY seller_employee_id
          ) a ON a.emp = t.employee_id
          WHERE t.period = ? AND t.scope_type = 'EMPLOYEE' AND t.target_revenue > 0
          ORDER BY completion DESC LIMIT 10`,
-        month,
-        month
+        from, to,
+        periodKey
       );
 
       const cashFlow = all<{ date: string; revenue: number; expense: number }>(
@@ -247,17 +269,19 @@ export function dashboardRouter(): Router {
                 COALESCE((SELECT SUM(amount) FROM revenue_transactions r WHERE r.transaction_date = d.date),0) as revenue,
                 COALESCE((SELECT SUM(amount) FROM expense_transactions x WHERE x.expense_date = d.date),0) as expense
          FROM (
-           SELECT transaction_date as date FROM revenue_transactions WHERE strftime('%Y-%m', transaction_date) = ?
+           SELECT transaction_date as date FROM revenue_transactions WHERE ${inPeriod('transaction_date')}
            UNION
-           SELECT expense_date as date FROM expense_transactions WHERE strftime('%Y-%m', expense_date) = ?
+           SELECT expense_date as date FROM expense_transactions WHERE ${inPeriod('expense_date')}
          ) d
          ORDER BY d.date ASC`,
-        month,
-        month
+        from, to,
+        from, to
       );
 
       res.json({
-        month,
+        from,
+        to,
+        label: `${from} → ${to}`,
         kpis: {
           revenueToday,
           revenueYesterday,

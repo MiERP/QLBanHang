@@ -12,6 +12,7 @@ import type {
   Employee,
   ImportSource,
   Invoice,
+  InvoiceOrderRow,
   LoanRow,
   NotificationsResponse,
   Order,
@@ -22,6 +23,7 @@ import type {
   PriceListEntry,
   Product,
   Promotion,
+  ReportPeriod,
   CustomerDebtReport,
   RevenueBorrowedReport,
   RevenueDetailReport,
@@ -118,10 +120,18 @@ export const fetchSettings = () => request<AppSettings>('/settings');
 export const updateSettings = (patch: AppSettings) =>
   put<{ success: boolean; settings: AppSettings }>('/settings', patch);
 
+// Kỳ báo cáo hiện tại (từ ngày → đến ngày) — nguồn duy nhất để hiển thị nhãn kỳ ở mọi màn báo cáo.
+export const fetchReportPeriod = () => request<ReportPeriod>('/report-period');
+
 // Invoices
 export const fetchInvoices = () => request<Invoice[]>('/invoices');
 export const createInvoice = (data: Record<string, unknown>) =>
   post<{ success: boolean; id: number; invoiceCode: string }>('/invoices', data);
+// Danh sách hóa đơn theo ĐƠN (đã xuất / chưa xuất).
+export const fetchInvoiceOrders = (invoiceStatus: 'INVOICED' | 'NOT_INVOICED') =>
+  request<InvoiceOrderRow[]>(`/invoices/orders${qs({ invoice_status: invoiceStatus })}`);
+export const invoiceOrdersExportUrl = (invoiceStatus: 'INVOICED' | 'NOT_INVOICED') =>
+  `${API_BASE}/invoices/orders.xlsx${qs({ invoice_status: invoiceStatus })}`;
 export const customers = resource<Customer>('/customers');
 export const staff = resource<Employee>('/staff');
 
@@ -129,6 +139,8 @@ export const staff = resource<Employee>('/staff');
 export const fetchOrders = (params: { from?: string; to?: string; status?: string; limit?: number; customer_id?: number } = {}) =>
   request<Order[]>(`/orders${qs(params)}`);
 export const fetchOrder = (id: number) => request<Order>(`/orders/${id}`);
+// Xuất Excel các đơn chưa hoàn tất để điều phối công việc.
+export const dispatchExportUrl = () => `${API_BASE}/orders/export-dispatch.xlsx`;
 export const createOrder = (data: Record<string, unknown>) => post<{ success: boolean; orderId: number; orderCode: string; total: number }>('/orders', data);
 export const updateOrder = (id: number, data: Record<string, unknown>) => put<{ success: boolean }>(`/orders/${id}`, data);
 export const updateOrderStatus = (id: number, status: string) =>
@@ -195,10 +207,13 @@ export const fetchRevenue = (params: { from?: string; to?: string; type?: string
   request<RevenueTransaction[]>(`/finance/revenue${qs(params)}`);
 
 // Loans (đơn cho mượn liên đơn vị)
-export const fetchLoans = (params: { month?: string; direction?: string } = {}) => request<LoanRow[]>(`/loans${qs(params)}`);
+export const fetchLoans = (params: { from?: string; to?: string; direction?: string } = {}) => request<LoanRow[]>(`/loans${qs(params)}`);
 // Công nợ phải thu của khách hàng (luỹ kế: nợ đầu kỳ + phần chưa thu của đơn đã hoàn thành).
 export const fetchCustomerDebts = () => request<CustomerDebtReport>('/customers/receivables');
 export const customerDebtExportUrl = () => `${API_BASE}/customers/receivables.xlsx`;
+// Thu nợ đầu kỳ của khách (giảm nợ đầu kỳ, ghi phiếu thu "Thu nợ" vào sổ quỹ).
+export const collectCustomerDebt = (customerId: number, data: Record<string, unknown>) =>
+  post<{ success: boolean; customerId: number; remaining: number }>(`/customers/${customerId}/collect-debt`, data);
 
 export const settleLoan = (orderId: number, data: Record<string, unknown>) =>
   post<{ success: boolean; orderId: number; ticketCode: string | null; returnedValue: number }>(
@@ -214,7 +229,7 @@ export const returnOrder = (orderId: number, data: Record<string, unknown>) =>
   );
 
 // Dashboard
-export const fetchDashboard = (month?: string) => request<DashboardData>(`/dashboard${qs({ month })}`);
+export const fetchDashboard = () => request<DashboardData>('/dashboard');
 
 // Reports
 // Doanh thu xí nghiệp chi tiết (nhóm theo kho xuất hàng / đơn vị của nhân viên bán).
@@ -235,10 +250,10 @@ export const revenueGrossExportUrl = (params: { from?: string; to?: string } = {
 export const fetchExpenseReport = (params: { from?: string; to?: string } = {}) =>
   request<ExpenseReport>(`/reports/expenses${qs(params)}`);
 // borrowed = cộng thêm doanh thu đơn đi mượn hàng của đối tác.
-export const fetchTradeReport = (month: string, borrowed = false) =>
-  request<TradeReport>(`/reports/trade-template${qs({ month, borrowed: borrowed ? 1 : undefined })}`);
-export const tradeReportExportUrl = (month: string, mode: 'net' | 'gross', borrowed = false) =>
-  `${API_BASE}/reports/trade-template.xlsx${qs({ month, mode, borrowed: borrowed ? 1 : undefined })}`;
+export const fetchTradeReport = (borrowed = false) =>
+  request<TradeReport>(`/reports/trade-template${qs({ borrowed: borrowed ? 1 : undefined })}`);
+export const tradeReportExportUrl = (mode: 'net' | 'gross', borrowed = false) =>
+  `${API_BASE}/reports/trade-template.xlsx${qs({ mode, borrowed: borrowed ? 1 : undefined })}`;
 export const fetchStockAudit = (params: { warehouse_id: number; from?: string; to?: string }) =>
   request<StockAuditReport>(`/reports/stock-audit${qs(params)}`);
 // Đối chiếu vỏ bình: vỏ xí nghiệp đang giữ ↔ nợ vỏ khách ↔ sổ vỏ khách (theo loại vỏ, không theo kho).
@@ -248,9 +263,9 @@ export const fetchShellAudit = (params: { from?: string; to?: string } = {}) =>
 export const fetchCashAudit = (params: { customer_id?: number; from?: string; to?: string } = {}) =>
   request<CashAuditReport>(`/reports/cash-audit${qs(params)}`);
 // Đối chiếu vỏ bình & cọc vỏ: nợ vỏ khách đang giữ ↔ tiền cọc đang giữ.
-export const fetchShellDepositReport = (params: { month?: string } = {}) =>
-  request<ShellDepositReport>(`/reports/shell-deposits${qs(params)}`);
-export const shellDepositExportUrl = (month: string) => `${API_BASE}/reports/shell-deposits.xlsx${qs({ month })}`;
+export const fetchShellDepositReport = () =>
+  request<ShellDepositReport>('/reports/shell-deposits');
+export const shellDepositExportUrl = () => `${API_BASE}/reports/shell-deposits.xlsx`;
 
 // Sổ vỏ bình: vỏ xí nghiệp đang giữ (một pool theo loại vỏ) + vỏ khách/đối tác đang giữ.
 export const fetchShellStock = () => request<ShellStockReport>('/shell-stock');
@@ -270,12 +285,12 @@ export const submitStockCount = (data: Record<string, unknown>) =>
   post<{ success: boolean; tickets: string[]; surplus: number; shortage: number }>('/stock-tickets/stock-count', data);
 
 // Bảng lương theo nhân viên (phí vận chuyển / dịch vụ gia tăng)
-export const fetchShippingPayroll = (month: string) =>
-  request<PayrollReport>(`/reports/payroll-shipping${qs({ month })}`);
-export const shippingPayrollExportUrl = (month: string) => `${API_BASE}/reports/payroll-shipping.xlsx${qs({ month })}`;
-export const fetchServicePayroll = (month: string) =>
-  request<PayrollReport>(`/reports/payroll-service${qs({ month })}`);
-export const servicePayrollExportUrl = (month: string) => `${API_BASE}/reports/payroll-service.xlsx${qs({ month })}`;
+export const fetchShippingPayroll = () =>
+  request<PayrollReport>('/reports/payroll-shipping');
+export const shippingPayrollExportUrl = () => `${API_BASE}/reports/payroll-shipping.xlsx`;
+export const fetchServicePayroll = () =>
+  request<PayrollReport>('/reports/payroll-service');
+export const servicePayrollExportUrl = () => `${API_BASE}/reports/payroll-service.xlsx`;
 
 // Deposits (cọc vỏ)
 export const fetchDeposits = (params: { customer_id?: number; type?: string; from?: string; to?: string } = {}) =>

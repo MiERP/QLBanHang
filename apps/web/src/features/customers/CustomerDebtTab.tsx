@@ -20,14 +20,21 @@ interface PayTarget {
   order: CustomerDebtOrderRow;
 }
 
+interface DebtTarget {
+  customerId: number;
+  customerName: string;
+  openingDebt: number;
+}
+
 // Công nợ khách hàng: nợ đầu kỳ + phần chưa thu của các đơn đã hoàn thành (luỹ kế, không theo tháng).
-// Thu nợ ngay tại đây: mỗi lần thu sinh một phiếu thu "Thu nợ" trong sổ quỹ và giảm nợ của đơn.
+// Thu nợ ngay tại đây: thu nợ đầu kỳ trực tiếp, hoặc thu theo đơn — mỗi lần thu sinh phiếu thu "Thu nợ".
 export function CustomerDebtTab() {
   const { data, loading, reload } = useApi(() => api.fetchCustomerDebts(), []);
   const { staff } = useReference();
   const toast = useToast();
 
   const [target, setTarget] = useState<PayTarget | null>(null);
+  const [debtTarget, setDebtTarget] = useState<DebtTarget | null>(null);
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [collectedBy, setCollectedBy] = useState('');
@@ -69,6 +76,39 @@ export function CustomerDebtTab() {
       reload();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Không thu được tiền');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openDebtPay = (customerId: number, customerName: string, openingDebt: number) => {
+    setDebtTarget({ customerId, customerName, openingDebt });
+    setAmount(String(openingDebt));
+    setPaymentMethod('CASH');
+    setCollectedBy('');
+    setTransactionDate(todayISO());
+    setNote('');
+  };
+
+  const submitDebtPay = async () => {
+    if (!debtTarget) return;
+    const value = Number(amount) || 0;
+    if (value <= 0) return toast.error('Nhập số tiền thu');
+    if (value > debtTarget.openingDebt + 0.5) return toast.error(`Số tiền vượt nợ đầu kỳ (${formatCurrency(debtTarget.openingDebt)})`);
+    setSaving(true);
+    try {
+      const res = await api.collectCustomerDebt(debtTarget.customerId, {
+        amount: value,
+        payment_method: paymentMethod,
+        transaction_date: transactionDate,
+        collected_by: collectedBy ? Number(collectedBy) : undefined,
+        note,
+      });
+      toast.success(`Đã thu nợ đầu kỳ ${formatCurrency(value)} — còn lại ${formatCurrency(res.remaining)}`);
+      setDebtTarget(null);
+      reload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Không thu được nợ đầu kỳ');
     } finally {
       setSaving(false);
     }
@@ -140,6 +180,26 @@ export function CustomerDebtTab() {
       sortValue: (r) => r.total_debt,
     },
     { key: 'max_debt_limit', header: 'Hạn mức', align: 'right', render: (r) => (r.max_debt_limit ? formatCurrency(r.max_debt_limit) : '—'), sortValue: (r) => r.max_debt_limit },
+    {
+      key: 'actions',
+      header: 'Thu nợ đầu kỳ',
+      align: 'center',
+      render: (r) =>
+        r.opening_debt > 0.5 ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              openDebtPay(r.customer_id, r.name, r.opening_debt);
+            }}
+          >
+            Thu nợ
+          </Button>
+        ) : (
+          <span className="text-slate-300">—</span>
+        ),
+    },
   ];
 
   return (
@@ -242,6 +302,59 @@ export function CustomerDebtTab() {
             </div>
             <Field label="Ghi chú">
               <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ví dụ: khách chuyển khoản trả nợ tháng 9" />
+            </Field>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={!!debtTarget}
+        onClose={() => setDebtTarget(null)}
+        size="lg"
+        title={debtTarget ? `Thu nợ đầu kỳ: ${debtTarget.customerName}` : ''}
+        subtitle={debtTarget ? `Nợ đầu kỳ còn lại ${formatCurrency(debtTarget.openingDebt)}` : ''}
+        footer={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setDebtTarget(null)}>
+              Hủy bỏ
+            </Button>
+            <Button size="sm" onClick={submitDebtPay} disabled={saving}>
+              {saving ? 'Đang lưu...' : 'Xác nhận thu'}
+            </Button>
+          </>
+        }
+      >
+        {debtTarget && (
+          <div className="space-y-4 p-5">
+            <div className="rounded-lg border border-slate-200 p-3 text-xs text-slate-600">
+              Nợ đầu kỳ của khách <b>{debtTarget.customerName}</b> là <b className="text-brand-red">{formatCurrency(debtTarget.openingDebt)}</b>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Số tiền thu">
+                <Input dense type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" />
+              </Field>
+              <Field label="Hình thức">
+                <Select dense value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+                  <option value="CASH">Tiền mặt</option>
+                  <option value="BANK_TRANSFER">Chuyển khoản</option>
+                </Select>
+              </Field>
+              <Field label="Ngày thu">
+                <Input dense type="date" value={transactionDate} onChange={(e) => setTransactionDate(e.target.value)} />
+              </Field>
+              <Field label="Người thu">
+                <Select dense value={collectedBy} onChange={(e) => setCollectedBy(e.target.value)}>
+                  <option value="">-- Chọn --</option>
+                  {staff.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.full_name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+            <Field label="Ghi chú">
+              <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ví dụ: khách trả nợ cũ từ kỳ trước" />
             </Field>
           </div>
         )}

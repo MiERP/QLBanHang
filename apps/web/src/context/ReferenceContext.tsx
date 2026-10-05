@@ -3,6 +3,7 @@ import {
   categories,
   customerGroups,
   customers,
+  fetchReportPeriod,
   fetchSettings,
   orgUnits,
   partnerUnits,
@@ -21,6 +22,7 @@ import type {
   PartnerUnit,
   Position,
   Product,
+  ReportPeriod,
   Warehouse,
 } from '../types';
 
@@ -36,6 +38,8 @@ interface ReferenceData {
   partnerUnits: PartnerUnit[];
   /** Cấu hình hệ thống (khoá → giá trị) — các màn nghiệp vụ đọc để áp quy tắc chung. */
   settings: AppSettings;
+  /** Kỳ báo cáo hiện tại đã phân giải — làm mới cùng lúc với cấu hình để mọi báo cáo dùng đúng kỳ. */
+  reportPeriod: ReportPeriod | null;
   loading: boolean;
   reload: () => void;
 }
@@ -54,13 +58,14 @@ export function ReferenceProvider({ children }: { children: ReactNode }) {
     customers: [],
     partnerUnits: [],
     settings: {},
+    reportPeriod: null,
   });
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [p, w, e, ou, pos, c, g, cu, pu, st] = await Promise.all([
+      const [p, w, e, ou, pos, c, g, cu, pu, st, rp] = await Promise.all([
         products.list(),
         warehouses.list(),
         staff.list(),
@@ -71,6 +76,7 @@ export function ReferenceProvider({ children }: { children: ReactNode }) {
         customers.list(),
         partnerUnits.list(),
         fetchSettings(),
+        fetchReportPeriod(),
       ]);
       setState({
         products: p,
@@ -83,6 +89,7 @@ export function ReferenceProvider({ children }: { children: ReactNode }) {
         customers: cu,
         partnerUnits: pu,
         settings: st,
+        reportPeriod: rp,
       });
     } finally {
       setLoading(false);

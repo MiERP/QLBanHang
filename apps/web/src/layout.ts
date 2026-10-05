@@ -56,6 +56,8 @@ export type TabId =
   | 'revenue'
   | 'expenses'
   | 'customer-debt'
+  | 'receipts'
+  | 'invoice-list'
   | 'cash-audit'
   | 'deposits'
   | 'shipping-report'
@@ -113,6 +115,8 @@ export const NAV_ITEMS: NavItem[] = [
     children: [
       { id: 'expenses', label: 'Phí vận chuyển', icon: Receipt },
       { id: 'customer-debt', label: 'Công nợ khách hàng', icon: Users },
+      { id: 'receipts', label: 'Phiếu thu', icon: Receipt },
+      { id: 'invoice-list', label: 'Danh sách hóa đơn', icon: Receipt },
       { id: 'cash-audit', label: 'Đối chiếu tiền', icon: Landmark },
       { id: 'deposits', label: 'Dòng tiền cọc vỏ', icon: Coins },
     ],

@@ -276,8 +276,8 @@ test('dashboard reports period revenue and unpaid debt, scope split, and every p
   db.prepare('UPDATE products SET category_id = ? WHERE id = ?').run(serviceCategory, service.product);
   const insert = db.prepare(`INSERT INTO orders
     (order_code, customer_id, seller_employee_id, warehouse_id, order_date, order_status,
-     order_type, target_scope, subtotal_amount, total_amount, paid_amount)
-    VALUES (?, ?, ?, ?, ?, 'COMPLETED', 'SALE', ?, ?, ?, ?)`);
+     order_type, target_scope, subtotal_amount, total_amount, paid_amount, invoice_status)
+    VALUES (?, ?, ?, ?, ?, 'COMPLETED', 'SALE', ?, ?, ?, ?, 'INVOICED')`);
   const make = (code: string, date: string, scope: string, revenue: number, total: number, paid: number) =>
     insert.run(code, f.customer, f.employee, f.warehouse, date, scope, revenue, total, paid);
   make(`DB-AUD-${f.product}-1`, '2041-03-02', 'COMPANY', 100, 120, 20);
@@ -376,6 +376,7 @@ test('fresh source scopes: revenue is consolidated and split by source', async (
   const enterprise = await f.order({ order_date: '2027-04-02', target_scope: 'ENTERPRISE' });
   await finish(company);
   await finish(enterprise);
+  db.prepare("UPDATE orders SET invoice_status = 'INVOICED' WHERE id IN (?, ?)").run(company, enterprise);
   const report = await api('GET', '/reports/trade-template?month=2027-04');
   assert.equal(report.status, 200, JSON.stringify(report.data));
   assert.equal(report.data.current.totals.quantity, 4);

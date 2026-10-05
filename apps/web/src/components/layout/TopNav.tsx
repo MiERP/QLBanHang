@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { NAV_ITEMS, type NavItem, type TabId } from '../../layout';
 import { cn } from '../../lib/cn';
 import { formatDate } from '../../lib/format';
-import type { AppNotification } from '../../types';
+import type { AppNotification, ReportPeriod } from '../../types';
 
 interface TopNavProps {
   active: TabId;
@@ -11,8 +11,7 @@ interface TopNavProps {
   notifications: AppNotification[];
   onOpenNotification: (n: AppNotification) => void;
   onRefreshNotifications: () => void;
-  workDate: string;
-  onWorkDateChange: (date: string) => void;
+  period: ReportPeriod | null;
 }
 
 const ITEM_BASE =
@@ -35,13 +34,11 @@ export function TopNav({
   notifications,
   onOpenNotification,
   onRefreshNotifications,
-  workDate,
-  onWorkDateChange,
+  period,
 }: TopNavProps) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [bellOpen, setBellOpen] = useState(false);
   const barRef = useRef<HTMLElement>(null);
-  const dateRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
@@ -53,14 +50,6 @@ export function TopNav({
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
   }, []);
-
-  // Hiển thị ngày làm việc dạng dd/mm/yyyy; bấm vào mở luôn bộ chọn ngày của trình duyệt.
-  const openDatePicker = () => {
-    const el = dateRef.current as (HTMLInputElement & { showPicker?: () => void }) | null;
-    if (!el) return;
-    if (el.showPicker) el.showPicker();
-    else el.focus();
-  };
 
   const groupActive = (item: NavItem) => item.children?.some((c) => c.id === active) ?? false;
   const unread = notifications.filter((n) => !n.read).length;
@@ -227,22 +216,15 @@ export function TopNav({
             )}
           </div>
 
-          <label
-            onClick={openDatePicker}
-            title="Chọn ngày làm việc"
-            className="relative flex cursor-pointer items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 transition-colors hover:bg-white/10"
+          <span
+            title="Kỳ báo cáo hiện tại"
+            className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5"
           >
             <CalendarDays className="h-4 w-4 shrink-0 text-brand-cyan" />
-            <span className="whitespace-nowrap text-xs font-semibold text-white">{formatDate(workDate)}</span>
-            <input
-              ref={dateRef}
-              type="date"
-              value={workDate}
-              onChange={(e) => onWorkDateChange(e.target.value)}
-              aria-label="Chọn ngày làm việc"
-              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-            />
-          </label>
+            <span className="whitespace-nowrap text-xs font-semibold text-white">
+              {period ? `${formatDate(period.from)} → ${formatDate(period.to)}` : 'Đang tải kỳ…'}
+            </span>
+          </span>
         </div>
       </div>
     </header>

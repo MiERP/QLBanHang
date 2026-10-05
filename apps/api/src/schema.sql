@@ -172,6 +172,7 @@ CREATE TABLE IF NOT EXISTS orders (
     loan_settled_at DATETIME,
     loan_settle_type TEXT CHECK(loan_settle_type IN ('RETURN_GOODS', 'PAYMENT')),
     loan_due_date DATE,
+    support_station_id INTEGER REFERENCES org_units(id),
     note TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -290,9 +291,7 @@ CREATE TABLE IF NOT EXISTS shipping_fees (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     code TEXT UNIQUE NOT NULL,
     name TEXT NOT NULL,
-    fee_per_trip REAL DEFAULT 0.0,
     fee_per_unit REAL DEFAULT 5000.0,
-    min_fee REAL DEFAULT 0.0,
     is_active INTEGER DEFAULT 1,
     note TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP

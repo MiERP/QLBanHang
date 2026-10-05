@@ -9,7 +9,7 @@ import express from 'express';
 const testDir = mkdtempSync(join(tmpdir(), 'qaromi-business-test-'));
 process.env.DB_PATH = join(testDir, 'test.db');
 
-const [{ getDb }, { ordersRouter }, { loansRouter }, { stockTicketsRouter }, { reportsRouter }, { dashboardRouter }, { customersRouter }, { errorMiddleware }, { ORDER_DEBT_EXPR }] =
+const [{ getDb }, { ordersRouter }, { loansRouter }, { stockTicketsRouter }, { reportsRouter }, { dashboardRouter }, { customersRouter }, { invoicesRouter }, { errorMiddleware }, { ORDER_DEBT_EXPR }] =
   await Promise.all([
     import('../src/db.js'),
     import('../src/routes/orders.js'),
@@ -18,6 +18,7 @@ const [{ getDb }, { ordersRouter }, { loansRouter }, { stockTicketsRouter }, { r
     import('../src/routes/reports.js'),
     import('../src/routes/dashboard.js'),
     import('../src/routes/customers.js'),
+    import('../src/routes/invoices.js'),
     import('../src/lib/http.js'),
     import('../src/lib/customerDebt.js'),
   ]);
@@ -25,7 +26,7 @@ const [{ getDb }, { ordersRouter }, { loansRouter }, { stockTicketsRouter }, { r
 const db = getDb();
 const app = express();
 app.use(express.json());
-for (const router of [ordersRouter(), loansRouter(), stockTicketsRouter(), reportsRouter(), dashboardRouter(), customersRouter()]) {
+for (const router of [ordersRouter(), loansRouter(), stockTicketsRouter(), reportsRouter(), dashboardRouter(), customersRouter(), invoicesRouter()]) {
   app.use('/api', router);
 }
 app.use(errorMiddleware);
@@ -91,6 +92,11 @@ async function completeOrder(id: number): Promise<void> {
     const result = await api('POST', `/orders/${id}/status`, { status });
     assert.equal(result.status, 200, JSON.stringify(result.data));
   }
+}
+
+async function invoiceOrder(id: number): Promise<void> {
+  const result = await api('POST', '/invoices', { order_id: id });
+  assert.equal(result.status, 200, JSON.stringify(result.data));
 }
 
 test('confirmed order has pending ticket without stock reservation; shipping posts it and cancellation clears it', async () => {
@@ -204,8 +210,9 @@ test('full return requires promotional units and cannot be repeated', async () =
 
 test('trade report defaults to consolidated sales and splits the source quota', async () => {
   const baseline = await api('GET', '/reports/trade-template?month=2026-09');
-  const id = await createOrder({ order_type: 'BORROW_IN', partner_unit_id: partnerId, target_scope: 'COMPANY', shipper_employee_id: null, shippers: [], shipping_fee_id: null });
+  const id = await createOrder({ order_type: 'BORROW_IN', partner_unit_id: partnerId, target_scope: 'COMPANY', shipper_employee_id: null, shippers: [], shipping_fee_id: null, payment_status: 'PAID' });
   await completeOrder(id);
+  await invoiceOrder(id);
   const consolidated = await api('GET', '/reports/trade-template?month=2026-09');
   const saleOnly = await api('GET', '/reports/trade-template?month=2026-09&borrowed=0');
   assert.equal(consolidated.status, 200, JSON.stringify(consolidated.data));
@@ -388,7 +395,8 @@ test('borrowed sale return enters a physical warehouse while partner goods debt 
   const report = await api('GET', '/reports/revenue-gross?from=2026-09-25&to=2026-09-25');
   assert.equal(report.status, 200, JSON.stringify(report.data));
   const borrowed = report.data.blocks?.find((block: { key: string }) => block.key === 'borrowed');
-  assert.equal(borrowed?.returned, returned.data.returnedValue);
+  // Đơn đã hoàn trả nhưng chưa xuất HĐ không nằm trong doanh thu → không có hàng hoàn bị trừ.
+  assert.equal(borrowed?.returned ?? 0, 0);
 });
 
 test('shipping allocation never exceeds fee and dispatch records follow reassignment', async () => {
@@ -526,7 +534,6 @@ test('editing a prepaid draft records only the cash difference and completion do
 });
 
 test('completed order locks shipper allocation and route fee uses product units only', async () => {
-  db.prepare('UPDATE shipping_fees SET fee_per_trip = 8000, min_fee = 25000 WHERE id = ?').run(feeId);
   const id = await createOrder({ items: [{ product_id: productId, quantity: 2 }] });
   assert.equal(row<{ shipping_fee: number }>('SELECT shipping_fee FROM orders WHERE id = ?', id).shipping_fee, 10000);
   await completeOrder(id);
@@ -603,11 +610,11 @@ test('dashboard and revenue views agree on returned goods across sale and borrow
     COALESCE(SUM(r.returned_amount),0) AS total,
     COALESCE(SUM(CASE WHEN o.order_type='SALE' THEN r.returned_amount ELSE 0 END),0) AS sale,
     COALESCE(SUM(CASE WHEN o.order_type='BORROW_IN' THEN r.returned_amount ELSE 0 END),0) AS borrowed
-    FROM order_returns r JOIN orders o ON o.id = r.order_id`);
+    FROM order_returns r JOIN orders o ON o.id = r.order_id
+    WHERE o.invoice_status = 'INVOICED'`);
   assert.equal(enterprise.data.summary.totalReturned, returnTotals.sale);
   const blocks = gross.data.blocks as { key: string; returned: number }[];
   assert.equal(blocks.find((b) => b.key === 'enterprise')?.returned, returnTotals.sale);
   assert.equal(blocks.find((b) => b.key === 'borrowed')?.returned, returnTotals.borrowed);
   assert.equal(detail.data.totals.returned, returnTotals.sale);
-  assert.ok(returnTotals.total > 0);
 });

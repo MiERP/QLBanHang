@@ -6,8 +6,8 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { StatCard } from '../../components/ui/StatCard';
 import { useApi } from '../../lib/hooks';
-import { formatCurrency, formatDateShort, formatMonth, formatNumber } from '../../lib/format';
-import type { DashboardData, TargetBoardRow } from '../../types';
+import { formatCurrency, formatDate, formatDateShort, formatNumber } from '../../lib/format';
+import type { DashboardData, ReportPeriod, TargetBoardRow } from '../../types';
 import type { TabId } from '../../layout';
 
 function SectionHeading({ title, subtitle }: { title: string; subtitle: string }) {
@@ -77,20 +77,20 @@ function WarehouseStock({ warehouses }: { warehouses: DashboardData['stockByWare
   );
 }
 
-export function OverviewTab({ month, onNavigate }: { month: string; onNavigate: (t: TabId) => void }) {
-  const dashboardApi = useApi(() => api.fetchDashboard(month), [month]);
-  const targetsApi = useApi(() => api.fetchTargets(month), [month]);
+export function OverviewTab({ period, onNavigate }: { period: ReportPeriod; onNavigate: (t: TabId) => void }) {
+  const dashboardApi = useApi(() => api.fetchDashboard(), [period.key]);
+  const targetsApi = useApi(() => api.fetchTargets(period.key), [period.key]);
   const d = dashboardApi.data;
   const k = d?.kpis;
   const scopeChart = (d?.revenueByScope ?? []).map((row) => ({
     name: row.scope === 'COMPANY' ? 'Công ty' : 'Xí nghiệp', 'Doanh thu': row.revenue,
   }));
-  const lastDay = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate();
-  const periodHint = `01/01–${lastDay}/${month.slice(5, 7)}/${month.slice(0, 4)}`;
+  const periodText = `${formatDate(period.from)} → ${formatDate(period.to)}`;
+  const year = period.to.slice(0, 4);
 
   return (
     <>
-      <PageHeader title="Bảng điều khiển" subtitle={`Tình hình điều hành · ${formatMonth(month)}`} />
+      <PageHeader title="Bảng điều khiển" subtitle={`Tình hình điều hành · kỳ ${periodText}`} />
 
       {dashboardApi.error && (
         <Card className="mb-5 border-brand-red/30"><CardBody className="flex flex-wrap items-center justify-between gap-2 text-sm text-brand-red">
@@ -104,8 +104,8 @@ export function OverviewTab({ month, onNavigate }: { month: string; onNavigate: 
             <SectionHeading title="Doanh thu" subtitle="Giá trị tiền hàng của đơn đã hoàn tất, chưa trừ hàng hoàn và không gồm phí vận chuyển." />
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <StatCard icon={Wallet} tone="navy" label="Trong ngày" value={formatCurrency(k?.revenueToday ?? 0)} hint="Hôm nay" />
-              <StatCard icon={BarChart3} tone="cyan" label="Trong tháng" value={formatCurrency(k?.revenueMonth ?? 0)} hint={formatMonth(month)} />
-              <StatCard icon={Building2} tone="green" label="Lũy kế năm" value={formatCurrency(k?.revenueYear ?? 0)} hint={periodHint} />
+              <StatCard icon={BarChart3} tone="cyan" label="Trong kỳ" value={formatCurrency(k?.revenueMonth ?? 0)} hint={periodText} />
+              <StatCard icon={Building2} tone="green" label="Lũy kế năm" value={formatCurrency(k?.revenueYear ?? 0)} hint={`Năm ${year}`} />
             </div>
           </section>
 
@@ -113,16 +113,16 @@ export function OverviewTab({ month, onNavigate }: { month: string; onNavigate: 
             <SectionHeading title="Công nợ chưa thu" subtitle="Số hiện còn phải thu của đơn phát sinh trong kỳ, sau các khoản đã thanh toán và hàng hoàn." />
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <StatCard icon={Wallet} tone="red" label="Phát sinh trong ngày" value={formatCurrency(k?.debtToday ?? 0)} hint="Đơn lập hôm nay" />
-              <StatCard icon={Wallet} tone="amber" label="Phát sinh trong tháng" value={formatCurrency(k?.debtMonth ?? 0)} hint={formatMonth(month)} />
-              <StatCard icon={Wallet} tone="indigo" label="Phát sinh lũy kế năm" value={formatCurrency(k?.debtYear ?? 0)} hint={periodHint} />
+              <StatCard icon={Wallet} tone="amber" label="Phát sinh trong kỳ" value={formatCurrency(k?.debtMonth ?? 0)} hint={periodText} />
+              <StatCard icon={Wallet} tone="indigo" label="Phát sinh lũy kế năm" value={formatCurrency(k?.debtYear ?? 0)} hint={`Năm ${year}`} />
             </div>
           </section>
 
           <div className="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
-            <ChartCard title="Doanh thu theo chỉ tiêu" subtitle={`Công ty và Xí nghiệp · ${formatMonth(month)}`} empty={!scopeChart.some((row) => row['Doanh thu'] > 0)} height={260}>
+            <ChartCard title="Doanh thu theo chỉ tiêu" subtitle={`Công ty và Xí nghiệp · ${periodText}`} empty={!scopeChart.some((row) => row['Doanh thu'] > 0)} height={260}>
               <BarSeries data={scopeChart} xKey="name" currency series={[{ key: 'Doanh thu', name: 'Doanh thu', color: '#2C2C6B' }]} />
             </ChartCard>
-            <ChartCard title="Xu hướng doanh thu" subtitle={`Theo ngày · ${formatMonth(month)}`} empty={(d?.revenueByDay ?? []).length === 0} height={260}>
+            <ChartCard title="Xu hướng doanh thu" subtitle={`Theo ngày · ${periodText}`} empty={(d?.revenueByDay ?? []).length === 0} height={260}>
               <AreaTrend data={(d?.revenueByDay ?? []).map((row) => ({ date: formatDateShort(row.date), revenue: row.revenue }))} xKey="date" currency series={[{ key: 'revenue', name: 'Doanh thu', color: '#50ADDE' }]} />
             </ChartCard>
           </div>
@@ -136,7 +136,7 @@ export function OverviewTab({ month, onNavigate }: { month: string; onNavigate: 
           </section>
 
           <section className="mb-6" aria-label="KPI">
-            <SectionHeading title="KPI nhân viên và đơn vị" subtitle={`Thực hiện so với chỉ tiêu được giao trong ${formatMonth(month)}.`} />
+            <SectionHeading title="KPI nhân viên và đơn vị" subtitle={`Thực hiện so với chỉ tiêu được giao trong kỳ ${periodText}.`} />
             {targetsApi.error && <p role="alert" className="mb-3 text-sm text-brand-red">Không tải được KPI: {targetsApi.error} <button type="button" className="underline" onClick={targetsApi.reload}>Thử lại</button></p>}
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
               <Card><CardHeader title="Nhân viên" subtitle="Doanh thu và tỷ lệ hoàn thành" action={<button type="button" onClick={() => onNavigate('kpi')} className="text-xs font-semibold text-brand-cyan hover:underline">Xem chỉ tiêu →</button>} /><CardBody className="p-0">{targetsApi.error ? <p className="p-5 text-xs text-slate-500">Dữ liệu KPI chưa sẵn sàng.</p> : targetsApi.loading ? <p className="p-5 text-xs text-slate-500">Đang tải KPI…</p> : <KpiTable rows={targetsApi.data?.employees ?? []} label="Nhân viên" />}</CardBody></Card>

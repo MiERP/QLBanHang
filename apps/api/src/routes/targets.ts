@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getDb } from '../db.js';
 import { ApiError, badRequest, handle } from '../lib/http.js';
+import { currentReportPeriod } from '../lib/reportPeriod.js';
 
 function gradeFor(completion: number): string {
   if (completion >= 120) return 'A_PLUS';
@@ -28,7 +29,11 @@ export function targetsRouter(): Router {
   router.get(
     '/targets',
     handle((req, res) => {
-      const period = (req.query.period as string) || new Date().toISOString().slice(0, 7);
+      const cur = currentReportPeriod(db);
+      const period = (req.query.period as string) || cur.key;
+      const m = /^(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})$/.exec(period);
+      const from = m ? m[1] : cur.from;
+      const to = m ? m[2] : cur.to;
       const employees = db
         .prepare(
           `SELECT e.id, e.full_name, e.org_unit_id, ou.name as org_unit_name
@@ -47,10 +52,12 @@ export function targetsRouter(): Router {
           // KPI giữ nguyên giá trị đơn kể cả khi khách đã trả lại hàng: đơn đã hoàn thành nghĩa vụ giao hàng.
           `SELECT seller_employee_id as emp, COALESCE(SUM(subtotal_amount),0) as total
            FROM orders
-           WHERE order_type IN ('SALE', 'BORROW_IN') AND order_status IN ('COMPLETED', 'RETURNED') AND strftime('%Y-%m', order_date) = ?
+           WHERE order_type IN ('SALE', 'BORROW_IN') AND order_status IN ('COMPLETED', 'RETURNED')
+             AND invoice_status = 'INVOICED'
+             AND order_date >= ? AND order_date <= ?
            GROUP BY seller_employee_id`
         )
-        .all(period) as { emp: number; total: number }[];
+        .all(from, to) as { emp: number; total: number }[];
       for (const r of rows) actualByEmployee.set(r.emp, r.total);
 
       const targetByEmployee = new Map<number, Record<string, unknown>>();
@@ -122,7 +129,7 @@ export function targetsRouter(): Router {
     '/targets',
     handle((req, res) => {
       const body = req.body ?? {};
-      const period = body.period || new Date().toISOString().slice(0, 7);
+      const period = body.period || currentReportPeriod(db).key;
       const scopeType = body.scope_type === 'UNIT' ? 'UNIT' : 'EMPLOYEE';
       if (scopeType === 'EMPLOYEE' && !body.employee_id) throw badRequest('Chọn nhân viên');
       if (scopeType === 'UNIT' && !body.org_unit_id) throw badRequest('Chọn đơn vị');

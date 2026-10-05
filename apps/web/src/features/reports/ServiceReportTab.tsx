@@ -9,15 +9,15 @@ import { useToast } from '../../components/ui/Toast';
 import { useReference } from '../../context/ReferenceContext';
 import { useApi } from '../../lib/hooks';
 import { todayISO } from '../../lib/format';
-import type { PayrollItem, ServiceJob } from '../../types';
+import type { PayrollItem, ReportPeriod, ServiceJob } from '../../types';
 import { PayrollReport } from './PayrollReport';
 
-export function ServiceReportTab({ month }: { month: string }) {
+export function ServiceReportTab({ period }: { period: ReportPeriod }) {
   const { customers, staff, products } = useReference();
   const toast = useToast();
   const confirm = useConfirm();
 
-  const payrollApi = useApi(() => api.fetchServicePayroll(month), [month]);
+  const payrollApi = useApi(() => api.fetchServicePayroll(), [period.key]);
   const jobsApi = useApi(() => api.serviceJobs.list(), []);
   const serviceProducts = products.filter((p) => p.product_type === 'SERVICE');
 
@@ -108,7 +108,7 @@ export function ServiceReportTab({ month }: { month: string }) {
         itemLabel="Mã phiếu"
         report={payrollApi.data}
         loading={payrollApi.loading}
-        exportUrl={api.servicePayrollExportUrl(month)}
+        exportUrl={api.servicePayrollExportUrl()}
         onItemClick={openEdit}
         actions={
           <Button variant="outline" onClick={openCreate}>

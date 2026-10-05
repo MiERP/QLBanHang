@@ -4,8 +4,9 @@ import type Database from 'better-sqlite3';
 import { getDb } from '../db.js';
 import { loanState } from './loans.js';
 import { freeShipWithoutShipper } from '../lib/appSettings.js';
+import { currentReportPeriod } from '../lib/reportPeriod.js';
 import { today } from '../lib/codes.js';
-import { badRequest, handle } from '../lib/http.js';
+import { handle } from '../lib/http.js';
 import { shellDepositFees } from '../lib/shells.js';
 import { vatRateAt } from '../lib/vat.js';
 
@@ -43,9 +44,9 @@ interface TradeSourceBlock {
 }
 
 interface TradeReportData {
-  month: string;
   from: string;
   to: string;
+  label: string;
   vatRate: number;
   includeBorrowed: boolean;
   current: TradeBlock;
@@ -112,7 +113,7 @@ async function buildTradeTemplateWorkbook(data: TradeReportData, mode: 'net' | '
   ws.mergeCells(`A4:${totalCol2}4`);
   setCell('A4', 'BÁO CÁO THƯƠNG MẠI NƯỚC ION KIỀM QAROMI', { bold: true, align: 'center', size: 14 });
   ws.mergeCells(`A5:${totalCol2}5`);
-  setCell('A5', `Tháng ${data.month.slice(5, 7)}/${data.month.slice(0, 4)}`, { align: 'center' });
+  setCell('A5', `Kỳ báo cáo: ${data.from} → ${data.to}`, { align: 'center' });
 
   // Chiều cao dòng tiêu đề: ô gộp không tự giãn nên phải đặt sẵn để tên sản phẩm xuống dòng hiển thị đủ.
   ws.getRow(6).height = 26;
@@ -201,7 +202,8 @@ interface PayrollDetailRow {
 }
 
 interface PayrollData {
-  month: string;
+  from: string;
+  to: string;
   year: string;
   detail: PayrollDetailRow[];
   summary: {
@@ -213,7 +215,7 @@ interface PayrollData {
 // Excel bảng lương: sheet 1 chi tiết theo nhân viên (cộng từng người), sheet 2 tổng hợp theo tháng.
 async function buildPayrollWorkbook(data: PayrollData, title: string): Promise<ExcelJS.Buffer> {
   const wb = new ExcelJS.Workbook();
-  const monthLabel = `Tháng ${data.month.slice(5, 7)}/${data.year}`;
+  const monthLabel = `Kỳ ${data.from} → ${data.to}`;
   const FONT = { name: 'Times New Roman', size: 11 };
   const BORDER = {
     top: { style: 'thin' as const },
@@ -315,6 +317,24 @@ export function reportsRouter(): Router {
   const router = Router();
   const db = getDb();
 
+  // Khoảng ngày của báo cáo: ưu tiên tham số from/to từ client, thiếu thì lấy kỳ báo cáo hiện tại.
+  const periodRange = (q: Record<string, string | undefined>): { from: string; to: string } => {
+    const period = currentReportPeriod(db);
+    return { from: q.from || period.from, to: q.to || period.to };
+  };
+
+  // Phân giải kỳ từ query: nếu có month=YYYY-MM thì lấy đúng tháng đó (xem kỳ cũ / xuất Excel),
+  // còn lại ưu tiên from/to rồi mới tới kỳ hiện tại.
+  const resolveReportPeriod = (q: Record<string, string | undefined>): { from: string; to: string } => {
+    const month = String(q.month || '').slice(0, 7);
+    if (/^\d{4}-\d{2}$/.test(month)) {
+      const [y, m] = month.split('-').map(Number);
+      const last = new Date(y, m, 0).getDate();
+      return { from: `${month}-01`, to: `${month}-${String(last).padStart(2, '0')}` };
+    }
+    return periodRange(q);
+  };
+
   // Doanh thu hợp nhất mặc định gồm đơn bán và đơn mượn hàng đối tác về bán.
   // Doanh thu lấy theo dòng hàng thực tế của đơn (khớp với màn Doanh thu, không dùng giá chuẩn).
   // Trước thuế suy ngược theo quy tắc đã chốt: làm tròn đơn giá chưa thuế đến đồng rồi mới nhân SL.
@@ -336,6 +356,7 @@ export function reportsRouter(): Router {
            FROM order_items oi
            JOIN orders o ON oi.order_id = o.id
            WHERE o.order_status = 'COMPLETED' AND o.order_type IN (${includeBorrowed ? "'SALE', 'BORROW_IN'" : "'SALE'"})
+             AND o.invoice_status = 'INVOICED'
              AND o.order_date >= ? AND o.order_date <= ?
              ${scope ? "AND COALESCE(o.target_scope, 'ENTERPRISE') = ?" : ''}
            GROUP BY oi.product_id
@@ -385,25 +406,22 @@ export function reportsRouter(): Router {
     return { rate, block: { items, totals } };
   };
 
-  const tradeReportData = (month: string, includeBorrowed = true): TradeReportData => {
-    const [y, m] = month.split('-').map(Number);
-    const from = `${month}-01`;
-    const lastDay = new Date(y, m, 0).getDate();
-    const to = `${month}-${String(lastDay).padStart(2, '0')}`;
+  const tradeReportData = (from: string, to: string, includeBorrowed = true): TradeReportData => {
+    const year = to.slice(0, 4);
     const current = computeTradeBlock(from, to, includeBorrowed);
-    const cumulative = computeTradeBlock(`${y}-01-01`, to, includeBorrowed);
+    const cumulative = computeTradeBlock(`${year}-01-01`, to, includeBorrowed);
     // Tách doanh thu theo nguồn khách; "Tổng" vẫn là tổng của cả hai nguồn (doanh thu của xí nghiệp).
     const sourcesOf = (start: string, end: string): TradeSourceBlock[] =>
       TRADE_SOURCES.map((source) => ({ key: source.key, label: source.label, block: computeTradeBlock(start, end, includeBorrowed, source.key).block }));
     return {
-      month,
       from,
       to,
+      label: `${from} → ${to}`,
       vatRate: current.rate,
       includeBorrowed,
       current: current.block,
       cumulative: cumulative.block,
-      sources: { current: sourcesOf(from, to), cumulative: sourcesOf(`${y}-01-01`, to) },
+      sources: { current: sourcesOf(from, to), cumulative: sourcesOf(`${year}-01-01`, to) },
     };
   };
 
@@ -445,7 +463,7 @@ export function reportsRouter(): Router {
   const revenueEnterpriseData = (from?: string, to?: string) => {
     // Doanh thu gộp = giá trị đơn hàng đã bán, tính cả đơn đã ghi nhận HÀNG HOÀN (đơn vẫn hoàn thành nghĩa vụ).
     // Hàng hoàn trừ riêng phần đã trả lại, ghi vào kỳ phát sinh hoàn — KPI/chỉ tiêu không bị ảnh hưởng.
-    const clauses: string[] = ["o.order_status IN ('COMPLETED', 'RETURNED')", "o.order_type = 'SALE'"];
+    const clauses: string[] = ["o.order_status IN ('COMPLETED', 'RETURNED')", "o.order_type = 'SALE'", "o.invoice_status = 'INVOICED'"];
     const params: unknown[] = [];
     if (from) {
       clauses.push('o.order_date >= ?');
@@ -458,7 +476,7 @@ export function reportsRouter(): Router {
     const where = `WHERE ${clauses.join(' AND ')}`;
 
     // Hàng hoàn: nguồn duy nhất là phiếu nhập "Hàng hoàn" của đơn, giá trị lấy theo đúng giá đã bán.
-    const returnClauses: string[] = ["t.reason = 'ORDER_RETURN'", "t.status = 'CONFIRMED'", "o.order_type = 'SALE'"];
+    const returnClauses: string[] = ["t.reason = 'ORDER_RETURN'", "t.status = 'CONFIRMED'", "o.order_type = 'SALE'", "o.invoice_status = 'INVOICED'"];
     const returnParams: unknown[] = [];
     if (from) {
       returnClauses.push('t.ticket_date >= ?');
@@ -713,7 +731,7 @@ export function reportsRouter(): Router {
   router.get(
     '/reports/revenue',
     handle((req, res) => {
-      const { from, to } = req.query as Record<string, string | undefined>;
+      const { from, to } = periodRange(req.query as Record<string, string | undefined>);
       res.json(revenueEnterpriseData(from, to));
     })
   );
@@ -724,7 +742,7 @@ export function reportsRouter(): Router {
     params: unknown[];
   }
   const orderScope = (types: string[], from?: string, to?: string): RevenueScope => {
-    const clauses = [`o.order_status IN ('COMPLETED', 'RETURNED')`, `o.order_type IN (${types.map((t) => `'${t}'`).join(',')})`];
+    const clauses = [`o.order_status IN ('COMPLETED', 'RETURNED')`, `o.order_type IN (${types.map((t) => `'${t}'`).join(',')})`, `o.invoice_status = 'INVOICED'`];
     const params: unknown[] = [];
     if (from) {
       clauses.push('o.order_date >= ?');
@@ -738,7 +756,7 @@ export function reportsRouter(): Router {
   };
   // Hàng hoàn tính theo NGÀY HOÀN (không theo ngày bán), đúng nhóm loại đơn đang xem.
   const returnScope = (types: string[], from?: string, to?: string) => {
-    const clauses = [`o.order_type IN (${types.map((t) => `'${t}'`).join(',')})`];
+    const clauses = [`o.order_type IN (${types.map((t) => `'${t}'`).join(',')})`, `o.invoice_status = 'INVOICED'`];
     const params: unknown[] = [];
     if (from) {
       clauses.push('r.return_date >= ?');
@@ -1111,24 +1129,25 @@ export function reportsRouter(): Router {
   router.get(
     '/reports/revenue-detail',
     handle((req, res) => {
-      const { from, to, group } = req.query as Record<string, string | undefined>;
-      res.json({ from: from ?? null, to: to ?? null, ...revenueDetailData(from, to, group) });
+      const q = req.query as Record<string, string | undefined>;
+      const { from, to } = periodRange(q);
+      res.json({ from, to, ...revenueDetailData(from, to, q.group) });
     })
   );
 
   router.get(
     '/reports/revenue-borrowed',
     handle((req, res) => {
-      const { from, to } = req.query as Record<string, string | undefined>;
-      res.json({ from: from ?? null, to: to ?? null, ...revenueBorrowedData(from, to) });
+      const { from, to } = periodRange(req.query as Record<string, string | undefined>);
+      res.json({ from, to, ...revenueBorrowedData(from, to) });
     })
   );
 
   router.get(
     '/reports/revenue-gross',
     handle((req, res) => {
-      const { from, to } = req.query as Record<string, string | undefined>;
-      res.json({ from: from ?? null, to: to ?? null, ...revenueGrossData(from, to) });
+      const { from, to } = periodRange(req.query as Record<string, string | undefined>);
+      res.json({ from, to, ...revenueGrossData(from, to) });
     })
   );
 
@@ -1198,7 +1217,7 @@ export function reportsRouter(): Router {
   router.get(
     '/reports/revenue.xlsx',
     handle(async (req, res) => {
-      const { from, to } = req.query as Record<string, string | undefined>;
+      const { from, to } = periodRange(req.query as Record<string, string | undefined>);
       const d = revenueEnterpriseData(from, to);
       const buffer = await buildReportWorkbook([
         {
@@ -1369,8 +1388,9 @@ export function reportsRouter(): Router {
   router.get(
     '/reports/revenue-detail.xlsx',
     handle(async (req, res) => {
-      const { from, to, group } = req.query as Record<string, string | undefined>;
-      const d = revenueDetailData(from, to, group);
+      const q = req.query as Record<string, string | undefined>;
+      const { from, to } = periodRange(q);
+      const d = revenueDetailData(from, to, q.group);
       const rows = d.rows.map((r) => [
         r.name,
         r.group_type ?? '',
@@ -1437,7 +1457,7 @@ export function reportsRouter(): Router {
   router.get(
     '/reports/revenue-borrowed.xlsx',
     handle(async (req, res) => {
-      const { from, to } = req.query as Record<string, string | undefined>;
+      const { from, to } = periodRange(req.query as Record<string, string | undefined>);
       const d = revenueBorrowedData(from, to);
       const buffer = await buildReportWorkbook([
         {
@@ -1539,7 +1559,7 @@ export function reportsRouter(): Router {
   router.get(
     '/reports/revenue-gross.xlsx',
     handle(async (req, res) => {
-      const { from, to } = req.query as Record<string, string | undefined>;
+      const { from, to } = periodRange(req.query as Record<string, string | undefined>);
       const d = revenueGrossData(from, to);
       const buffer = await buildReportWorkbook([
         {
@@ -1654,7 +1674,7 @@ export function reportsRouter(): Router {
   router.get(
     '/reports/expenses',
     handle((req, res) => {
-      const { from, to } = req.query as Record<string, string | undefined>;
+      const { from, to } = periodRange(req.query as Record<string, string | undefined>);
 
       // Phí vận chuyển là chi phí phát sinh khi hàng đã rời kho (đang giao / hoàn tất).
       const rows = shippingShareRows(from, to);
@@ -1690,35 +1710,30 @@ export function reportsRouter(): Router {
 
   // --- Báo cáo doanh thu theo mẫu nộp Công ty (sau thuế / trước thuế) ---
 
-  const tradeMonth = (raw: unknown): string => {
-    const month = String(raw || '').slice(0, 7);
-    if (!/^\d{4}-\d{2}$/.test(month)) throw badRequest('Thiếu tháng báo cáo (month=YYYY-MM)');
-    return month;
-  };
-
   // Mặc định hợp nhất; ?borrowed=0 chỉ dùng khi cần phân tích riêng doanh thu hàng kho.
   const includeBorrowedFlag = (raw: unknown) => raw !== '0' && raw !== 'false';
 
   router.get(
     '/reports/trade-template',
     handle((req, res) => {
-      const q = req.query as Record<string, unknown>;
-      res.json(tradeReportData(tradeMonth(q.month), includeBorrowedFlag(q.borrowed)));
+      const q = req.query as Record<string, string | undefined>;
+      const { from, to } = resolveReportPeriod(q);
+      res.json(tradeReportData(from, to, includeBorrowedFlag(q.borrowed)));
     })
   );
 
   router.get(
     '/reports/trade-template.xlsx',
     handle(async (req, res) => {
-      const q = req.query as Record<string, unknown>;
-      const month = tradeMonth(q.month);
+      const q = req.query as Record<string, string | undefined>;
+      const { from, to } = resolveReportPeriod(q);
       const mode = q.mode === 'gross' ? 'gross' : 'net';
       const includeBorrowed = includeBorrowedFlag(q.borrowed);
-      const buffer = await buildTradeTemplateWorkbook(tradeReportData(month, includeBorrowed), mode);
+      const buffer = await buildTradeTemplateWorkbook(tradeReportData(from, to, includeBorrowed), mode);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader(
         'Content-Disposition',
-        `attachment; filename="bao-cao-thuong-mai-${month}-${mode}${includeBorrowed ? '-kem-hang-di-muon' : ''}.xlsx"`
+        `attachment; filename="bao-cao-thuong-mai-${from}_${to}-${mode}${includeBorrowed ? '-kem-hang-di-muon' : ''}.xlsx"`
       );
       res.send(Buffer.from(buffer));
     })
@@ -1740,7 +1755,7 @@ export function reportsRouter(): Router {
     refunded_month: number;
   }
 
-  const shellDepositReportData = (db: Database.Database, month: string) => {
+  const shellDepositReportData = (db: Database.Database, from: string, to: string) => {
     const { feeVoi, feeUp } = shellDepositFees(db);
     const raw = db
       .prepare(
@@ -1756,12 +1771,12 @@ export function reportsRouter(): Router {
          LEFT JOIN (SELECT customer_id,
                            SUM(CASE WHEN transaction_type = 'COLLECT' THEN amount ELSE 0 END) as collected,
                            SUM(CASE WHEN transaction_type = 'REFUND' THEN amount ELSE 0 END) as refunded
-                    FROM deposit_transactions WHERE strftime('%Y-%m', transaction_date) = ? GROUP BY customer_id) m
+                    FROM deposit_transactions WHERE transaction_date >= ? AND transaction_date <= ? GROUP BY customer_id) m
                 ON m.customer_id = c.id
          WHERE c.is_active = 1
          ORDER BY (c.bottle_debt_voi + c.bottle_debt_up) DESC, c.id ASC`
       )
-      .all(month) as Omit<ShellDepositReportRow, 'shell_value' | 'balance' | 'diff'>[];
+      .all(from, to) as Omit<ShellDepositReportRow, 'shell_value' | 'balance' | 'diff'>[];
 
     const rows: ShellDepositReportRow[] = raw.map((row) => {
       const shellValue = (Number(row.debt_voi) || 0) * feeVoi + (Number(row.debt_up) || 0) * feeUp;
@@ -1805,22 +1820,22 @@ export function reportsRouter(): Router {
       }
     );
     const mismatchCount = rows.filter((row) => Math.abs(row.diff) > 0.5).length;
-    return { month, feeVoi, feeUp, rows, totals: { ...totals, mismatch_count: mismatchCount } };
+    return { from, to, feeVoi, feeUp, rows, totals: { ...totals, mismatch_count: mismatchCount } };
   };
 
   router.get(
     '/reports/shell-deposits',
     handle((req, res) => {
-      const month = String((req.query.month as string) || '').slice(0, 7);
-      res.json(shellDepositReportData(db, month));
+      const { from, to } = resolveReportPeriod(req.query as Record<string, string | undefined>);
+      res.json(shellDepositReportData(db, from, to));
     })
   );
 
   router.get(
     '/reports/shell-deposits.xlsx',
     handle(async (req, res) => {
-      const month = String((req.query.month as string) || '').slice(0, 7);
-      const data = shellDepositReportData(db, month);
+      const { from, to } = resolveReportPeriod(req.query as Record<string, string | undefined>);
+      const data = shellDepositReportData(db, from, to);
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet('Cọc vỏ bình');
       ws.columns = [
@@ -1835,7 +1850,7 @@ export function reportsRouter(): Router {
         { width: 16 },
       ];
       ws.mergeCells('A1:I1');
-      ws.getCell('A1').value = `ĐỐI CHIẾU VỎ BÌNH - CỌC VỎ${month ? ` THÁNG ${month}` : ''}`;
+      ws.getCell('A1').value = `ĐỐI CHIẾU VỎ BÌNH - CỌC VỎ · KỲ ${from} → ${to}`;
       ws.getCell('A1').font = { bold: true, size: 13 };
       ws.getCell('A1').alignment = { horizontal: 'center' };
       ws.mergeCells('A2:I2');
@@ -1887,7 +1902,7 @@ export function reportsRouter(): Router {
 
       const buffer = await wb.xlsx.writeBuffer();
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', `attachment; filename="doi-chieu-vo-coc${month ? `-${month}` : ''}.xlsx"`);
+      res.setHeader('Content-Disposition', `attachment; filename="doi-chieu-vo-coc-${from}_${to}.xlsx"`);
       res.send(Buffer.from(buffer));
     })
   );
@@ -2486,14 +2501,13 @@ export function reportsRouter(): Router {
     return { year, rows: [...map.values()].sort((a, b) => b.total - a.total) };
   };
 
-  const payrollData = (loadRows: (from: string, to: string) => PayrollSourceRow[], month: string): PayrollData => {
-    const year = month.slice(0, 4);
-    const [y, m] = month.split('-').map(Number);
-    const lastDay = new Date(y, m, 0).getDate();
+  const payrollData = (loadRows: (from: string, to: string) => PayrollSourceRow[], from: string, to: string): PayrollData => {
+    const year = to.slice(0, 4);
     return {
-      month,
+      from,
+      to,
       year,
-      detail: buildPayrollDetail(loadRows(`${month}-01`, `${month}-${String(lastDay).padStart(2, '0')}`)),
+      detail: buildPayrollDetail(loadRows(from, to)),
       summary: buildPayrollSummary(year, loadRows(`${year}-01-01`, `${year}-12-31`)),
     };
   };
@@ -2559,17 +2573,18 @@ export function reportsRouter(): Router {
     router.get(
       `/reports/${base}`,
       handle((req, res) => {
-        res.json(payrollData(loadRows, tradeMonth((req.query as Record<string, unknown>).month)));
+        const { from, to } = resolveReportPeriod(req.query as Record<string, string | undefined>);
+        res.json(payrollData(loadRows, from, to));
       })
     );
 
     router.get(
       `/reports/${base}.xlsx`,
       handle(async (req, res) => {
-        const month = tradeMonth((req.query as Record<string, unknown>).month);
-        const buffer = await buildPayrollWorkbook(payrollData(loadRows, month), title);
+        const { from, to } = resolveReportPeriod(req.query as Record<string, string | undefined>);
+        const buffer = await buildPayrollWorkbook(payrollData(loadRows, from, to), title);
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        res.setHeader('Content-Disposition', `attachment; filename="${base}-${month}.xlsx"`);
+        res.setHeader('Content-Disposition', `attachment; filename="${base}-${from}_${to}.xlsx"`);
         res.send(Buffer.from(buffer));
       })
     );

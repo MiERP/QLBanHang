@@ -7,11 +7,20 @@ export interface SettingDef {
   label: string;
   note: string;
   default: string;
+  // flag: quy tắc bật/tắt (giá trị '0'/'1'); date: ngày dạng YYYY-MM-DD.
+  type?: 'flag' | 'date';
 }
 
 // Bật: đơn để trống người giao là đơn miễn ship — không phát sinh tiền công giao hàng.
 // Tắt: bắt buộc chọn người giao khi lưu đơn.
 export const FREE_SHIP_WITHOUT_SHIPPER = 'free_ship_without_shipper';
+
+// Bật: miễn ship cho khách — khách chỉ trả tiền hàng, phí ship vẫn ghi nhận để trả công giao hàng cuối kỳ.
+export const FREE_SHIP_FOR_CUSTOMER = 'free_ship_for_customer';
+
+// Kỳ báo cáo hiện tại: từ ngày → đến ngày. Để trống = tự dùng tháng dương lịch hiện tại.
+export const REPORT_PERIOD_FROM = 'report_period_from';
+export const REPORT_PERIOD_TO = 'report_period_to';
 
 export const SETTING_DEFS: SettingDef[] = [
   {
@@ -19,6 +28,26 @@ export const SETTING_DEFS: SettingDef[] = [
     label: 'Đơn không có nhân viên vận chuyển là đơn miễn ship',
     note: 'Bật: đơn để trống người giao được coi là đơn miễn ship — không vào báo cáo phí vận chuyển và bảng lương giao hàng. Tắt: bắt buộc chọn người giao khi lưu đơn.',
     default: '0',
+  },
+  {
+    key: FREE_SHIP_FOR_CUSTOMER,
+    label: 'Miễn ship cho khách',
+    note: 'Bật: khách chỉ trả tiền hàng, không trả phí ship; phí ship vẫn được tính và ghi nhận để xí nghiệp trả công nhân viên giao hàng cuối kỳ báo cáo.',
+    default: '0',
+  },
+  {
+    key: REPORT_PERIOD_FROM,
+    label: 'Kỳ báo cáo — từ ngày',
+    note: 'Ngày bắt đầu kỳ báo cáo hiện tại. Để trống sẽ dùng ngày đầu tháng dương lịch hiện tại.',
+    default: '',
+    type: 'date',
+  },
+  {
+    key: REPORT_PERIOD_TO,
+    label: 'Kỳ báo cáo — đến ngày',
+    note: 'Ngày kết thúc kỳ báo cáo hiện tại. Để trống sẽ dùng ngày cuối tháng dương lịch hiện tại.',
+    default: '',
+    type: 'date',
   },
 ];
 
@@ -45,6 +74,11 @@ export function freeShipWithoutShipper(db: Database.Database): boolean {
   return settingFlag(db, FREE_SHIP_WITHOUT_SHIPPER);
 }
 
+// Khách có được miễn phí ship (khách chỉ trả tiền hàng, phí ship vẫn tính công giao hàng) không.
+export function freeShipForCustomer(db: Database.Database): boolean {
+  return settingFlag(db, FREE_SHIP_FOR_CUSTOMER);
+}
+
 // Nhận cả boolean lẫn chuỗi '0'/'1' từ client — chuỗi '0' vẫn là TẮT nên không được dựa vào truthy của JS.
 function toFlag(value: unknown): string {
   return value === false || value === 0 || value === '0' || value === '' || value === null || value === undefined ? '0' : '1';
@@ -59,7 +93,8 @@ export function writeSettings(db: Database.Database, patch: Record<string, unkno
   db.transaction(() => {
     for (const def of SETTING_DEFS) {
       if (!(def.key in patch)) continue;
-      stmt.run(def.key, toFlag(patch[def.key]));
+      // Khoá dạng ngày ghi nguyên giá trị chuỗi (để trống = xoá cấu hình kỳ, rơi về mặc định).
+      stmt.run(def.key, def.type === 'date' ? String(patch[def.key] ?? '').trim() : toFlag(patch[def.key]));
     }
   })();
 }

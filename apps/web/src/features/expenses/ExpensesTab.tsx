@@ -1,15 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import * as api from '../../api';
 import { Badge } from '../../components/ui/Badge';
 import { DataTable, type Column } from '../../components/ui/DataTable';
-import { Field, Input, Select } from '../../components/ui/Field';
+import { Field, Select } from '../../components/ui/Field';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { SubTable, type SubColumn } from '../../components/ui/SubTable';
 import { useReference } from '../../context/ReferenceContext';
 import { useApi } from '../../lib/hooks';
 import { formatCurrency, formatDate, formatMonth, formatNumber } from '../../lib/format';
 import { freeShipWithoutShipper } from '../../lib/settings';
-import type { ExpenseOrderRow } from '../../types';
+import type { ExpenseOrderRow, ReportPeriod } from '../../types';
 import { statusMeta } from '../orders/orderStatus';
 
 type CostMetrics = { trips: number; shipping_fee: number };
@@ -68,17 +68,12 @@ const drillColumns: SubColumn<ExpenseOrderRow>[] = [
   },
 ];
 
-export function ExpensesTab({ month, onOpenOrder }: { month: string; onOpenOrder?: (orderId: number) => void }) {
+export function ExpensesTab({ period, onOpenOrder }: { period: ReportPeriod; onOpenOrder?: (orderId: number) => void }) {
   const { settings } = useReference();
   const freeShipNoShipper = freeShipWithoutShipper(settings);
-  const [from, setFrom] = useState(`${month}-01`);
-  const [to, setTo] = useState(`${month}-31`);
+  const from = period.from;
+  const to = period.to;
   const [group, setGroup] = useState('employee');
-
-  useEffect(() => {
-    setFrom(`${month}-01`);
-    setTo(`${month}-31`);
-  }, [month]);
 
   const { data, loading } = useApi(() => api.fetchExpenseReport({ from, to }), [from, to]);
 
@@ -102,13 +97,7 @@ export function ExpensesTab({ month, onOpenOrder }: { month: string; onOpenOrder
         } Xí nghiệp giữ lại khoản này và cuối tháng cộng vào lương.`}
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-4">
-        <Field label="Từ ngày">
-          <Input dense type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-        </Field>
-        <Field label="Đến ngày">
-          <Input dense type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-        </Field>
+      <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-3">
         <Field label="Xem theo">
           <Select dense value={group} onChange={(e) => setGroup(e.target.value)}>
             <option value="employee">Nhân viên</option>
@@ -117,6 +106,7 @@ export function ExpensesTab({ month, onOpenOrder }: { month: string; onOpenOrder
             <option value="month">Tháng</option>
           </Select>
         </Field>
+        <span className="mb-1 text-xs text-slate-500">Kỳ báo cáo: {formatDate(from)} → {formatDate(to)}</span>
       </div>
 
       <div className="mb-3 flex flex-wrap gap-5 text-sm text-slate-600">

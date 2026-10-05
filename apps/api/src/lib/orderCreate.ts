@@ -163,8 +163,8 @@ export function createOrder(db: Database.Database, body: Record<string, unknown>
           personal_id_vat, budget_relation_code_vat,
           subtotal_amount, shipping_fee, discount_amount, deposit_amount, total_amount, paid_amount,
           shipping_receiver, shipping_phone, shipping_address, shipping_note, shipping_fee_id,
-          returned_shells_voi, returned_shells_up, invoice_status, loan_due_date, note
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, 0, 0, ?, ?, ?, ?, ?, ?, ?, 'NOT_INVOICED', ?, ?)`
+          returned_shells_voi, returned_shells_up, invoice_status, loan_due_date, support_station_id, note
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, 0, 0, ?, ?, ?, ?, ?, ?, ?, 'NOT_INVOICED', ?, ?, ?)`
       )
       .run(
         code,
@@ -197,6 +197,7 @@ export function createOrder(db: Database.Database, body: Record<string, unknown>
         Number(body.returned_shells_voi) || 0,
         Number(body.returned_shells_up) || 0,
         orderType !== 'SALE' && !isHired && body.loan_due_date ? String(body.loan_due_date) : null,
+        body.support_station_id ? Number(body.support_station_id) : null,
         body.note || ''
       );
     const orderId = Number(insert.lastInsertRowid);

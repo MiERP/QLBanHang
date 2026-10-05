@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { fetchNotifications, markNotificationRead } from './api';
 import { TopNav } from './components/layout/TopNav';
-import { ReferenceProvider } from './context/ReferenceContext';
+import { ReferenceProvider, useReference } from './context/ReferenceContext';
 import { AuditLogTab } from './features/audit-log/AuditLogTab';
 import { CreateOrderTab } from './features/create-order/CreateOrderTab';
 import { CustomerDebtTab } from './features/customers/CustomerDebtTab';
@@ -9,8 +9,10 @@ import { CustomerDetailTab } from './features/customers/CustomerDetailTab';
 import { CustomersTab } from './features/customers/CustomersTab';
 import { DepositsTab } from './features/deposits/DepositsTab';
 import { CashAuditTab } from './features/finance/CashAuditTab';
+import { ReceiptsTab } from './features/finance/ReceiptsTab';
 import { ExpensesTab } from './features/expenses/ExpensesTab';
 import { InvoicesTab } from './features/invoices/InvoicesTab';
+import { InvoiceListTab } from './features/invoices/InvoiceListTab';
 import { LoansTab } from './features/loans/LoansTab';
 import { PartnerUnitsTab } from './features/partner-units/PartnerUnitsTab';
 import { TargetsTab } from './features/targets/TargetsTab';
@@ -34,15 +36,14 @@ import { StockInTab } from './features/warehouse/StockInTab';
 import { StockMatrixTab } from './features/warehouse/StockMatrixTab';
 import { StockOutTab } from './features/warehouse/StockOutTab';
 import type { TabId } from './layout';
-import { todayISO } from './lib/format';
 import { useApi } from './lib/hooks';
 import type { AppNotification } from './types';
 
 function Shell() {
   const [tab, setTab] = useState<TabId>('overview');
-  // Ngày làm việc chọn ở góc phải thanh menu. Kì báo cáo vẫn theo tháng nên tháng suy ra từ ngày này.
-  const [workDate, setWorkDate] = useState(todayISO());
-  const month = workDate.slice(0, 7);
+  // Kỳ báo cáo hiện tại (từ ngày → đến ngày) — nguồn duy nhất cho mọi báo cáo, do backend phân giải.
+  // Nằm trong ReferenceContext nên tự làm mới khi lưu cấu hình kỳ ở màn Cấu hình chung.
+  const { reportPeriod: period } = useReference();
   // Đơn cần mở sẵn khi điều hướng sang màn Đơn hàng từ màn khác (vd: bấm vào dòng trong Báo cáo doanh thu).
   const [openOrderId, setOpenOrderId] = useState<number | null>(null);
   // Ô tồn kho cần làm nổi khi bấm một cảnh báo ở chuông thông báo.
@@ -83,58 +84,62 @@ function Shell() {
         notifications={notificationsApi.data?.items ?? []}
         onOpenNotification={openNotification}
         onRefreshNotifications={notificationsApi.reload}
-        workDate={workDate}
-        // Xoá trống ô ngày thì giữ ngày hôm nay, tránh tháng báo cáo rỗng làm hỏng mọi báo cáo.
-        onWorkDateChange={(value) => setWorkDate(value || todayISO())}
+        period={period}
       />
       <main className="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-4 lg:p-6">
-          {tab === 'overview' && <OverviewTab month={month} onNavigate={openTab} />}
-          {tab === 'create-order' && <CreateOrderTab />}
-          {tab === 'orders' && <OrdersTab openOrderId={openOrderId} onOpened={() => setOpenOrderId(null)} />}
-          {tab === 'invoices' && <InvoicesTab />}
-          {tab === 'products' && <ProductsTab />}
-          {tab === 'price-list' && <PriceListTab />}
-          {tab === 'shipping-fees' && <ShippingFeesTab />}
-          {tab === 'promotions' && <PromotionsTab />}
-          {tab === 'partner-units' && <PartnerUnitsTab />}
-          {tab === 'customers' && <CustomersTab />}
-          {tab === 'customer-detail' && <CustomerDetailTab />}
-          {tab === 'stock-in' && <StockInTab />}
-          {tab === 'stock-out' && <StockOutTab />}
-          {tab === 'stock' && <StockMatrixTab focus={stockFocus} />}
-          {tab === 'stock-audit' && <StockAuditTab />}
-          {tab === 'shell-audit' && <ShellAuditTab />}
-          {tab === 'import-sources' && <ImportSourcesTab />}
-          {tab === 'loans' && <LoansTab month={month} />}
-          {tab === 'kpi' && <TargetsTab month={month} />}
-          {tab === 'revenue' && (
-            <RevenueTab
-              month={month}
-              onOpenOrder={(id) => {
-                setOpenOrderId(id);
-                setTab('orders');
-              }}
-            />
-          )}
-          {tab === 'expenses' && (
-            <ExpensesTab
-              month={month}
-              onOpenOrder={(id) => {
-                setOpenOrderId(id);
-                setTab('orders');
-              }}
-            />
-          )}
-          {tab === 'customer-debt' && <CustomerDebtTab />}
-          {tab === 'cash-audit' && <CashAuditTab />}
-          {tab === 'shipping-report' && <ShippingReportTab month={month} />}
-          {tab === 'service-report' && <ServiceReportTab month={month} />}
-          {tab === 'shell-deposits' && <ShellReportTab month={month} />}
-          {tab === 'shell-stock' && <ShellStockTab />}
-          {tab === 'deposits' && <DepositsTab month={month} />}
-          {tab === 'staff' && <StaffTab />}
-          {tab === 'settings' && <SettingsTab />}
-          {tab === 'audit-log' && <AuditLogTab />}
+        {period && (
+          <>
+            {tab === 'overview' && <OverviewTab period={period} onNavigate={openTab} />}
+            {tab === 'create-order' && <CreateOrderTab />}
+            {tab === 'orders' && <OrdersTab openOrderId={openOrderId} onOpened={() => setOpenOrderId(null)} />}
+            {tab === 'invoices' && <InvoicesTab />}
+            {tab === 'products' && <ProductsTab />}
+            {tab === 'price-list' && <PriceListTab />}
+            {tab === 'shipping-fees' && <ShippingFeesTab />}
+            {tab === 'promotions' && <PromotionsTab />}
+            {tab === 'partner-units' && <PartnerUnitsTab />}
+            {tab === 'customers' && <CustomersTab />}
+            {tab === 'customer-detail' && <CustomerDetailTab />}
+            {tab === 'stock-in' && <StockInTab />}
+            {tab === 'stock-out' && <StockOutTab />}
+            {tab === 'stock' && <StockMatrixTab focus={stockFocus} />}
+            {tab === 'stock-audit' && <StockAuditTab />}
+            {tab === 'shell-audit' && <ShellAuditTab />}
+            {tab === 'import-sources' && <ImportSourcesTab />}
+            {tab === 'loans' && <LoansTab period={period} />}
+            {tab === 'kpi' && <TargetsTab period={period} />}
+            {tab === 'revenue' && (
+              <RevenueTab
+                period={period}
+                onOpenOrder={(id) => {
+                  setOpenOrderId(id);
+                  setTab('orders');
+                }}
+              />
+            )}
+            {tab === 'expenses' && (
+              <ExpensesTab
+                period={period}
+                onOpenOrder={(id) => {
+                  setOpenOrderId(id);
+                  setTab('orders');
+                }}
+              />
+            )}
+            {tab === 'customer-debt' && <CustomerDebtTab />}
+            {tab === 'receipts' && <ReceiptsTab />}
+            {tab === 'invoice-list' && <InvoiceListTab />}
+            {tab === 'cash-audit' && <CashAuditTab />}
+            {tab === 'shipping-report' && <ShippingReportTab period={period} />}
+            {tab === 'service-report' && <ServiceReportTab period={period} />}
+            {tab === 'shell-deposits' && <ShellReportTab period={period} />}
+            {tab === 'shell-stock' && <ShellStockTab />}
+            {tab === 'deposits' && <DepositsTab period={period} />}
+            {tab === 'staff' && <StaffTab />}
+            {tab === 'settings' && <SettingsTab />}
+            {tab === 'audit-log' && <AuditLogTab />}
+          </>
+        )}
       </main>
     </div>
   );

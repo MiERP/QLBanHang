@@ -3,9 +3,9 @@ import { Button } from '../../components/ui/Button';
 import { DataTable, type Column } from '../../components/ui/DataTable';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { useApi } from '../../lib/hooks';
-import { formatCurrency, formatMonth, formatNumber } from '../../lib/format';
+import { formatCurrency, formatDate, formatNumber } from '../../lib/format';
 import * as api from '../../api';
-import type { ShellDepositReportRow } from '../../types';
+import type { ReportPeriod, ShellDepositReportRow } from '../../types';
 
 const diffTone = (diff: number) => (Math.abs(diff) <= 0.5 ? 'green' : diff > 0 ? 'amber' : 'red');
 const diffLabel = (diff: number) =>
@@ -41,31 +41,32 @@ const columns: Column<ShellDepositReportRow>[] = [
   },
   {
     key: 'collected_month',
-    header: 'Thu trong tháng',
+    header: 'Thu trong kỳ',
     align: 'right',
     render: (r) => (r.collected_month ? formatCurrency(r.collected_month) : '—'),
     sortValue: (r) => r.collected_month,
   },
   {
     key: 'refunded_month',
-    header: 'Hoàn trong tháng',
+    header: 'Hoàn trong kỳ',
     align: 'right',
     render: (r) => (r.refunded_month ? formatCurrency(r.refunded_month) : '—'),
     sortValue: (r) => r.refunded_month,
   },
 ];
 
-export function ShellReportTab({ month }: { month: string }) {
-  const { data, loading } = useApi(() => api.fetchShellDepositReport({ month }), [month]);
+export function ShellReportTab({ period }: { period: ReportPeriod }) {
+  const { data, loading } = useApi(() => api.fetchShellDepositReport(), [period.key]);
   const totals = data?.totals;
+  const periodText = `${formatDate(period.from)} → ${formatDate(period.to)}`;
 
   return (
     <>
       <PageHeader
         title="Vỏ bình & cọc"
-        subtitle={`${formatMonth(month)} · nợ vỏ khách đang giữ đối chiếu với tiền cọc mình đang giữ · phí cọc Vòi ${formatCurrency(data?.feeVoi ?? 0)} / Úp ${formatCurrency(data?.feeUp ?? 0)}`}
+        subtitle={`${periodText} · nợ vỏ khách đang giữ đối chiếu với tiền cọc mình đang giữ · phí cọc Vòi ${formatCurrency(data?.feeVoi ?? 0)} / Úp ${formatCurrency(data?.feeUp ?? 0)}`}
         actions={
-          <Button variant="outline" size="sm" onClick={() => window.open(api.shellDepositExportUrl(month), '_blank')}>
+          <Button variant="outline" size="sm" onClick={() => window.open(api.shellDepositExportUrl(), '_blank')}>
             Xuất Excel
           </Button>
         }

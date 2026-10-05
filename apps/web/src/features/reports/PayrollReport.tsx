@@ -4,7 +4,7 @@ import { Button } from '../../components/ui/Button';
 import { DataTable, type Column } from '../../components/ui/DataTable';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { SubTable, type SubColumn } from '../../components/ui/SubTable';
-import { formatCurrency, formatDate, formatMonth, formatNumber } from '../../lib/format';
+import { formatCurrency, formatDate, formatNumber } from '../../lib/format';
 import type { PayrollDetailRow, PayrollItem, PayrollReport as PayrollReportData } from '../../types';
 
 type SummaryRow = PayrollReportData['summary']['rows'][number];
@@ -89,7 +89,7 @@ export function PayrollReport({
       />
 
       <div className="mb-2 flex flex-wrap items-center gap-4 text-sm text-slate-600">
-        <span className="font-semibold text-slate-700">Chi tiết theo nhân viên — {report ? formatMonth(report.month) : ''}</span>
+        <span className="font-semibold text-slate-700">Chi tiết theo nhân viên — {report ? `${formatDate(report.from)} → ${formatDate(report.to)}` : ''}</span>
         <span>
           Tổng: <b className="text-brand-navy">{formatCurrency(detailTotal)}</b>
         </span>

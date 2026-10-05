@@ -2,6 +2,7 @@
 import Database from 'better-sqlite3';
 import { getDb } from '../db.js';
 import { today } from '../lib/codes.js';
+import { currentReportPeriod } from '../lib/reportPeriod.js';
 import { ApiError, badRequest, handle } from '../lib/http.js';
 import { getOrder, type OrderRecord } from '../lib/orderStatus.js';
 import { addPartnerShellMovement, recordShellMovement } from '../lib/shellStock.js';
@@ -116,12 +117,16 @@ export function loansRouter(): Router {
   router.get(
     '/loans',
     handle((req, res) => {
-      const { month, direction } = req.query as Record<string, string | undefined>;
+      const { from, to, direction } = req.query as Record<string, string | undefined>;
+      const period = currentReportPeriod(db);
+      const f = from || period.from;
+      const t = to || period.to;
       const clauses: string[] = ["o.order_type IN ('LEND_OUT', 'BORROW_IN')"];
       const params: unknown[] = [];
-      if (month) {
-        clauses.push(`strftime('%Y-%m', o.order_date) = ?`);
-        params.push(month);
+      // Lọc theo kỳ khi có from/to; không truyền thì lấy toàn bộ (xem mượn-trả mọi kỳ).
+      if (from || to) {
+        clauses.push(`o.order_date >= ? AND o.order_date <= ?`);
+        params.push(f, t);
       }
       if (direction === 'LEND_OUT' || direction === 'BORROW_IN') {
         clauses.push('o.order_type = ?');

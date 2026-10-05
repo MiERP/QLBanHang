@@ -5,8 +5,8 @@ import { Button } from '../../components/ui/Button';
 import { DataTable, type Column } from '../../components/ui/DataTable';
 import { Select } from '../../components/ui/Field';
 import { useApi } from '../../lib/hooks';
-import { formatCurrency, formatMonth, formatNumber } from '../../lib/format';
-import type { TradeReportBlock, TradeReportItem, TradeReportSource } from '../../types';
+import { formatCurrency, formatDate, formatNumber } from '../../lib/format';
+import type { ReportPeriod, TradeReportBlock, TradeReportItem, TradeReportSource } from '../../types';
 
 type Mode = 'net' | 'gross';
 
@@ -56,12 +56,13 @@ function SourceBreakdown({
   );
 }
 
-export function TradeReportTab({ month }: { month: string }) {
+export function TradeReportTab({ period }: { period: ReportPeriod }) {
   const [mode, setMode] = useState<Mode>('net');
   // Đơn đi mượn hàng của đối tác (hàng lấy từ kho đối tác, giao cho khách của xí nghiệp) cũng là
   // doanh thu của xí nghiệp — tick để cộng gộp vào báo cáo.
   const [borrowed, setBorrowed] = useState(true);
-  const { data, loading } = useApi(() => api.fetchTradeReport(month, borrowed), [month, borrowed]);
+  const { data, loading } = useApi(() => api.fetchTradeReport(borrowed), [borrowed, period.key]);
+  const periodText = `${formatDate(period.from)} → ${formatDate(period.to)}`;
 
   const amountOf = (r: TradeReportItem) => (mode === 'net' ? r.amount_net : r.amount_gross);
   const unitPriceOf = (r: TradeReportItem) => (mode === 'net' ? r.net_unit_price : r.unit_price);
@@ -87,7 +88,7 @@ export function TradeReportTab({ month }: { month: string }) {
       <div className="mb-4 rounded-xl border border-slate-200 bg-white p-3">
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-sm text-slate-600">
-            Kỳ báo cáo: <b className="text-slate-800">{formatMonth(month)}</b>
+            Kỳ báo cáo: <b className="text-slate-800">{periodText}</b>
           </span>
           <div className="w-72">
             <Select dense value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
@@ -106,7 +107,7 @@ export function TradeReportTab({ month }: { month: string }) {
             className="ml-auto"
             variant="outline"
             size="sm"
-            onClick={() => window.open(api.tradeReportExportUrl(month, mode, borrowed), '_blank')}
+            onClick={() => window.open(api.tradeReportExportUrl(mode, borrowed), '_blank')}
           >
             <FileSpreadsheet className="h-4 w-4" /> Xuất Excel
           </Button>
@@ -115,7 +116,7 @@ export function TradeReportTab({ month }: { month: string }) {
           {borrowed
             ? 'Đang cộng gộp: đơn bán của xí nghiệp + đơn đi mượn hàng của đối tác (hàng lấy từ kho đối tác, giao cho khách của xí nghiệp).'
             : 'Chỉ tính đơn bán của xí nghiệp (hàng xuất từ kho xí nghiệp) — chưa gồm đơn đi mượn hàng của đối tác.'}{' '}
-          Mẫu báo cáo thương mại nộp Công ty, kỳ báo cáo theo tháng làm việc.
+          Mẫu báo cáo thương mại nộp Công ty, kỳ báo cáo theo kỳ đang cấu hình.
         </p>
       </div>
 

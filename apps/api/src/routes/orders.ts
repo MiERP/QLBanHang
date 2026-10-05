@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import ExcelJS from 'exceljs';
 import { getDb, loanWarehouseId } from '../db.js';
 import { dispatchCode, orderCode, revenueCode, today } from '../lib/codes.js';
 import { ApiError, badRequest, handle } from '../lib/http.js';
@@ -26,6 +27,22 @@ import {
 
 const STATUSES: OrderStatus[] = ['DRAFT', 'CONFIRMED', 'SHIPPING', 'COMPLETED', 'CANCELLED', 'RETURNED'];
 
+const ORDER_TYPE_LABEL: Record<string, string> = {
+  SALE: 'Đơn bán',
+  LEND_OUT: 'Đơn cho mượn',
+  BORROW_IN: 'Đơn mượn',
+  HIRED_LOAD: 'Đơn bốc xếp',
+};
+
+const ORDER_STATUS_LABEL: Record<string, string> = {
+  DRAFT: 'Nháp',
+  CONFIRMED: 'Đã tạo đơn',
+  SHIPPING: 'Đang giao',
+  COMPLETED: 'Hoàn tất',
+  CANCELLED: 'Đã hủy',
+  RETURNED: 'Hàng hoàn',
+};
+
 // Cột enum của đơn phải chặn giá trị lạ ngay tại API: cột thêm vào DB cũ bằng ALTER TABLE
 // không mang theo ràng buộc CHECK như trong schema.sql.
 const ENUM_COLUMNS: Record<string, { label: string; values: readonly string[] }> = {
@@ -38,12 +55,14 @@ const ORDER_SELECT = `SELECT o.*,
                             sh.full_name as shipper_name,
                             w.name as warehouse_name,
                             pu.name as partner_unit_name,
+                            ou.name as support_station_name,
                             mi.order_code as merged_into_code
                      FROM orders o
                      JOIN customers c ON o.customer_id = c.id
                      LEFT JOIN employees s ON o.seller_employee_id = s.id
                      LEFT JOIN employees sh ON o.shipper_employee_id = sh.id
                      LEFT JOIN partner_units pu ON o.partner_unit_id = pu.id
+                     LEFT JOIN org_units ou ON o.support_station_id = ou.id
                      LEFT JOIN orders mi ON o.merged_into_id = mi.id
                      JOIN warehouses w ON o.warehouse_id = w.id`;
 
@@ -157,6 +176,98 @@ export function ordersRouter(): Router {
 
       const orders = db.prepare(query).all(...params) as Record<string, unknown>[];
       res.json(attachOrderDetails(db, orders));
+    })
+  );
+
+  // Xuất Excel các đơn CHƯA HOÀN TẤT (Nháp / Đã tạo đơn / Đang giao) để điều phối công việc.
+  router.get(
+    '/orders/export-dispatch.xlsx',
+    handle(async (_req, res) => {
+      const orders = db
+        .prepare(
+          `SELECT o.id, o.order_date, o.order_type, o.order_status,
+                  c.name as customer_name,
+                  COALESCE(o.shipping_address, c.address, '') as address,
+                  w.name as warehouse_name,
+                  ou.name as support_station_name
+           FROM orders o
+           JOIN customers c ON o.customer_id = c.id
+           LEFT JOIN warehouses w ON o.warehouse_id = w.id
+           LEFT JOIN org_units ou ON o.support_station_id = ou.id
+           WHERE o.order_status IN ('DRAFT', 'CONFIRMED', 'SHIPPING')
+           ORDER BY o.order_date ASC, o.id ASC`
+        )
+        .all() as { id: number; order_date: string; order_type: string; order_status: string; customer_name: string; address: string; warehouse_name: string | null; support_station_name: string | null }[];
+
+      const orderIds = orders.map((o) => o.id);
+      const itemsByOrder = new Map<number, { name: string; quantity: number }[]>();
+      const shippersByOrder = new Map<number, string[]>();
+      if (orderIds.length) {
+        const ph = orderIds.map(() => '?').join(',');
+        const items = db
+          .prepare(
+            `SELECT oi.order_id, p.name, oi.quantity
+             FROM order_items oi JOIN products p ON p.id = oi.product_id
+             WHERE oi.order_id IN (${ph}) ORDER BY oi.id ASC`
+          )
+          .all(...orderIds) as { order_id: number; name: string; quantity: number }[];
+        for (const it of items) {
+          const list = itemsByOrder.get(it.order_id) ?? [];
+          list.push({ name: it.name, quantity: Number(it.quantity) || 0 });
+          itemsByOrder.set(it.order_id, list);
+        }
+        const shippers = db
+          .prepare(
+            `SELECT os.order_id, e.full_name
+             FROM order_shippers os JOIN employees e ON e.id = os.employee_id
+             WHERE os.order_id IN (${ph}) AND COALESCE(os.kind, 'DELIVERY') = 'DELIVERY'
+             ORDER BY os.id ASC`
+          )
+          .all(...orderIds) as { order_id: number; full_name: string }[];
+        for (const s of shippers) {
+          const list = shippersByOrder.get(s.order_id) ?? [];
+          list.push(s.full_name);
+          shippersByOrder.set(s.order_id, list);
+        }
+      }
+
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('Điều phối đơn');
+      ws.columns = [
+        { header: 'Ngày tạo đơn', width: 14 },
+        { header: 'Tên khách hàng', width: 30 },
+        { header: 'Địa chỉ', width: 36 },
+        { header: 'Loại đơn', width: 16 },
+        { header: 'Kho', width: 22 },
+        { header: 'Sản phẩm bán', width: 42 },
+        { header: 'Số lượng', width: 10 },
+        { header: 'Người vận chuyển', width: 22 },
+        { header: 'Trạm hỗ trợ', width: 20 },
+        { header: 'Trạng thái đơn', width: 14 },
+      ];
+      ws.getRow(1).font = { bold: true };
+      for (const o of orders) {
+        const products = itemsByOrder.get(o.id) ?? [];
+        const productText = products.map((p) => `${p.name} × ${p.quantity}`).join('; ');
+        const totalQty = products.reduce((a, p) => a + p.quantity, 0);
+        ws.addRow([
+          o.order_date,
+          o.customer_name,
+          o.address,
+          ORDER_TYPE_LABEL[o.order_type] ?? o.order_type,
+          o.warehouse_name ?? '',
+          productText,
+          totalQty,
+          (shippersByOrder.get(o.id) ?? []).join(', '),
+          o.support_station_name ?? '',
+          ORDER_STATUS_LABEL[o.order_status] ?? o.order_status,
+        ]);
+      }
+
+      const buffer = await wb.xlsx.writeBuffer();
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename="dieu-phoi-don-chua-hoan-tat.xlsx"');
+      res.send(Buffer.from(buffer));
     })
   );
 
@@ -477,6 +588,7 @@ export function ordersRouter(): Router {
         'shipping_phone',
         'shipping_address',
         'shipping_note',
+        'support_station_id',
         'note',
       ];
 

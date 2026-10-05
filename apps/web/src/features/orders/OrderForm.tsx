@@ -9,7 +9,7 @@ import { useReference } from '../../context/ReferenceContext';
 import { useApi } from '../../lib/hooks';
 import { formatCurrency, formatNumber, todayISO } from '../../lib/format';
 import { withPromotions } from '../../lib/promotions';
-import { freeShipWithoutShipper } from '../../lib/settings';
+import { freeShipForCustomer, freeShipWithoutShipper } from '../../lib/settings';
 import { stockWarehouses } from '../../lib/warehouses';
 import type { Customer, Order, PriceListEntry, Product } from '../../types';
 import { CustomerFields, emptyCustomerForm } from '../customers/CustomerFields';
@@ -31,6 +31,7 @@ const blankHeader = () => ({
   target_scope: 'ENTERPRISE',
   warehouse_id: '',
   seller_employee_id: '',
+  support_station_id: '',
   shipping_fee_id: '',
   order_date: todayISO(),
   delivery_date: todayISO(),
@@ -64,6 +65,7 @@ function orderToForm(order: Order): Record<string, unknown> {
     target_scope: order.target_scope ?? 'ENTERPRISE',
     warehouse_id: order.warehouse_id ?? '',
     seller_employee_id: order.seller_employee_id ?? '',
+    support_station_id: order.support_station_id ?? '',
     shipping_fee_id: order.shipping_fee_id ?? '',
     order_date: order.order_date ?? todayISO(),
     delivery_date: order.delivery_date ?? order.order_date ?? todayISO(),
@@ -106,7 +108,7 @@ interface OrderFormProps {
 }
 
 export function OrderForm({ order, readOnly = false, showActions = true, onSaved, onCancel }: OrderFormProps) {
-  const { products, warehouses, staff, customers, partnerUnits, settings, reload: reloadRefs } = useReference();
+  const { products, warehouses, staff, customers, partnerUnits, orgUnits, settings, reload: reloadRefs } = useReference();
   const priceListApi = useApi(() => api.priceList.list(), []);
   const shippingFeesApi = useApi(() => api.shippingFees.list(), []);
   const promotionsApi = useApi(() => api.promotions.list(), []);
@@ -242,7 +244,9 @@ export function OrderForm({ order, readOnly = false, showActions = true, onSaved
   const shippingFee = feeAuto ? (shippers.length ? routeShippingFee : 0) : Number(form.shipping_fee) || 0;
   const subtotal = shownItems.reduce((a, it) => a + (Number(it.quantity) || 0) * (Number(it.unit_price) || 0), 0);
   const discountAmount = Number(form.discount_amount) || 0;
-  const total = (isFreightOnly ? 0 : subtotal - discountAmount) + shippingFee;
+  // Miễn ship cho khách (cấu hình chung): khách chỉ trả tiền hàng, phí ship vẫn hiển thị (để tính công giao hàng) nhưng không cộng vào tổng.
+  const freeShipCustomer = freeShipForCustomer(settings);
+  const total = (isFreightOnly ? 0 : subtotal - discountAmount) + (freeShipCustomer && !isFreightOnly ? 0 : shippingFee);
 
   const addLine = () => updateItems((prev) => [...prev, blankLine()]);
 
@@ -250,6 +254,7 @@ export function OrderForm({ order, readOnly = false, showActions = true, onSaved
     ...form,
     order_type: orderType,
     partner_unit_id: orderType !== 'SALE' ? Number(form.partner_unit_id) : null,
+    support_station_id: form.support_station_id ? Number(form.support_station_id) : null,
     loan_due_date: isLoan && form.loan_due_date ? form.loan_due_date : null,
     shippers: shippers.map((s) => ({ employee_id: s.employee_id, allocated_fee: s.allocated_fee })),
     shipping_fee: shippingFee,
@@ -417,6 +422,16 @@ export function OrderForm({ order, readOnly = false, showActions = true, onSaved
                     </Select>
                   </Field>
                 )}
+                <Field label="Trạm hỗ trợ" hint="Đơn lớn cần trạm bốc xếp; đơn nhỏ để trống">
+                  <Select dense value={String(form.support_station_id ?? '')} onChange={(e) => setForm({ ...form, support_station_id: e.target.value })}>
+                    <option value="">-- Không cần --</option>
+                    {orgUnits.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
                 {(
                   <Field
                     label="Người giao (nhiều người)"

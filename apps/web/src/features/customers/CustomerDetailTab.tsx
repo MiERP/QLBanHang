@@ -86,10 +86,13 @@ export function CustomerDetailTab() {
     );
   }
 
-  // Doanh thu của khách = giá trị các đơn đã bán (HOÀN TẤT, kể cả đơn đã ghi nhận hàng hoàn) trừ phần hàng hoàn.
+  // Doanh thu của khách = giá trị các đơn đã HOÀN TẤT VÀ ĐÃ XUẤT HÓA ĐƠN (đúng quy tắc doanh thu cuối kỳ) trừ phần hàng hoàn.
   // Không tính đơn nháp / đã hủy / đơn cho đối tác mượn; giá trị là tiền hàng.
   const completedOrders = (ordersApi.data ?? []).filter(
-    (o) => (o.order_status === 'COMPLETED' || o.order_status === 'RETURNED') && (o.order_type === 'SALE' || o.order_type === 'BORROW_IN')
+    (o) =>
+      (o.order_status === 'COMPLETED' || o.order_status === 'RETURNED') &&
+      (o.order_type === 'SALE' || o.order_type === 'BORROW_IN') &&
+      o.invoice_status === 'INVOICED'
   );
   const totalRevenue = completedOrders.reduce(
     (a, o) => a + (Number(o.subtotal_amount) || 0) - (Number(o.returned_value) || 0),
@@ -144,7 +147,7 @@ export function CustomerDetailTab() {
             value={formatCurrency(selected.deposit_balance ?? 0)}
             danger={Math.abs(selected.shell_deposit_diff ?? 0) > 0.5}
           />
-          <StatCard label="Doanh thu (đơn hoàn tất)" value={formatCurrency(totalRevenue)} />
+          <StatCard label="Doanh thu (đơn đã xuất HĐ)" value={formatCurrency(totalRevenue)} />
           <StatCard label="Số đơn (200 gần nhất)" value={formatNumber(totalOrders)} />
         </div>
       )}

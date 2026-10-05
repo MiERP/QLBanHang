@@ -115,6 +115,12 @@ INSERT INTO order_items (order_id, product_id, quantity, quantity_promo, unit_pr
 (4, 1, 3, 0, 48000.0, 144000.0),
 (4, 2, 6, 0, 48000.0, 288000.0);
 
+-- Phiếu thu tương ứng cho các đơn đã thanh toán (để sổ quỹ khớp với số đã thu trên đơn).
+INSERT INTO revenue_transactions (transaction_code, transaction_type, order_id, customer_id, amount, payment_method, collected_by, transaction_date, note) VALUES
+('PT-20260907-001', 'WATER_SALE', 1, 1, 1030000.0, 'BANK_TRANSFER', 12, '2026-09-07', 'Thu tiền đơn DH-20260907-01'),
+('PT-20260907-002', 'WATER_SALE', 2, 3, 1194000.0, 'BANK_TRANSFER', 12, '2026-09-07', 'Thu tiền đơn DH-20260907-02'),
+('PT-20260907-003', 'WATER_SALE', 4, 5, 452000.0, 'CASH', 13, '2026-09-07', 'Thu tiền đơn DH-20260907-04');
+
 -- 35. Đối tác liên kết (đơn vị bạn trong cùng công ty mẹ)
 INSERT INTO partner_units (id, code, name, contact_person, phone, address, is_active, note) VALUES
 (1, 'DT_CAM_PHA', 'Xí Nghiệp Nước Cẩm Phả', 'Anh Tuấn', '0203.3861.222', 'Cẩm Phả, Quảng Ninh', 1, 'Đơn vị bạn cùng công ty mẹ'),
