@@ -89,44 +89,79 @@ test('Khôi phục theo ID: dòng đã có thì cập nhật, dòng chưa có th
   assert.ok(count('orders') > 0, 'Đơn hàng trong tệp sao lưu vẫn còn');
 });
 
-test('Xoá sạch dữ liệu đưa CSDL về mặc định ban đầu', async () => {
-  // Trước khi reset: có cả dữ liệu mẫu lẫn dữ liệu vừa thao tác.
-  assert.ok(count('customers') > 0 && count('products') > 0 && count('employees') > 0 && count('inventory_stock') > 0);
+test('Xoá dữ liệu về mặc định: xoá nghiệp vụ, giữ danh mục nền, bật quy tắc vận chuyển', async () => {
+  // Trước khi reset: có dữ liệu mẫu, dữ liệu vừa thao tác và danh mục nền.
+  assert.ok(count('customers') > 0 && count('employees') > 0 && count('inventory_stock') > 0);
+  const productsBefore = count('products');
+  const categoriesBefore = count('categories');
+  const warehousesBefore = count('warehouses');
+
+  // Danh mục nền do người dùng tự thêm cũng phải được giữ.
+  db.prepare(`INSERT INTO price_list (product_id, customer_group_id, unit_price, effective_date) VALUES (1, 1, 99000, '2026-09-01')`).run();
+  db.prepare(
+    `INSERT INTO promotions (code, name, product_id, buy_quantity, free_quantity, is_active) VALUES ('KM-GIU', 'Khuyến mãi giữ lại', 1, 5, 1, 1)`
+  ).run();
   db.prepare(`UPDATE app_settings SET value = '2026-09-01' WHERE key = 'report_period_from'`).run();
 
   const res = await fetch(`${base}/system/reset-database`, { method: 'POST' });
   assert.equal(res.status, 200);
 
-  // Dữ liệu mẫu lẫn dữ liệu nghiệp vụ đều sạch.
+  // Dữ liệu nghiệp vụ (kể cả dữ liệu mẫu) đều sạch.
   for (const table of [
     'customers',
     'orders',
     'order_items',
     'employees',
-    'products',
     'inventory_stock',
     'stock_movements',
+    'stock_tickets',
     'revenue_transactions',
+    'deposit_transactions',
+    'customer_bottle_ledgers',
+    'invoices',
+    'shell_stock',
+    'shell_movements',
     'audit_logs',
+    'targets',
   ]) {
     assert.equal(count(table), 0, `${table} phải trống`);
   }
-  assert.equal(count('warehouses', `WHERE code = 'KHO_TANGAP'`), 0, 'Không còn kho vật lý của dữ liệu mẫu');
-  assert.equal(count('warehouses'), 3, 'Chỉ còn 3 kho ảo hệ thống');
 
-  // Danh mục nền do phần mềm tự tạo vẫn còn để CSDL dùng được ngay.
+  // Danh mục nền giữ nguyên — kể cả kho vật lý xí nghiệp đang dùng.
+  assert.equal(count('products'), productsBefore, 'Sản phẩm giữ nguyên');
+  assert.equal(count('categories'), categoriesBefore, 'Nhóm hàng giữ nguyên');
+  assert.equal(count('warehouses'), warehousesBefore, 'Kho giữ nguyên (kể cả kho vật lý hiện tại)');
+  assert.ok(count('warehouses', `WHERE code = 'KHO_TANGAP'`) > 0, 'Kho vật lý của xí nghiệp vẫn còn');
+  assert.equal(count('price_list'), 1, 'Bảng giá giữ nguyên');
+  assert.equal(count('promotions'), 1, 'Khuyến mãi giữ nguyên');
+  assert.ok(count('customer_groups') > 0, 'Nhóm khách hàng giữ nguyên');
+  assert.ok(count('positions') > 0, 'Chức vụ giữ nguyên');
+  assert.ok(count('shell_deposits') > 0, 'Mức cọc vỏ giữ nguyên');
+  assert.ok(count('vat_rates') > 0, 'Thuế suất giữ nguyên');
+  assert.ok(count('shipping_fees') > 0, 'Phí vận chuyển giữ nguyên');
+
+  // Danh mục do phần mềm tự tạo vẫn đủ để dùng ngay.
   assert.ok(count('app_settings') > 0, 'Cấu hình chung còn nguyên');
+  assert.ok(count('org_units') > 0, 'Đơn vị gốc');
+  assert.ok(count('import_sources') > 0, 'Nguồn nhập mặc định');
+  assert.ok(count('partner_units') > 0, 'Đối tác mặc định');
+
+  // Cấu hình: kỳ báo cáo giữ nguyên, hai quy tắc vận chuyển được bật.
   assert.equal(
     (db.prepare(`SELECT value FROM app_settings WHERE key = 'report_period_from'`).get() as { value: string }).value,
     '2026-09-01',
     'Giá trị cấu hình được giữ lại'
   );
-  assert.ok(count('positions') > 0, 'Chức vụ mặc định');
-  assert.ok(count('org_units') > 0, 'Đơn vị gốc');
-  assert.ok(count('import_sources') > 0, 'Nguồn nhập mặc định');
-  assert.ok(count('partner_units') > 0, 'Đối tác mặc định');
-  assert.ok(count('vat_rates') > 0, 'Thuế GTGT mặc định');
-  assert.ok(count('shipping_fees') > 0, 'Phí vận chuyển mặc định');
+  for (const key of ['free_ship_without_shipper', 'free_ship_for_customer']) {
+    assert.equal(
+      (db.prepare(`SELECT value FROM app_settings WHERE key = ?`).get(key) as { value: string }).value,
+      '1',
+      `${key} phải được bật`
+    );
+  }
+
+  // Nhân viên đã xoá nên kho không còn trỏ vào trưởng kho cũ.
+  assert.equal(count('warehouses', `WHERE manager_employee_id IS NOT NULL`), 0, 'Không còn tham chiếu trưởng kho cũ');
 
   // CSDL vẫn dùng được bình thường sau khi reset.
   db.prepare(`INSERT INTO customers (code, name, address) VALUES ('KH-SAU', 'Khách sau reset', '')`).run();

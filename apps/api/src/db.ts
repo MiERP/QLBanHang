@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { SETTING_DEFS } from './lib/appSettings.js';
+import { FREE_SHIP_FOR_CUSTOMER, FREE_SHIP_WITHOUT_SHIPPER, SETTING_DEFS } from './lib/appSettings.js';
 import { dateKey, nextCode } from './lib/codes.js';
 import { recalcTotals } from './lib/orderStatus.js';
 
@@ -734,18 +734,49 @@ export function getDb(): Database.Database {
   return dbInstance;
 }
 
-// Đưa CSDL về mặc định ban đầu: xoá sạch dữ liệu nghiệp vụ (giữ cấu hình hệ thống) rồi nạp lại
-// danh mục nền do phần mềm tự tạo — KHÔNG nạp seed.sql nên không còn dữ liệu mẫu.
+// Danh mục nền & cấu hình: nút "Xóa toàn bộ dữ liệu" GIỮ NGUYÊN các bảng này
+// (xí nghiệp khai một lần rồi dùng mãi: nhóm hàng, sản phẩm, bảng giá, phí vận chuyển,
+// khuyến mãi, cọc vỏ, chức vụ, nhóm khách hàng, thuế, kho hiện tại và cấu hình chung).
+const PRESERVED_TABLES = [
+  'app_settings',
+  'categories',
+  'products',
+  'price_list',
+  'shipping_fees',
+  'promotions',
+  'shell_deposits',
+  'positions',
+  'customer_groups',
+  'vat_rates',
+  'warehouses',
+];
+
+// Đưa CSDL về mặc định: xoá sạch DỮ LIỆU NGHIỆP VỤ (khách hàng, đơn hàng, tồn kho, phiếu kho,
+// sổ quỹ, nhân viên...) nhưng giữ nguyên danh mục nền ở trên, rồi nạp lại các danh mục
+// do phần mềm tự tạo (chức vụ, nguồn nhập, đối tác, cọc vỏ, thuế, 3 kho ảo...).
+// KHÔNG nạp seed.sql nên không có dữ liệu mẫu.
 export function resetDatabase(): void {
   const db = getDb();
-  db.pragma('foreign_keys = OFF');
+  const preserved = new Set(PRESERVED_TABLES);
   const tables = db
-    .prepare(
-      `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name <> 'app_settings'`
-    )
+    .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
     .all() as { name: string }[];
+
+  db.pragma('foreign_keys = OFF');
   db.transaction(() => {
-    for (const table of tables) db.prepare(`DELETE FROM "${table.name}"`).run();
+    for (const table of tables) {
+      if (preserved.has(table.name)) continue;
+      db.prepare(`DELETE FROM "${table.name}"`).run();
+    }
+    // Nhân viên bị xoá nên bỏ tham chiếu trưởng kho, tránh kho còn trỏ vào bản ghi đã mất.
+    db.prepare(`UPDATE warehouses SET manager_employee_id = NULL WHERE manager_employee_id IS NOT NULL`).run();
+    // Quy tắc vận chuyển: bật cả hai theo mặc định của xí nghiệp.
+    const setSetting = db.prepare(
+      `INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`
+    );
+    setSetting.run(FREE_SHIP_WITHOUT_SHIPPER, '1');
+    setSetting.run(FREE_SHIP_FOR_CUSTOMER, '1');
   })();
   if (db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sqlite_sequence'`).get()) {
     db.prepare('DELETE FROM sqlite_sequence').run();

@@ -142,9 +142,9 @@ export function GeneralSettingsTab() {
 
   const resetAll = async () => {
     const first = await confirm({
-      title: 'Xóa toàn bộ dữ liệu',
+      title: 'Xóa dữ liệu nghiệp vụ',
       message:
-        'Toàn bộ dữ liệu nghiệp vụ (kho, nhân viên, sản phẩm, khách hàng, tồn kho, đơn hàng, phiếu kho, sổ quỹ, hóa đơn, cọc vỏ...) sẽ bị xóa sạch. Chỉ giữ lại cấu hình chung. Thao tác này KHÔNG THỂ hoàn tác.',
+        'Toàn bộ dữ liệu nghiệp vụ (khách hàng, đơn hàng, tồn kho, phiếu kho, sổ quỹ, hóa đơn, nhân viên, cọc vỏ, vỏ bình...) sẽ bị xóa sạch. Danh mục nền vẫn giữ nguyên: nhóm hàng, sản phẩm, bảng giá, phí vận chuyển, khuyến mãi, cọc vỏ, chức vụ, nhóm khách hàng, thuế, kho hiện tại và cấu hình chung. Thao tác này KHÔNG THỂ hoàn tác.',
       confirmLabel: 'Tiếp tục',
       danger: true,
     });
@@ -253,12 +253,13 @@ export function GeneralSettingsTab() {
           <div className={EXCEL_BACKUP_ENABLED ? 'mt-4 border-t border-slate-100 pt-4' : ''}>
             <div className="text-sm font-semibold text-brand-red">Vùng nguy hiểm</div>
             <p className="mt-1 text-xs text-slate-500">
-              Xóa sạch toàn bộ dữ liệu nghiệp vụ: kho, nhân viên, sản phẩm, khách hàng, tồn kho, đơn hàng, sổ quỹ, hóa đơn...
-              Chỉ giữ lại cấu hình chung và vài danh mục nền do phần mềm tự tạo.
+              Xóa sạch dữ liệu nghiệp vụ: khách hàng, đơn hàng, tồn kho, phiếu kho, sổ quỹ, hóa đơn, nhân viên...
+              Danh mục nền vẫn giữ nguyên: nhóm hàng, sản phẩm, bảng giá, phí vận chuyển, khuyến mãi, cọc vỏ, chức vụ, nhóm khách
+              hàng, thuế, kho hiện tại và cấu hình chung.
               {EXCEL_BACKUP_ENABLED ? ' Hãy xuất Excel sao lưu trước khi thực hiện.' : ' Thao tác này KHÔNG THỂ hoàn tác.'}
             </p>
             <Button size="sm" variant="danger" className="mt-2" onClick={resetAll} disabled={dbBusy}>
-              <RotateCcw className="h-3.5 w-3.5" /> Xóa toàn bộ dữ liệu
+              <RotateCcw className="h-3.5 w-3.5" /> Xóa dữ liệu nghiệp vụ
             </Button>
           </div>
         </CardBody>

@@ -5,8 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 
-// CSDL đã tồn tại (có bảng) nhưng trống dữ liệu = trạng thái sau nút "Xóa toàn bộ dữ liệu".
-// Mở lại phần mềm KHÔNG được nạp lại dữ liệu mẫu, nếu không dữ liệu mẫu sẽ sống dậy sau mỗi lần khởi động.
+// CSDL mới tinh (chỉ schema, chưa có dòng nào) — ví dụ bản cài trên máy mới khi tệp CSDL đã tồn tại
+// nhưng rỗng. Mở lại phần mềm KHÔNG được tự nạp dữ liệu mẫu, nếu không dữ liệu mẫu sẽ sống dậy sau mỗi lần khởi động.
 const testDir = mkdtempSync(join(tmpdir(), 'qaromi-empty-'));
 process.env.DB_PATH = join(testDir, 'empty.db');
 const schemaOnly = new Database(process.env.DB_PATH);

@@ -613,5 +613,5 @@ Toàn bộ nằm trong một transaction (lỗi giữa chừng thì không ghi g
 
 Lỗi: `400` tệp không đọc được / không có bảng nào khớp với hệ thống / thiếu tệp.
 
-**`POST /api/system/reset-database`** — xoá sạch mọi bảng nghiệp vụ rồi nạp lại schema + danh mục nền do phần mềm tự tạo (chức vụ, đơn vị gốc, nguồn nhập, đối tác mặc định, thuế GTGT, phí ship mặc định, 3 kho ảo). **Không** nạp `seed.sql` (không có dữ liệu mẫu) và **giữ nguyên** giá trị cấu hình chung trong `app_settings`. Giao diện yêu cầu xác nhận 2 lần trước khi gọi.
+**`POST /api/system/reset-database`** — xoá sạch **dữ liệu nghiệp vụ** (khách hàng, đơn hàng, tồn kho, phiếu kho, sổ quỹ, hóa đơn, nhân viên, cọc vỏ, vỏ bình...) nhưng **giữ nguyên danh mục nền**: nhóm hàng, sản phẩm, bảng giá, phí vận chuyển, khuyến mãi, cọc vỏ, chức vụ, nhóm khách hàng, thuế suất, **kho hiện tại** và cấu hình chung (hai quy tắc vận chuyển được bật lại). Sau đó nạp lại các danh mục do phần mềm tự tạo (đơn vị gốc, nguồn nhập, đối tác mặc định, 3 kho ảo...). **Không** nạp `seed.sql` nên không có dữ liệu mẫu. Giao diện yêu cầu xác nhận 2 lần trước khi gọi.
 
