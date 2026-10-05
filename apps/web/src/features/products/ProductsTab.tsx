@@ -12,7 +12,7 @@ import { PageHeader } from '../../components/ui/PageHeader';
 import { useToast } from '../../components/ui/Toast';
 import { useReference } from '../../context/ReferenceContext';
 import { useApi } from '../../lib/hooks';
-import { formatCurrency } from '../../lib/format';
+import { formatCurrency, todayISO } from '../../lib/format';
 import type { Product } from '../../types';
 
 const BOTTLE_LABEL: Record<string, string> = { VOI: 'Bình Vòi', UP: 'Bình Úp', NONE: 'Không vỏ' };
@@ -41,7 +41,9 @@ export function ProductsTab() {
 
   // Thuế suất đang hiệu lực (danh mục sắp xếp hiệu lực mới nhất trước) — dùng để suy giá trước thuế.
   const vatRate = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10);
+    // Ngày phải lấy theo giờ địa phương: toISOString() trả giờ UTC nên trước 7h sáng sẽ thành hôm trước
+    // và thuế suất mới hiệu lực hôm nay không được áp dụng.
+    const today = todayISO();
     const active = (vatApi.data ?? []).filter(
       (v) => (!v.effective_from || v.effective_from <= today) && (!v.effective_to || v.effective_to >= today)
     );

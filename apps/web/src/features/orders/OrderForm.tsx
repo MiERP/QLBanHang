@@ -112,6 +112,7 @@ export function OrderForm({ order, readOnly = false, showActions = true, onSaved
   const priceListApi = useApi(() => api.priceList.list(), []);
   const shippingFeesApi = useApi(() => api.shippingFees.list(), []);
   const promotionsApi = useApi(() => api.promotions.list(), []);
+  const vatRatesApi = useApi(() => api.vatRates.list(), []);
   const toast = useToast();
   const editing = !!order;
 
@@ -122,6 +123,15 @@ export function OrderForm({ order, readOnly = false, showActions = true, onSaved
   // Chỉ hàng bán mới lên đơn được — dịch vụ dùng luồng yêu cầu dịch vụ riêng.
   const sellableProducts = products.filter((p) => p.product_type !== 'SERVICE');
   const activeShippingFees = (shippingFeesApi.data ?? []).filter((f) => !!f.is_active);
+  // Thuế suất đang hiệu lực của danh mục — điền sẵn khi tích "Xuất hóa đơn VAT" để hóa đơn không
+  // bị 0% do người dùng quên nhập (hóa đơn 0% trong khi báo cáo vẫn tách thuế theo danh mục).
+  const currentVatRate = useMemo(() => {
+    const today = todayISO();
+    const active = (vatRatesApi.data ?? []).filter(
+      (v) => (!v.effective_from || v.effective_from <= today) && (!v.effective_to || v.effective_to >= today)
+    );
+    return active.length ? Number(active[0].rate) || 0 : 0;
+  }, [vatRatesApi.data]);
 
   const [form, setForm] = useState<Record<string, unknown>>(() => (order ? orderToForm(order) : blankHeader()));
   const [items, setItems] = useState<LineItem[]>(() =>
@@ -677,7 +687,16 @@ export function OrderForm({ order, readOnly = false, showActions = true, onSaved
               {!isFreightOnly && (
               <div className="rounded-lg border border-slate-200 p-3">
                 <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
-                  <input type="checkbox" checked={!!form.is_vat_invoice} onChange={(e) => setForm({ ...form, is_vat_invoice: e.target.checked })} />
+                  <input
+                    type="checkbox"
+                    checked={!!form.is_vat_invoice}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      // Tích xuất hóa đơn thì điền sẵn thuế suất đang hiệu lực nếu ô đang trống/0.
+                      const vatRate = checked && !Number(form.vat_rate) ? currentVatRate : form.vat_rate;
+                      setForm({ ...form, is_vat_invoice: checked, vat_rate: vatRate });
+                    }}
+                  />
                   Xuất hóa đơn VAT
                 </label>
                 {!!form.is_vat_invoice && (

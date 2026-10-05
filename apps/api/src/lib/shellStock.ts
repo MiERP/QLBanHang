@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { nowStamp } from './codes.js';
 import { badRequest } from './http.js';
 
 export type BottleType = 'VOI' | 'UP';
@@ -82,7 +83,7 @@ export function recordShellMovement(db: Database.Database, input: ShellMovementI
       input.ticketId ? Number(input.ticketId) : null,
       input.performedBy ? Number(input.performedBy) : null,
       input.note ?? '',
-      input.movementDate ? `${input.movementDate} 00:00:00` : new Date().toISOString().slice(0, 19).replace('T', ' ')
+      input.movementDate ? `${input.movementDate} 00:00:00` : nowStamp()
     );
   return Number(insert.lastInsertRowid);
 }

@@ -19,19 +19,46 @@ export function nextCode(db: Database.Database, { table, column, prefix, width =
   return `${prefix}${String(max + 1).padStart(width, '0')}`;
 }
 
+// Ngày/giờ nghiệp vụ luôn tính theo giờ Việt Nam (UTC+7), KHÔNG theo múi giờ của máy chủ:
+// VPS thường chạy UTC nên từ 00:00 đến 07:00 giờ Việt Nam, ngày theo giờ máy vẫn là hôm trước —
+// hóa đơn, phiếu thu và ngày đơn sẽ bị lùi một ngày.
+const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+function vnParts(date?: string): { year: number; month: number; day: number } {
+  const raw = date ? new Date(date) : new Date();
+  const d = Number.isNaN(raw.getTime()) ? new Date() : raw;
+  const vn = new Date(d.getTime() + VN_OFFSET_MS);
+  return { year: vn.getUTCFullYear(), month: vn.getUTCMonth() + 1, day: vn.getUTCDate() };
+}
+
 export function dateKey(date?: string): string {
-  const d = date ? new Date(date) : new Date();
-  const safe = Number.isNaN(d.getTime()) ? new Date() : d;
-  const y = safe.getFullYear();
-  const m = String(safe.getMonth() + 1).padStart(2, '0');
-  const day = String(safe.getDate()).padStart(2, '0');
-  return `${y}${m}${day}`;
+  // Chuỗi ngày thuần đã là ngày nghiệp vụ, giữ nguyên (new Date('2026-09-30') hiểu là UTC nên dễ lệch).
+  if (date && DATE_ONLY.test(date)) return date.replace(/-/g, '');
+  const { year, month, day } = vnParts(date);
+  return `${year}${String(month).padStart(2, '0')}${String(day).padStart(2, '0')}`;
 }
 
 export function today(date?: string): string {
-  const d = date ? new Date(date) : new Date();
-  const safe = Number.isNaN(d.getTime()) ? new Date() : d;
-  return `${safe.getFullYear()}-${String(safe.getMonth() + 1).padStart(2, '0')}-${String(safe.getDate()).padStart(2, '0')}`;
+  if (date && DATE_ONLY.test(date)) return date;
+  const { year, month, day } = vnParts(date);
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+// Mốc thời gian nghiệp vụ 'YYYY-MM-DD HH:MM:SS' theo giờ Việt Nam — dùng làm created_at cho các
+// bút toán kho/vỏ để nhật ký theo ngày và báo cáo đối soát cắt ngày đúng theo giờ Việt Nam.
+export function nowStamp(date?: string): string {
+  if (date && DATE_ONLY.test(date)) return `${date} 00:00:00`;
+  const raw = date ? new Date(date) : new Date();
+  const d = Number.isNaN(raw.getTime()) ? new Date() : raw;
+  const vn = new Date(d.getTime() + VN_OFFSET_MS);
+  const time = `${String(vn.getUTCHours()).padStart(2, '0')}:${String(vn.getUTCMinutes()).padStart(2, '0')}:${String(
+    vn.getUTCSeconds()
+  ).padStart(2, '0')}`;
+  return `${vn.getUTCFullYear()}-${String(vn.getUTCMonth() + 1).padStart(2, '0')}-${String(vn.getUTCDate()).padStart(
+    2,
+    '0'
+  )} ${time}`;
 }
 
 export const orderCode = (db: Database.Database, date?: string) =>

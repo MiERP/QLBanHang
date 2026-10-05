@@ -1958,8 +1958,10 @@ export function reportsRouter(): Router {
 
       // Kho chứa hàng thật: bỏ kho ảo (trung chuyển / mượn) và nút "Khách hàng" (chỉ là điểm giao trong tuyến).
       const STOCK_TYPES = `('CENTRAL','STORE','VEHICLE','STATION')`;
+      // Mỗi chặng chuyển kho chỉ thuộc MỘT kho: TRANSFER_OUT thuộc kho nguồn, TRANSFER_IN thuộc kho đích.
+      // Không lọc theo loại thì lọc một kho sẽ hút cả hai chặng và đối soát báo lệch ảo.
       const whClause = warehouseId
-        ? '(source_warehouse_id = ? OR target_warehouse_id = ?)'
+        ? `((source_warehouse_id = ? AND movement_type <> 'TRANSFER_IN') OR (target_warehouse_id = ? AND movement_type <> 'TRANSFER_OUT'))`
         : `(source_warehouse_id IN (SELECT id FROM warehouses WHERE type IN ${STOCK_TYPES})
             OR target_warehouse_id IN (SELECT id FROM warehouses WHERE type IN ${STOCK_TYPES}))`;
       const whParams = warehouseId ? [warehouseId, warehouseId] : [];
@@ -2275,8 +2277,6 @@ export function reportsRouter(): Router {
         )
         .all(...(customerId ? [from, to, customerId] : [from, to])) as Record<string, string | number>[];
 
-      const isSaleLike = (t: string) => t === 'SALE' || t === 'BORROW_IN';
-
       const orderRows = rows.map((raw) => {
         const o = {
           order_id: Number(raw.order_id),
@@ -2304,8 +2304,9 @@ export function reportsRouter(): Router {
         };
         const expected = expectedRevenue(o);
         const revenueDiff = o.ledger_revenue - expected;
-        // Đơn cho mượn / bốc xếp chỉ thu tiền vận chuyển — không phải khoản phải thu giá trị hàng.
-        const collectible = isSaleLike(o.order_type) ? Math.max(0, o.total_amount - o.returned_amount) : o.shipping_fee;
+        // Đơn cho mượn / bốc xếp chỉ thu tiền vận chuyển, và total_amount đã phản ánh đúng điều đó
+        // (bằng 0 khi bật miễn ship cho khách) — dùng chung một cách tính cho mọi loại đơn.
+        const collectible = Math.max(0, o.total_amount - o.returned_amount);
         const netPaid = o.paid_amount - o.refunded_amount;
         const receivable = Math.max(0, collectible - netPaid);
         const depositDiff = o.deposit_collect - o.deposit_amount;

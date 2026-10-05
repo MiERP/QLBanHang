@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getDb } from '../db.js';
 import { badRequest, handle } from '../lib/http.js';
 import { stockAlertRows } from '../lib/alerts.js';
+import { today } from '../lib/codes.js';
 import { buildInventoryWorkbook, type InventoryColumn, type InventoryRow } from '../lib/inventoryExcel.js';
 
 // Kho chứa hàng thật: bỏ kho ảo (trung chuyển / mượn) và nút "Khách hàng".
@@ -50,16 +51,21 @@ function stockByDay(db: Db, from: string, to: string): Map<string, Map<string, n
   const live = db.prepare('SELECT warehouse_id, product_id, quantity FROM inventory_stock').all() as StockCell[];
   const liveMap = new Map(live.map((row) => [cellKey(row.warehouse_id, row.product_id), Number(row.quantity) || 0]));
 
+  // Mỗi phiếu chuyển kho ghi HAI chặng (TRANSFER_OUT ở kho nguồn, TRANSFER_IN ở kho đích) và cả hai
+  // chặng đều mang đủ cặp kho nguồn/đích, nên phải chọn đúng một phía theo loại bút toán — nếu không
+  // mỗi chặng bị tính hai lần và tồn quá khứ của hai kho bị lệch đúng bằng số hàng đã chuyển.
   const movements = db
     .prepare(
       `SELECT day, warehouse_id, product_id, SUM(delta) AS delta FROM (
          SELECT date(created_at) AS day, target_warehouse_id AS warehouse_id, product_id,
                 quantity + COALESCE(quantity_promo, 0) AS delta
-           FROM stock_movements WHERE target_warehouse_id IS NOT NULL AND date(created_at) > ?
+           FROM stock_movements
+          WHERE target_warehouse_id IS NOT NULL AND movement_type <> 'TRANSFER_OUT' AND date(created_at) > ?
          UNION ALL
          SELECT date(created_at) AS day, source_warehouse_id AS warehouse_id, product_id,
                 -(quantity + COALESCE(quantity_promo, 0)) AS delta
-           FROM stock_movements WHERE source_warehouse_id IS NOT NULL AND date(created_at) > ?
+           FROM stock_movements
+          WHERE source_warehouse_id IS NOT NULL AND movement_type <> 'TRANSFER_IN' AND date(created_at) > ?
        ) GROUP BY day, warehouse_id, product_id`
     )
     .all(from, from) as { day: string; warehouse_id: number; product_id: number; delta: number }[];
@@ -166,7 +172,8 @@ export function inventoryRouter(): Router {
         .prepare(`SELECT id, name FROM warehouses WHERE ${STOCK_WAREHOUSE_FILTER} ORDER BY id`)
         .all() as { id: number; name: string }[];
       const columns: InventoryColumn[] = products.map((p) => ({ name: p.name, unit: p.unit }));
-      const today = new Date().toISOString().slice(0, 10);
+      // Ngày trên tiêu đề/tên tệp theo giờ Việt Nam, không theo giờ UTC của máy chủ.
+      const snapshotDate = today();
 
       if (range) {
         const byDay = stockByDay(db, range.from, range.to);
@@ -204,7 +211,7 @@ export function inventoryRouter(): Router {
         warehouse: w.name,
         quantities: products.map((p) => quantities.get(cellKey(w.id, p.id)) ?? 0),
       }));
-      const [y, m, d] = today.split('-');
+      const [y, m, d] = snapshotDate.split('-');
       const buffer = await buildInventoryWorkbook(columns, rows, {
         title: 'Tổng hợp tồn kho',
         subtitle: `Tồn hiện tại đến hết ngày ${d}/${m}/${y} — ${rows.length} kho × ${columns.length} mặt hàng`,
@@ -212,7 +219,7 @@ export function inventoryRouter(): Router {
       });
 
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', `attachment; filename="ton-kho-${today}.xlsx"`);
+      res.setHeader('Content-Disposition', `attachment; filename="ton-kho-${snapshotDate}.xlsx"`);
       res.send(Buffer.from(buffer));
     })
   );

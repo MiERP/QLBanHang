@@ -132,11 +132,21 @@ function withManualTicketPromotions(db: Database.Database, items: ReturnType<typ
   return items;
 }
 
-function assertHeader(input: TicketHeaderInput) {
+function assertHeader(db: Database.Database, input: TicketHeaderInput) {
   if (!Number(input.warehouseId)) throw badRequest('Thiếu kho xuất/nhập');
   if (input.ticketType === 'TRANSFER') {
     if (!input.targetWarehouseId) throw badRequest('Thiếu kho nhận điều chuyển');
     if (Number(input.targetWarehouseId) === Number(input.warehouseId)) throw badRequest('Kho xuất và kho nhận phải khác nhau');
+    // Hàng thật chỉ nằm ở kho thật: chuyển vào kho ảo (trung chuyển/mượn) hay nút "Khách hàng" sẽ đẩy
+    // hàng sang nơi báo cáo đối soát không nhìn tới, gây lệch không thể tìm ra.
+    const whType = db.prepare('SELECT type FROM warehouses WHERE id = ?');
+    for (const id of [Number(input.warehouseId), Number(input.targetWarehouseId)]) {
+      const wh = whType.get(id) as { type: string } | undefined;
+      if (!wh) throw badRequest('Kho không tồn tại');
+      if (!['CENTRAL', 'STORE', 'VEHICLE', 'STATION'].includes(wh.type)) {
+        throw badRequest('Điều chuyển kho chỉ áp dụng cho kho chứa hàng thật (kho trung tâm, cửa hàng, xe, trạm)');
+      }
+    }
   }
 }
 
@@ -172,7 +182,7 @@ function replaceItems(db: Database.Database, ticketId: number, items: TicketItem
 export function createTicket(db: Database.Database, input: CreateTicketInput): { id: number; code: string } {
   const items = withManualTicketPromotions(db, validItems(input.items), input.ticketType,
     input.reason, input.ticketDate, !!input.auto, input.orderId);
-  assertHeader(input);
+  assertHeader(db, input);
   const status: TicketStatus = input.status ?? 'DRAFT';
 
   const prefix = input.ticketType === 'IN' ? 'PN' : input.ticketType === 'OUT' ? 'PX' : 'PDC';
@@ -316,9 +326,14 @@ export function updateTicket(db: Database.Database, ticketId: number, input: Tic
   const ticket = getTicket(db, ticketId);
   if (!ticket) throw badRequest('Không tìm thấy phiếu kho');
   if (ticket.status === 'CONFIRMED') throw badRequest('Phiếu đã xác nhận (đã cộng/trừ tồn kho) — không sửa được');
+  // Phiếu sinh từ đơn hàng phải sửa qua chính đơn đó: sửa riêng phiếu làm số hàng xuất kho lệch khỏi
+  // đơn, trong khi số vỏ, tiền cọc và số lượng hoàn vẫn tính theo đơn.
+  if (ticket.order_id) {
+    throw badRequest('Phiếu sinh từ đơn hàng — sửa ở đơn hàng để tồn kho và đơn luôn khớp nhau');
+  }
   const items = withManualTicketPromotions(db, validItems(input.items), input.ticketType,
     input.reason, input.ticketDate, !!ticket.auto, ticket.order_id);
-  assertHeader(input);
+  assertHeader(db, input);
   db.prepare(
     `UPDATE stock_tickets SET ticket_date = ?, warehouse_id = ?, target_warehouse_id = ?, partner_unit_id = ?,
        source_id = ?, reason = ?, check_note = ?, vehicle = ?, in_charge_employee_id = ?, note = ? WHERE id = ?`

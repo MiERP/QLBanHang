@@ -13,11 +13,14 @@ export interface ReportPeriod {
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-function validDate(value: string): boolean {
-  if (!DATE_RE.test(value)) return false;
-  const d = new Date(`${value}T00:00:00Z`);
+// Ngày nghiệp vụ hợp lệ (đúng định dạng và tồn tại thật). Dùng chung cho lúc lưu cấu hình kỳ báo cáo
+// để không lưu được một kỳ sai rồi bị hệ thống âm thầm bỏ qua.
+export function isValidReportDate(value: unknown): boolean {
+  const text = String(value ?? '').trim();
+  if (!DATE_RE.test(text)) return false;
+  const d = new Date(`${text}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return false;
-  return d.toISOString().slice(0, 10) === value;
+  return d.toISOString().slice(0, 10) === text;
 }
 
 // Tháng dương lịch chứa `date` (mặc định khi chưa cấu hình kỳ).
@@ -31,7 +34,7 @@ function calendarMonth(date: string): { from: string; to: string } {
 export function currentReportPeriod(db: Database.Database): ReportPeriod {
   const from = settingValue(db, REPORT_PERIOD_FROM);
   const to = settingValue(db, REPORT_PERIOD_TO);
-  const range = validDate(from) && validDate(to) && from <= to
+  const range = isValidReportDate(from) && isValidReportDate(to) && from <= to
     ? { from, to }
     : calendarMonth(today());
   return { from: range.from, to: range.to, label: `${range.from} → ${range.to}`, key: `${range.from}..${range.to}` };

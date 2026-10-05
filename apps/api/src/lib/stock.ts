@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { nowStamp } from './codes.js';
 import { badRequest } from './http.js';
 
 export type MovementType =
@@ -96,9 +97,8 @@ export function recordMovement(db: Database.Database, opts: MovementOptions) {
     opts.note ?? null,
   ];
   // Ngày nghiệp vụ của bút toán = ngày phiếu (để đối soát theo kỳ đúng ngày phát sinh).
-  if (opts.createdAt) {
-    cols.push('created_at');
-    values.push(opts.createdAt);
-  }
+  // Không truyền ngày thì lấy giờ Việt Nam, không lấy giờ máy chủ (VPS chạy UTC sẽ lệch ngày).
+  cols.push('created_at');
+  values.push(nowStamp(opts.createdAt));
   db.prepare(`INSERT INTO stock_movements (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`).run(...values);
 }

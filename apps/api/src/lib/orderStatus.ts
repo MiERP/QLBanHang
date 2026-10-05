@@ -53,8 +53,10 @@ export function getOrder(db: Database.Database, id: number): OrderRecord | undef
   return db.prepare('SELECT * FROM orders WHERE id = ?').get(id) as OrderRecord | undefined;
 }
 
+// Số tiền khách còn phải trả của một đơn. Mọi loại đơn đều lấy theo total_amount vì chính
+// recalcTotals đã quyết định đơn cho mượn/bốc xếp chỉ thu phí ship (và bằng 0 khi miễn ship);
+// lấy riêng shipping_fee ở đây sẽ mâu thuẫn với quy tắc miễn ship và làm lệch sổ quỹ.
 export function payableAmount(db: Database.Database, order: OrderRecord): number {
-  if (order.order_type === 'LEND_OUT' || order.order_type === 'HIRED_LOAD') return Number(order.shipping_fee) || 0;
   const returned = db.prepare('SELECT COALESCE(SUM(returned_amount), 0) AS amount FROM order_returns WHERE order_id = ?')
     .get(order.id) as { amount: number } | undefined;
   return Math.max(0, (Number(order.total_amount) || 0) - (Number(returned?.amount) || 0));
@@ -543,6 +545,35 @@ export function applyCompletionEffects(db: Database.Database, order: OrderRecord
       order.shipper_employee_id ?? order.seller_employee_id,
       `Giao hàng và đối soát vỏ bình theo đơn ${order.order_code}${overBook > 0 ? ` (vỏ trả vượt sổ: ${overBook} bình không hoàn cọc)` : ''}`
     );
+
+    // Vỏ khách trả ngay khi giao hàng phải nhập lại pool vỏ của xí nghiệp và ghi sổ vỏ.
+    // Thiếu bút toán này thì nợ vỏ của khách đã giảm mà số vỏ xí nghiệp đang giữ vẫn thiếu vĩnh viễn.
+    const shellNote = `Thu hồi vỏ khi giao hàng theo đơn ${order.order_code}`;
+    const handledBy = order.shipper_employee_id ?? order.seller_employee_id ?? null;
+    if (returnedVoi) {
+      recordShellMovement(db, {
+        movementType: 'RETURN',
+        bottleType: 'VOI',
+        quantity: returnedVoi,
+        customerId: order.customer_id,
+        orderId: order.id,
+        performedBy: handledBy,
+        note: shellNote,
+        movementDate: order.order_date,
+      });
+    }
+    if (returnedUp) {
+      recordShellMovement(db, {
+        movementType: 'RETURN',
+        bottleType: 'UP',
+        quantity: returnedUp,
+        customerId: order.customer_id,
+        orderId: order.id,
+        performedBy: handledBy,
+        note: shellNote,
+        movementDate: order.order_date,
+      });
+    }
   }
 }
 

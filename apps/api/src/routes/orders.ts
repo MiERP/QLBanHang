@@ -124,9 +124,9 @@ function attachOrderDetails(db: ReturnType<typeof getDb>, orders: Record<string,
     const returnedAmount = returnHistory.reduce((sum, row) => sum + Number(row.returned_amount || 0), 0) || returnedValue;
     const refundedAmount = returnHistory.reduce((sum, row) => sum + Number(row.refund_amount || 0), 0);
     const freightOnly = o.order_type === 'LEND_OUT' || o.order_type === 'HIRED_LOAD';
-    const collectible = freightOnly
-      ? Number(o.shipping_fee) || 0
-      : Math.max(0, (Number(o.total_amount) || 0) - returnedAmount);
+    // Đơn cho mượn/bốc xếp đã có total_amount = phí ship (và bằng 0 khi bật miễn ship cho khách),
+    // nên mọi loại đơn dùng chung một cách tính để không lệch với quy tắc miễn ship.
+    const collectible = Math.max(0, (Number(o.total_amount) || 0) - returnedAmount);
     const outstandingAmount = Math.max(0, collectible - ((Number(o.paid_amount) || 0) - refundedAmount));
     return {
       ...o,
@@ -652,7 +652,7 @@ export function ordersRouter(): Router {
         assertShipperSelected(db, after.order_type, id);
         // Đổi trạng thái thanh toán thì tiền đã thu phải khớp lại (đơn cho mượn chỉ thu tiền vận chuyển).
         if (body.payment_status !== undefined && body.paid_amount === undefined) {
-          const collectible = after.order_type === 'LEND_OUT' || after.order_type === 'HIRED_LOAD' ? totals.shippingFee : totals.total;
+          const collectible = totals.total;
           const paid =
             body.payment_status === 'PAID'
               ? collectible
@@ -662,7 +662,7 @@ export function ordersRouter(): Router {
           db.prepare('UPDATE orders SET paid_amount = ? WHERE id = ?').run(paid, id);
         }
         const currentPaid = Number((getOrder(db, id)!).paid_amount);
-        const collectible = after.order_type === 'LEND_OUT' || after.order_type === 'HIRED_LOAD' ? totals.shippingFee : totals.total;
+        const collectible = totals.total;
         if (after.payment_method === 'DEBT' && currentPaid > 0) throw badRequest('Đơn ghi nợ chưa có phiếu thu không được đánh dấu đã thanh toán');
         if (!Number.isFinite(currentPaid) || currentPaid < 0 || currentPaid > collectible + 0.5) {
           throw badRequest('Số tiền đã thu vượt số phải thanh toán của đơn');

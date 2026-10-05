@@ -1,6 +1,7 @@
 import express, { Router } from 'express';
 import ExcelJS from 'exceljs';
 import { getDb, resetDatabase } from '../db.js';
+import { today } from '../lib/codes.js';
 import { badRequest, handle } from '../lib/http.js';
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -77,7 +78,7 @@ export function systemRouter(): Router {
       }
       const buffer = await wb.xlsx.writeBuffer();
       res.setHeader('Content-Type', XLSX_MIME);
-      res.setHeader('Content-Disposition', `attachment; filename="qaromi-backup-${new Date().toISOString().slice(0, 10)}.xlsx"`);
+      res.setHeader('Content-Disposition', `attachment; filename="qaromi-backup-${today()}.xlsx"`);
       res.send(Buffer.from(buffer));
     })
   );

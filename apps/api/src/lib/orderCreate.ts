@@ -213,7 +213,8 @@ export function createOrder(db: Database.Database, body: Record<string, unknown>
     }
 
     const requestedPaymentStatus = String(body.payment_status || 'UNPAID');
-    const collectible = orderType === 'LEND_OUT' || isHired ? totals.shippingFee : totals.total;
+    // Mọi loại đơn thu theo total_amount: đơn cho mượn/bốc xếp đã có total = phí ship (0 khi miễn ship).
+    const collectible = totals.total;
     const paidAmount =
       requestedPaymentStatus === 'PAID' ? collectible : requestedPaymentStatus === 'UNPAID' ? 0 : Number(body.paid_amount) || 0;
     if (!Number.isFinite(paidAmount) || paidAmount < 0 || paidAmount > collectible + 0.5) {

@@ -194,14 +194,17 @@ export function invoicesRouter(): Router {
           width: 2,
         });
 
-        // Giá bán trên đơn ĐÃ gồm VAT, nên tiền hàng trước thuế phải suy ngược từ đơn giá
-        // (làm tròn từng đơn giá rồi mới nhân số lượng) và tiền thuế = tiền hàng - tiền trước thuế.
-        // Trước đây lấy thẳng tiền hàng nhân thuế suất nên vừa thừa thuế vừa không khớp tổng.
+        // Giá bán trên đơn ĐÃ gồm VAT nên tiền hàng trước thuế phải suy ngược từ đơn giá (làm tròn
+        // từng đơn giá rồi mới nhân số lượng). Giảm giá làm giảm giá trị hàng thực thu, nên tách thuế
+        // trên phần thực thu — nếu không hóa đơn tính thuế cả phần đã giảm và không khớp tổng thanh toán.
         const goodsGross = Number(order.subtotal_amount) || 0;
         const discount = Number(order.discount_amount) || 0;
+        const goodsPaid = Math.max(0, goodsGross - discount);
         const vatRate = order.is_vat_invoice ? Number(order.vat_rate) || 0 : 0;
-        const goodsNet = vatRate > 0 ? orderGoodsNet(db, orderId, vatRate) : goodsGross;
-        const taxAmount = goodsGross - goodsNet;
+        const netBeforeDiscount = vatRate > 0 ? orderGoodsNet(db, orderId, vatRate) : goodsGross;
+        const goodsNet =
+          vatRate > 0 && goodsGross > 0 ? Math.round((netBeforeDiscount * goodsPaid) / goodsGross) : goodsPaid;
+        const taxAmount = goodsPaid - goodsNet;
         const total = Number(order.total_amount) || 0;
 
         const insert = db

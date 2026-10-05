@@ -10,7 +10,7 @@ import { PageHeader } from '../../components/ui/PageHeader';
 import { useToast } from '../../components/ui/Toast';
 import { useReference } from '../../context/ReferenceContext';
 import { useApi } from '../../lib/hooks';
-import { formatDate, formatNumber, todayISO } from '../../lib/format';
+import { formatDateTime, formatNumber, todayISO } from '../../lib/format';
 import type { ShellMovement } from '../../types';
 
 const MOVEMENT_LABEL: Record<string, string> = {
@@ -39,7 +39,8 @@ const MANUAL_TYPES = [
 ];
 
 const movementColumns: Column<ShellMovement>[] = [
-  { key: 'created_at', header: 'Ngày', render: (r) => formatDate(r.created_at.slice(0, 10)), sortValue: (r) => r.created_at },
+  // created_at là mốc thời gian thật (UTC) — hiển thị kèm giờ, cắt 10 ký tự sẽ lùi ngày với phát sinh sau 17h UTC.
+  { key: 'created_at', header: 'Ngày', render: (r) => formatDateTime(r.created_at), sortValue: (r) => r.created_at },
   {
     key: 'movement_type',
     header: 'Nghiệp vụ',
