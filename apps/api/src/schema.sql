@@ -158,6 +158,8 @@ CREATE TABLE IF NOT EXISTS orders (
     shipping_fee REAL DEFAULT 0.0,
     discount_amount REAL DEFAULT 0.0,
     deposit_amount REAL DEFAULT 0.0,
+    -- Tiền cọc vỏ do người dùng nhập tay cho đơn; NULL = tự tính theo số bình × phí cọc.
+    deposit_override REAL,
     total_amount REAL NOT NULL,
     paid_amount REAL DEFAULT 0.0,
     shipping_receiver TEXT,

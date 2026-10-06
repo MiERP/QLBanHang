@@ -430,9 +430,11 @@ for (let r = 6; r <= MAX_ROW; r++) {
 
 const orders = [];
 const orderItems = [];
+const revenueTransactions = [];
 const warnings = [];
 const unmappedWarehouses = new Map();
 const seqByDate = new Map();
+const revenueSeqByDate = new Map();
 
 function collectItems(rows, desc) {
   const items = [];
@@ -576,6 +578,27 @@ for (const g of groups) {
       total_price: it.total_price,
     });
   });
+
+  // Đơn đã thu tiền phải có phiếu thu tương ứng trong sổ quỹ, nếu không tiền thu và sổ quỹ lệch nhau.
+  if (paid && total > 0) {
+    const dateKey = g.date.replace(/-/g, '');
+    const rseq = (revenueSeqByDate.get(g.date) ?? 0) + 1;
+    revenueSeqByDate.set(g.date, rseq);
+    const isSale = orderType === 'SALE' || orderType === 'BORROW_IN';
+    revenueTransactions.push({
+      id: revenueTransactions.length + 1,
+      transaction_code: `PT-${dateKey}-${String(rseq).padStart(3, '0')}`,
+      transaction_type: isSale ? 'WATER_SALE' : 'OTHER',
+      order_id: id,
+      customer_id: isSale ? customerId : null,
+      amount: total,
+      payment_method: paymentMethod,
+      collected_by: shipperIds[0] ?? sellerIds[0] ?? null,
+      transaction_date: g.date,
+      note: `Thu tiền đơn nhập từ sổ ĐIỀU PHỐI NƯỚC LỌC T10 (dòng ${g.startRow})`,
+      created_at: `${g.date} 00:00:00`,
+    });
+  }
 }
 
 console.log(`Đơn: ${orders.length} | Dòng hàng: ${orderItems.length} | Khách: ${customers.length} | Nhân viên: ${employees.length}`);
@@ -789,6 +812,7 @@ fill(tpl, 'employees', employees);
 fill(tpl, 'products', productSheet.rows);
 fill(tpl, 'orders', orders);
 fill(tpl, 'order_items', orderItems);
+fill(tpl, 'revenue_transactions', revenueTransactions);
 fill(tpl, 'stock_movements', stockMovements);
 fill(tpl, 'inventory_stock', inventoryRows);
 fill(tpl, 'partner_units', partnerSheet.rows);

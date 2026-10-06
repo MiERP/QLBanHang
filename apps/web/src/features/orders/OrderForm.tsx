@@ -38,6 +38,7 @@ const blankHeader = () => ({
   payment_method: 'CASH',
   payment_status: 'UNPAID',
   discount_amount: 0,
+  deposit_override: '',
   shipping_fee: 0,
   shipping_receiver: '',
   shipping_phone: '',
@@ -72,6 +73,7 @@ function orderToForm(order: Order): Record<string, unknown> {
     payment_method: order.payment_method ?? 'CASH',
     payment_status: order.payment_status ?? 'UNPAID',
     discount_amount: order.discount_amount ?? 0,
+    deposit_override: order.deposit_override ?? '',
     shipping_fee: order.shipping_fee ?? 0,
     shipping_receiver: order.shipping_receiver ?? '',
     shipping_phone: order.shipping_phone ?? '',
@@ -113,6 +115,7 @@ export function OrderForm({ order, readOnly = false, showActions = true, onSaved
   const shippingFeesApi = useApi(() => api.shippingFees.list(), []);
   const promotionsApi = useApi(() => api.promotions.list(), []);
   const vatRatesApi = useApi(() => api.vatRates.list(), []);
+  const shellDepositsApi = useApi(() => api.shellDeposits.list(), []);
   const toast = useToast();
   const editing = !!order;
 
@@ -258,6 +261,36 @@ export function OrderForm({ order, readOnly = false, showActions = true, onSaved
   const freeShipCustomer = freeShipForCustomer(settings);
   const total = (isFreightOnly ? 0 : subtotal - discountAmount) + (freeShipCustomer && !isFreightOnly ? 0 : shippingFee);
 
+  // Tiền cọc vỏ bình khách phải trả để được mượn vỏ (chỉ với hàng bình RO / bình kiềm):
+  // số bình giao (kể cả bình khuyến mãi, trừ bình khách trả ngay) × phí cọc theo loại vỏ.
+  // Phí cọc lấy từ danh mục "Cọc vỏ bình", chưa cấu hình thì theo sản phẩm bình đang bán.
+  const shellFee = (type: 'VOI' | 'UP'): number => {
+    const configured = (shellDepositsApi.data ?? []).find((r) => r.bottle_type === type);
+    if (configured && Number(configured.deposit_fee) > 0) return Number(configured.deposit_fee);
+    const product = (products ?? []).find((p) => p.bottle_type === type && Number(p.deposit_fee) > 0);
+    return Number(product?.deposit_fee) || 0;
+  };
+  const depositAmount = (() => {
+    if (isFreightOnly) return 0;
+    let voi = 0;
+    let up = 0;
+    for (const it of shownItems) {
+      const product = (products ?? []).find((p) => p.id === Number(it.product_id));
+      const qty = (Number(it.quantity) || 0) + (Number(it.quantity_promo) || 0);
+      if (product?.bottle_type === 'VOI') voi += qty;
+      else if (product?.bottle_type === 'UP') up += qty;
+    }
+    const netVoi = Math.max(0, voi - (Number(form.returned_shells_voi) || 0));
+    const netUp = Math.max(0, up - (Number(form.returned_shells_up) || 0));
+    return netVoi * shellFee('VOI') + netUp * shellFee('UP');
+  })();
+  // Người dùng có thể điền tay số tiền cọc; để trống thì dùng số tự tính.
+  const depositOverrideRaw = String(form.deposit_override ?? '').trim();
+  const depositValue =
+    depositOverrideRaw !== '' && Number.isFinite(Number(depositOverrideRaw))
+      ? Math.max(0, Number(depositOverrideRaw))
+      : depositAmount;
+
   const addLine = () => updateItems((prev) => [...prev, blankLine()]);
 
   const buildPayload = (valid: LineItem[]) => ({
@@ -269,6 +302,8 @@ export function OrderForm({ order, readOnly = false, showActions = true, onSaved
     shippers: shippers.map((s) => ({ employee_id: s.employee_id, allocated_fee: s.allocated_fee })),
     shipping_fee: shippingFee,
     shipping_fee_id: isBorrow && !shippers.length ? null : form.shipping_fee_id,
+    // Để trống = tự tính theo số bình × phí cọc; điền số thì lấy đúng số người dùng nhập.
+    deposit_override: depositOverrideRaw === '' ? null : Math.max(0, Number(depositOverrideRaw)),
     items: valid.map((it) => ({
       product_id: it.product_id,
       quantity: Number(it.quantity),
@@ -603,11 +638,22 @@ export function OrderForm({ order, readOnly = false, showActions = true, onSaved
                       <Field label="Vỏ Úp thu hồi">
                         <Input dense type="number" value={String(form.returned_shells_up ?? '')} onChange={(e) => setForm({ ...form, returned_shells_up: e.target.value })} />
                       </Field>
+                      <Field label="Tiền cọc vỏ (trống = tự tính)">
+                        <Input
+                          dense
+                          type="number"
+                          placeholder={formatNumber(depositAmount)}
+                          value={String(form.deposit_override ?? '')}
+                          onChange={(e) => setForm({ ...form, deposit_override: e.target.value })}
+                        />
+                      </Field>
                     </>
                   )}
-                  <Field label="Ghi chú giao">
-                    <Input dense value={String(form.shipping_note ?? '')} onChange={(e) => setForm({ ...form, shipping_note: e.target.value })} />
-                  </Field>
+                  <div className="col-span-full">
+                    <Field label="Ghi chú giao">
+                      <Textarea value={String(form.shipping_note ?? '')} onChange={(e) => setForm({ ...form, shipping_note: e.target.value })} />
+                    </Field>
+                  </div>
                 </FormGrid>
               </div>
             </div>
@@ -728,9 +774,6 @@ export function OrderForm({ order, readOnly = false, showActions = true, onSaved
                 )}
               </div>
               )}
-              <Field label="Ghi chú đơn hàng">
-                <Textarea value={String(form.note ?? '')} onChange={(e) => setForm({ ...form, note: e.target.value })} />
-              </Field>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-5 border-t border-slate-100 bg-slate-50 px-4 py-3 text-sm">
               <span className="text-slate-600">
@@ -744,6 +787,17 @@ export function OrderForm({ order, readOnly = false, showActions = true, onSaved
               {!isFreightOnly && <span className="text-slate-600">
                 Giảm giá: <b className="text-slate-800">{formatCurrency(discountAmount)}</b>
               </span>}
+              {!isFreightOnly && (
+                <span
+                  className="text-slate-600"
+                  title="Khoản cọc vỏ bình khách trả để được mượn bình (RO / kiềm), hoàn lại khi khách trả vỏ"
+                >
+                  Cọc vỏ bình: <b className="text-slate-800">{formatCurrency(depositValue)}</b>
+                  <span className="ml-1 text-xs text-slate-400">
+                    {depositOverrideRaw !== '' ? '(nhập tay)' : '(tự tính · hoàn lại khi trả vỏ)'}
+                  </span>
+                </span>
+              )}
               <span className="text-slate-600">
                 Tổng cộng: <b className="text-base text-brand-navy">{formatCurrency(total)}</b>
               </span>

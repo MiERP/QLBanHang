@@ -7,7 +7,7 @@ import { useConfirm } from '../../components/ui/ConfirmDialog';
 import { Field, Input } from '../../components/ui/Field';
 import { useToast } from '../../components/ui/Toast';
 import { useReference } from '../../context/ReferenceContext';
-import { FREE_SHIP_FOR_CUSTOMER, FREE_SHIP_WITHOUT_SHIPPER, REPORT_PERIOD_FROM, REPORT_PERIOD_TO } from '../../lib/settings';
+import { FREE_SHIP_FOR_CUSTOMER, FREE_SHIP_WITHOUT_SHIPPER, REPORT_PERIOD_FROM, REPORT_PERIOD_TO, STOCK_ALERT_THRESHOLD, stockAlertThreshold } from '../../lib/settings';
 
 // Cờ bật/tắt khối sao lưu/khôi phục bằng Excel trong Cấu hình chung.
 // Đặt false để tạm ẩn hai nút Xuất/Nhập (API phía sau vẫn giữ nguyên).
@@ -96,6 +96,7 @@ export function GeneralSettingsTab() {
 
   const [periodFrom, setPeriodFrom] = useState(settings[REPORT_PERIOD_FROM] ?? '');
   const [periodTo, setPeriodTo] = useState(settings[REPORT_PERIOD_TO] ?? '');
+  const [threshold, setThreshold] = useState(String(stockAlertThreshold(settings)));
 
   const toggleFreeShip = async (next: boolean) => {
     setSaving(true);
@@ -135,6 +136,19 @@ export function GeneralSettingsTab() {
       toast.success('Đã lưu kỳ báo cáo');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Không lưu được kỳ báo cáo');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveThreshold = async () => {
+    setSaving(true);
+    try {
+      await api.updateSettings({ [STOCK_ALERT_THRESHOLD]: threshold });
+      await reload();
+      toast.success('Đã lưu ngưỡng cảnh báo tồn kho');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Không lưu được ngưỡng cảnh báo');
     } finally {
       setSaving(false);
     }
@@ -235,6 +249,31 @@ export function GeneralSettingsTab() {
               </span>
             </span>
           </label>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="Cảnh báo tồn kho"
+          subtitle="Kho × mặt hàng có số lượng nhỏ hơn hoặc bằng ngưỡng này sẽ được cảnh báo sắp hết hàng. Số lượng ≤ 0 luôn là nguy cấp."
+        />
+        <CardBody>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:items-end">
+            <Field label="Ngưỡng cảnh báo (số lượng)">
+              <Input
+                type="number"
+                min={0}
+                value={threshold}
+                onChange={(e) => setThreshold(e.target.value)}
+              />
+            </Field>
+            <Button size="sm" onClick={saveThreshold} disabled={saving}>
+              {saving ? 'Đang lưu...' : 'Lưu ngưỡng cảnh báo'}
+            </Button>
+          </div>
+          <p className="mt-2 text-xs text-slate-500">
+            Áp dụng ngay cho màn Tồn kho, Bảng điều khiển, chuông cảnh báo và màn cảnh báo tồn kho.
+          </p>
         </CardBody>
       </Card>
 

@@ -7,8 +7,8 @@ export interface SettingDef {
   label: string;
   note: string;
   default: string;
-  // flag: quy tắc bật/tắt (giá trị '0'/'1'); date: ngày dạng YYYY-MM-DD.
-  type?: 'flag' | 'date';
+  // flag: quy tắc bật/tắt (giá trị '0'/'1'); date: ngày dạng YYYY-MM-DD; number: số nguyên không âm.
+  type?: 'flag' | 'date' | 'number';
 }
 
 // Bật: đơn để trống người giao là đơn miễn ship — không phát sinh tiền công giao hàng.
@@ -21,6 +21,10 @@ export const FREE_SHIP_FOR_CUSTOMER = 'free_ship_for_customer';
 // Kỳ báo cáo hiện tại: từ ngày → đến ngày. Để trống = tự dùng tháng dương lịch hiện tại.
 export const REPORT_PERIOD_FROM = 'report_period_from';
 export const REPORT_PERIOD_TO = 'report_period_to';
+
+// Ngưỡng cảnh báo tồn kho dùng chung: kho × mặt hàng có số lượng ≤ ngưỡng này sẽ được cảnh báo "sắp hết".
+// Số lượng ≤ 0 luôn là "nguy cấp" bất kể ngưỡng.
+export const STOCK_ALERT_THRESHOLD = 'stock_alert_threshold';
 
 export const SETTING_DEFS: SettingDef[] = [
   {
@@ -48,6 +52,13 @@ export const SETTING_DEFS: SettingDef[] = [
     note: 'Ngày kết thúc kỳ báo cáo hiện tại. Để trống sẽ dùng ngày cuối tháng dương lịch hiện tại.',
     default: '',
     type: 'date',
+  },
+  {
+    key: STOCK_ALERT_THRESHOLD,
+    label: 'Ngưỡng cảnh báo tồn kho',
+    note: 'Mức tồn tối thiểu dùng chung: kho × mặt hàng có số lượng nhỏ hơn hoặc bằng ngưỡng này sẽ hiện cảnh báo sắp hết hàng. Số lượng ≤ 0 luôn là nguy cấp.',
+    default: '20',
+    type: 'number',
   },
 ];
 
@@ -79,6 +90,12 @@ export function freeShipForCustomer(db: Database.Database): boolean {
   return settingFlag(db, FREE_SHIP_FOR_CUSTOMER);
 }
 
+// Ngưỡng cảnh báo tồn kho đang cấu hình (mặc định 20 nếu chưa đặt hoặc giá trị không hợp lệ).
+export function stockAlertThreshold(db: Database.Database): number {
+  const value = Number(settingValue(db, STOCK_ALERT_THRESHOLD));
+  return Number.isFinite(value) && value >= 0 ? Math.floor(value) : 20;
+}
+
 // Nhận cả boolean lẫn chuỗi '0'/'1' từ client — chuỗi '0' vẫn là TẮT nên không được dựa vào truthy của JS.
 function toFlag(value: unknown): string {
   return value === false || value === 0 || value === '0' || value === '' || value === null || value === undefined ? '0' : '1';
@@ -93,8 +110,15 @@ export function writeSettings(db: Database.Database, patch: Record<string, unkno
   db.transaction(() => {
     for (const def of SETTING_DEFS) {
       if (!(def.key in patch)) continue;
-      // Khoá dạng ngày ghi nguyên giá trị chuỗi (để trống = xoá cấu hình kỳ, rơi về mặc định).
-      stmt.run(def.key, def.type === 'date' ? String(patch[def.key] ?? '').trim() : toFlag(patch[def.key]));
+      // Ngày ghi nguyên chuỗi (để trống = xoá cấu hình kỳ, rơi về mặc định);
+      // số ghi số nguyên không âm; còn lại quy về cờ '0'/'1'.
+      const value =
+        def.type === 'date'
+          ? String(patch[def.key] ?? '').trim()
+          : def.type === 'number'
+            ? String(Math.max(0, Math.floor(Number(patch[def.key]) || 0)))
+            : toFlag(patch[def.key]);
+      stmt.run(def.key, value);
     }
   })();
 }

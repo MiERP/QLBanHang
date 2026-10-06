@@ -246,6 +246,8 @@ export interface Order {
   shipping_fee: number;
   discount_amount?: number;
   deposit_amount?: number;
+  /** Số tiền cọc vỏ người dùng nhập tay; null/rỗng = tự tính theo số bình × phí cọc. */
+  deposit_override?: number | null;
   total_amount: number;
   paid_amount: number;
   shipping_receiver?: string;

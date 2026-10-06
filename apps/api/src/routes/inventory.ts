@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getDb } from '../db.js';
 import { badRequest, handle } from '../lib/http.js';
 import { stockAlertRows } from '../lib/alerts.js';
+import { stockAlertThreshold } from '../lib/appSettings.js';
 import { today } from '../lib/codes.js';
 import { buildInventoryWorkbook, type InventoryColumn, type InventoryRow } from '../lib/inventoryExcel.js';
 
@@ -105,12 +106,15 @@ export function inventoryRouter(): Router {
     '/inventory/stock',
     handle((req, res) => {
       const wId = req.query.warehouse_id;
-      let query = `SELECT s.*,
+      // Ngưỡng cảnh báo lấy từ Cấu hình chung; trả về luôn ở cột min_stock_alert để màn Tồn kho tô đỏ theo đúng ngưỡng.
+      const threshold = stockAlertThreshold(db);
+      let query = `SELECT s.id, s.warehouse_id, s.product_id, s.quantity, s.avg_daily_sales, s.last_updated,
+                          ? as min_stock_alert,
                           w.name as warehouse_name, w.code as warehouse_code,
                           p.name as product_name, p.code as product_code, p.unit, p.bottle_type, p.standard_price,
                           (CASE
                             WHEN s.quantity <= 0 THEN 'CRITICAL'
-                            WHEN s.quantity <= s.min_stock_alert THEN 'HIGH'
+                            WHEN s.quantity <= ? THEN 'HIGH'
                             WHEN s.quantity <= (s.avg_daily_sales * 5) THEN 'MEDIUM'
                             ELSE 'NORMAL'
                           END) as urgency_level,
@@ -118,7 +122,7 @@ export function inventoryRouter(): Router {
                    FROM inventory_stock s
                    JOIN warehouses w ON s.warehouse_id = w.id
                    JOIN products p ON s.product_id = p.id`;
-      const params: unknown[] = [];
+      const params: unknown[] = [threshold, threshold];
       if (wId) {
         query += ` WHERE s.warehouse_id = ?`;
         params.push(wId);

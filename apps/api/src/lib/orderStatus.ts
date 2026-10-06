@@ -214,7 +214,7 @@ export function routeFeeFor(db: Database.Database, shippingFeeId: number | null 
 export function recalcTotals(db: Database.Database, orderId: number) {
   const row = db
     .prepare(
-      `SELECT order_type, shipping_fee, shipping_fee_id, discount_amount, returned_shells_voi, returned_shells_up
+      `SELECT order_type, shipping_fee, shipping_fee_id, discount_amount, returned_shells_voi, returned_shells_up, deposit_override
        FROM orders WHERE id = ?`
     )
     .get(orderId) as {
@@ -224,6 +224,7 @@ export function recalcTotals(db: Database.Database, orderId: number) {
     discount_amount: number;
     returned_shells_voi: number;
     returned_shells_up: number;
+    deposit_override: number | null;
   };
   const subtotal = Number(
     (db.prepare('SELECT COALESCE(SUM(total_price),0) as s FROM order_items WHERE order_id = ?').get(orderId) as {
@@ -246,9 +247,13 @@ export function recalcTotals(db: Database.Database, orderId: number) {
   const { borrowedVoi, borrowedUp } = bottleAmounts(itemRows(db, orderId));
   const { feeVoi, feeUp } = shellDepositFees(db);
   // Thu cọc theo số vỏ thực giao; phần vỏ khách trả dư được hoàn tiền ở bước hoàn tất đơn.
+  // Người dùng có thể điền tay số tiền cọc (deposit_override) — khi đó dùng số đã điền.
   const netVoi = borrowedVoi - (Number(row.returned_shells_voi) || 0);
   const netUp = borrowedUp - (Number(row.returned_shells_up) || 0);
-  const deposit = Math.max(0, netVoi) * feeVoi + Math.max(0, netUp) * feeUp;
+  const deposit =
+    row.deposit_override != null
+      ? Math.max(0, Number(row.deposit_override) || 0)
+      : Math.max(0, netVoi) * feeVoi + Math.max(0, netUp) * feeUp;
   // Miễn ship cho khách (cấu hình chung): khách chỉ trả tiền hàng, phí ship vẫn lưu (shipping_fee) để tính công giao hàng.
   const goodsTotal = row.order_type === 'LEND_OUT' || row.order_type === 'HIRED_LOAD' ? 0 : subtotal - discount;
   const total = goodsTotal + (freeShipForCustomer(db) ? 0 : shippingFee);

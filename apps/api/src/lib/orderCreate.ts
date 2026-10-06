@@ -202,6 +202,14 @@ export function createOrder(db: Database.Database, body: Record<string, unknown>
       );
     const orderId = Number(insert.lastInsertRowid);
 
+    // Tiền cọc vỏ do người dùng nhập tay (để trống = tự tính theo số bình × phí cọc).
+    if (body.deposit_override !== undefined && body.deposit_override !== null && body.deposit_override !== '') {
+      db.prepare('UPDATE orders SET deposit_override = ? WHERE id = ?').run(
+        Math.max(0, Number(body.deposit_override) || 0),
+        orderId
+      );
+    }
+
     insertItems(db, orderId, items, orderType);
     replaceShippers(db, orderId, shippers);
     const totals = recalcTotals(db, orderId);

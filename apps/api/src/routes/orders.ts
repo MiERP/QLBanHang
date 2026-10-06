@@ -43,6 +43,12 @@ const ORDER_STATUS_LABEL: Record<string, string> = {
   RETURNED: 'Hàng hoàn',
 };
 
+// Nguồn chỉ tiêu của đơn bán: khách do xí nghiệp tự khai thác hay do Công ty đưa sang.
+const TARGET_SCOPE_LABEL: Record<string, string> = {
+  COMPANY: 'Công ty',
+  ENTERPRISE: 'Xí nghiệp',
+};
+
 // Cột enum của đơn phải chặn giá trị lạ ngay tại API: cột thêm vào DB cũ bằng ALTER TABLE
 // không mang theo ràng buộc CHECK như trong schema.sql.
 const ENUM_COLUMNS: Record<string, { label: string; values: readonly string[] }> = {
@@ -189,8 +195,10 @@ export function ordersRouter(): Router {
         .prepare(
           `SELECT o.id, o.order_date, o.order_type, o.order_status,
                   c.name as customer_name,
+                  COALESCE(NULLIF(o.shipping_phone, ''), c.phone, '') as phone,
                   COALESCE(o.shipping_address, c.address, '') as address,
                   w.name as warehouse_name,
+                  o.target_scope,
                   ou.name as support_station_name
            FROM orders o
            JOIN customers c ON o.customer_id = c.id
@@ -199,7 +207,7 @@ export function ordersRouter(): Router {
            WHERE o.order_status IN ('DRAFT', 'CONFIRMED', 'SHIPPING')
            ORDER BY o.order_date ASC, o.id ASC`
         )
-        .all() as { id: number; order_date: string; order_type: string; order_status: string; customer_name: string; address: string; warehouse_name: string | null; support_station_name: string | null }[];
+        .all() as { id: number; order_date: string; order_type: string; order_status: string; customer_name: string; phone: string; address: string; warehouse_name: string | null; target_scope: string | null; support_station_name: string | null }[];
 
       const orderIds = orders.map((o) => o.id);
       const itemsByOrder = new Map<number, { name: string; quantity: number }[]>();
@@ -238,9 +246,11 @@ export function ordersRouter(): Router {
       ws.columns = [
         { header: 'Ngày tạo đơn', width: 14 },
         { header: 'Tên khách hàng', width: 30 },
+        { header: 'Số điện thoại', width: 16 },
         { header: 'Địa chỉ', width: 36 },
         { header: 'Loại đơn', width: 16 },
         { header: 'Kho', width: 22 },
+        { header: 'Chỉ tiêu', width: 14 },
         { header: 'Sản phẩm bán', width: 42 },
         { header: 'Số lượng', width: 10 },
         { header: 'Người vận chuyển', width: 22 },
@@ -255,9 +265,11 @@ export function ordersRouter(): Router {
         ws.addRow([
           o.order_date,
           o.customer_name,
+          o.phone,
           o.address,
           ORDER_TYPE_LABEL[o.order_type] ?? o.order_type,
           o.warehouse_name ?? '',
+          TARGET_SCOPE_LABEL[o.target_scope ?? ''] ?? '',
           productText,
           totalQty,
           (shippersByOrder.get(o.id) ?? []).join(', '),
@@ -576,6 +588,7 @@ export function ordersRouter(): Router {
         'shipping_fee',
         'shipping_fee_id',
         'discount_amount',
+        'deposit_override',
         'returned_shells_voi',
         'returned_shells_up',
         'is_vat_invoice',

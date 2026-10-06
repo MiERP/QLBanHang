@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getDb } from '../db.js';
 import { today } from '../lib/codes.js';
 import { currentReportPeriod } from '../lib/reportPeriod.js';
+import { stockAlertThreshold } from '../lib/appSettings.js';
 import { badRequest, handle } from '../lib/http.js';
 
 export function dashboardRouter(): Router {
@@ -49,6 +50,8 @@ export function dashboardRouter(): Router {
 
       const one = <T>(sql: string, ...params: unknown[]): T => db.prepare(sql).get(...params) as T;
       const all = <T>(sql: string, ...params: unknown[]): T[] => db.prepare(sql).all(...params) as T[];
+      // Ngưỡng cảnh báo tồn kho lấy từ Cấu hình chung (dùng cho thẻ cảnh báo và danh sách tồn thấp).
+      const alertThreshold = stockAlertThreshold(db);
 
       const revenueToday = one<{ total: number }>(
         `SELECT COALESCE(SUM(subtotal_amount),0) as total FROM orders WHERE order_date = ? AND ${completed} AND ${own} AND ${invoiced}`,
@@ -120,7 +123,8 @@ export function dashboardRouter(): Router {
       const alertCount = one<{ total: number }>(
         `SELECT COUNT(*) as total FROM inventory_stock s JOIN warehouses w ON s.warehouse_id = w.id
          WHERE w.type IN ('CENTRAL', 'STORE', 'VEHICLE', 'STATION')
-           AND (s.quantity <= s.min_stock_alert OR s.quantity <= 0)`
+           AND (s.quantity <= ? OR s.quantity <= 0)`,
+        alertThreshold
       ).total;
 
       const revenueByDay = all<{ date: string; revenue: number; orders: number }>(
@@ -231,9 +235,10 @@ export function dashboardRouter(): Router {
       );
 
       const stockLevels = all<{ name: string; quantity: number; min_stock_alert: number }>(
-        `SELECT p.name as name, s.quantity as quantity, s.min_stock_alert as min_stock_alert
+        `SELECT p.name as name, s.quantity as quantity, ? as min_stock_alert
          FROM inventory_stock s JOIN products p ON s.product_id = p.id
-         WHERE s.warehouse_id = 1 ORDER BY s.quantity ASC LIMIT 10`
+         WHERE s.warehouse_id = 1 ORDER BY s.quantity ASC LIMIT 10`,
+        alertThreshold
       );
 
       const movementsSummary = all<{ name: string; quantity: number }>(

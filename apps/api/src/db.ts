@@ -877,6 +877,7 @@ function initializeDatabase(dbInstance: Database.Database, forceSeed: boolean): 
   ensureColumn(dbInstance, 'orders', 'loan_due_date', 'DATE');
   ensureColumn(dbInstance, 'orders', 'returned_shells_voi', 'INTEGER DEFAULT 0');
   ensureColumn(dbInstance, 'orders', 'returned_shells_up', 'INTEGER DEFAULT 0');
+  ensureColumn(dbInstance, 'orders', 'deposit_override', 'REAL');
   ensureColumn(dbInstance, 'orders', 'merged_into_id', 'INTEGER');
   ensureColumn(dbInstance, 'orders', 'support_station_id', 'INTEGER');
   dropColumnIfExists(dbInstance, 'orders', 'free_ship_customer');
