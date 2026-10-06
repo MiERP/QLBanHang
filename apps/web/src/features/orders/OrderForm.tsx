@@ -110,7 +110,7 @@ interface OrderFormProps {
 }
 
 export function OrderForm({ order, readOnly = false, showActions = true, onSaved, onCancel }: OrderFormProps) {
-  const { products, warehouses, staff, customers, partnerUnits, orgUnits, settings, reload: reloadRefs } = useReference();
+  const { products, warehouses, staff, customers, partnerUnits, orgUnits, positions, settings, reload: reloadRefs } = useReference();
   const priceListApi = useApi(() => api.priceList.list(), []);
   const shippingFeesApi = useApi(() => api.shippingFees.list(), []);
   const promotionsApi = useApi(() => api.promotions.list(), []);
@@ -148,6 +148,8 @@ export function OrderForm({ order, readOnly = false, showActions = true, onSaved
   const [saving, setSaving] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickForm, setQuickForm] = useState<Record<string, unknown>>({ ...emptyCustomerForm });
+  const [quickStaffOpen, setQuickStaffOpen] = useState(false);
+  const [quickStaffForm, setQuickStaffForm] = useState<Record<string, unknown>>({ full_name: '', org_unit_id: '', position_id: '', phone: '' });
   const [addShipperId, setAddShipperId] = useState('');
   // Phí ship của đơn đã tạo là số đã lưu; chỉ tính lại theo tuyến khi tạo đơn mới
   // hoặc khi người dùng đổi tuyến phí / dòng hàng.
@@ -376,6 +378,24 @@ export function OrderForm({ order, readOnly = false, showActions = true, onSaved
     }
   };
 
+  const quickAddEmployee = async () => {
+    if (!quickStaffForm.full_name) return toast.error('Nhập họ tên nhân viên');
+    try {
+      const res = await api.staff.create({
+        ...quickStaffForm,
+        org_unit_id: quickStaffForm.org_unit_id || null,
+        position_id: quickStaffForm.position_id || null,
+      });
+      toast.success('Đã thêm nhân viên vào danh sách');
+      setQuickStaffOpen(false);
+      setForm({ ...form, seller_employee_id: String(res.id) });
+      setQuickStaffForm({ full_name: '', org_unit_id: '', position_id: '', phone: '' });
+      await reloadRefs();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Không thêm được nhân viên');
+    }
+  };
+
   return (
     <>
       <fieldset disabled={readOnly} className="m-0 min-w-0 border-0 p-0">
@@ -445,14 +465,27 @@ export function OrderForm({ order, readOnly = false, showActions = true, onSaved
                   </Field>
                 ) : (
                   <Field label="Người bán" required>
-                    <Select dense value={String(form.seller_employee_id ?? '')} onChange={(e) => setForm({ ...form, seller_employee_id: e.target.value })}>
-                      <option value="">-- Chọn --</option>
-                      {sellers.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.full_name}
-                        </option>
-                      ))}
-                    </Select>
+                    <div className="flex gap-1.5">
+                      <Select dense value={String(form.seller_employee_id ?? '')} onChange={(e) => setForm({ ...form, seller_employee_id: e.target.value })}>
+                        <option value="">-- Chọn --</option>
+                        {sellers.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.full_name}
+                          </option>
+                        ))}
+                      </Select>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        title="Thêm nhân viên nhanh"
+                        onClick={() => {
+                          setQuickStaffForm({ full_name: '', org_unit_id: orgUnits[0]?.id ?? '', position_id: positions[0]?.id ?? '', phone: '' });
+                          setQuickStaffOpen(true);
+                        }}
+                      >
+                        <UserPlus className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </Field>
                 )}
                 {!isNoStock && (
@@ -836,6 +869,54 @@ export function OrderForm({ order, readOnly = false, showActions = true, onSaved
       >
         <div className="space-y-3 p-5">
           <CustomerFields form={quickForm} set={(patch) => setQuickForm({ ...quickForm, ...patch })} />
+        </div>
+      </Modal>
+
+      <Modal
+        open={quickStaffOpen}
+        onClose={() => setQuickStaffOpen(false)}
+        size="md"
+        title="Thêm nhân viên nhanh"
+        footer={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setQuickStaffOpen(false)}>
+              Hủy bỏ
+            </Button>
+            <Button size="sm" onClick={quickAddEmployee}>
+              Lưu vào danh sách nhân viên
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3 p-5">
+          <FormGrid cols={2}>
+            <Field label="Họ và tên" required className="sm:col-span-2">
+              <Input value={String(quickStaffForm.full_name ?? '')} onChange={(e) => setQuickStaffForm({ ...quickStaffForm, full_name: e.target.value })} />
+            </Field>
+            <Field label="Đơn vị công tác">
+              <Select value={String(quickStaffForm.org_unit_id ?? '')} onChange={(e) => setQuickStaffForm({ ...quickStaffForm, org_unit_id: e.target.value })}>
+                <option value="">-- Chọn đơn vị --</option>
+                {orgUnits.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Chức vụ">
+              <Select value={String(quickStaffForm.position_id ?? '')} onChange={(e) => setQuickStaffForm({ ...quickStaffForm, position_id: e.target.value })}>
+                <option value="">-- Chọn chức vụ --</option>
+                {positions.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Điện thoại" className="sm:col-span-2">
+              <Input value={String(quickStaffForm.phone ?? '')} onChange={(e) => setQuickStaffForm({ ...quickStaffForm, phone: e.target.value })} />
+            </Field>
+          </FormGrid>
         </div>
       </Modal>
     </>
