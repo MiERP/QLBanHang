@@ -7,7 +7,8 @@ import { Modal } from '../../components/ui/Modal';
 import { useToast } from '../../components/ui/Toast';
 import { useReference } from '../../context/ReferenceContext';
 import { useApi } from '../../lib/hooks';
-import { formatCurrency, formatNumber, todayISO } from '../../lib/format';
+import { formatCurrency, formatNumber } from '../../lib/format';
+import { getWorkingDate } from '../../lib/workingDate';
 import { withPromotions } from '../../lib/promotions';
 import { stockWarehouses } from '../../lib/warehouses';
 import type { StockTicket } from '../../types';
@@ -45,7 +46,7 @@ export function StockTicketForm({
   // Dịch vụ không có tồn kho → phiếu kho chỉ chọn hàng bán.
   const stockProducts = products.filter((p) => p.product_type !== 'SERVICE');
   const [ticketType, setTicketType] = useState<TicketType>(ticket?.ticket_type ?? defaultType);
-  const [ticketDate, setTicketDate] = useState(ticket?.ticket_date ?? todayISO());
+  const [ticketDate, setTicketDate] = useState(ticket?.ticket_date ?? getWorkingDate());
   const [warehouseId, setWarehouseId] = useState(ticket ? String(ticket.warehouse_id) : '');
   const [targetWarehouseId, setTargetWarehouseId] = useState(
     ticket?.target_warehouse_id ? String(ticket.target_warehouse_id) : ''

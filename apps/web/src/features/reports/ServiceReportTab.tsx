@@ -8,7 +8,7 @@ import { Modal } from '../../components/ui/Modal';
 import { useToast } from '../../components/ui/Toast';
 import { useReference } from '../../context/ReferenceContext';
 import { useApi } from '../../lib/hooks';
-import { todayISO } from '../../lib/format';
+import { getWorkingDate } from '../../lib/workingDate';
 import type { PayrollItem, ReportPeriod, ServiceJob } from '../../types';
 import { PayrollReport } from './PayrollReport';
 
@@ -27,7 +27,7 @@ export function ServiceReportTab({ period }: { period: ReportPeriod }) {
   const [saving, setSaving] = useState(false);
 
   const blankForm = () => ({
-    service_date: todayISO(),
+    service_date: getWorkingDate(),
     customer_id: '',
     employee_id: '',
     product_id: serviceProducts[0]?.id ?? '',

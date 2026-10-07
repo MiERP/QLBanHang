@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { NAV_ITEMS, type NavItem, type TabId } from '../../layout';
 import { cn } from '../../lib/cn';
 import { formatDate } from '../../lib/format';
+import { setWorkingDate, useWorkingDate } from '../../lib/workingDate';
 import type { AppNotification, ReportPeriod } from '../../types';
 
 interface TopNavProps {
@@ -39,6 +40,7 @@ export function TopNav({
   const [openId, setOpenId] = useState<string | null>(null);
   const [bellOpen, setBellOpen] = useState(false);
   const barRef = useRef<HTMLElement>(null);
+  const workingDate = useWorkingDate();
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
@@ -215,6 +217,19 @@ export function TopNav({
               </div>
             )}
           </div>
+
+          <label
+            title="Ngày nhập liệu — phiếu mới (đơn hàng, phiếu kho, sổ quỹ…) mặc định theo ngày này. Đổi để nhập bù dữ liệu ngày cũ."
+            className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1"
+          >
+            <span className="whitespace-nowrap text-xs font-semibold text-slate-200">Hôm nay:</span>
+            <input
+              type="date"
+              value={workingDate}
+              onChange={(e) => e.target.value && setWorkingDate(e.target.value)}
+              className="w-[8.5rem] bg-transparent text-xs font-semibold text-white outline-none [color-scheme:dark]"
+            />
+          </label>
 
           <span
             title="Kỳ báo cáo hiện tại"

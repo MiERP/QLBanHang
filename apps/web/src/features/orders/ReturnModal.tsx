@@ -6,7 +6,8 @@ import { Modal } from '../../components/ui/Modal';
 import { useToast } from '../../components/ui/Toast';
 import { useReference } from '../../context/ReferenceContext';
 import { useApi } from '../../lib/hooks';
-import { formatCurrency, formatNumber, todayISO } from '../../lib/format';
+import { formatCurrency, formatNumber } from '../../lib/format';
+import { getWorkingDate } from '../../lib/workingDate';
 import type { Order } from '../../types';
 import { splitShippingFee } from './orderStatus';
 
@@ -27,7 +28,7 @@ export function ReturnModal({ order, open, onClose, onDone }: Props) {
   const items = useMemo(() => order.items ?? [], [order.items]);
   const quantities = useMemo(() => Object.fromEntries(items.map((item) => [item.id ?? 0, String(item.quantity)])), [items]);
   const promos = useMemo(() => Object.fromEntries(items.map((item) => [item.id ?? 0, String(item.quantity_promo ?? 0)])), [items]);
-  const [returnDate, setReturnDate] = useState(todayISO());
+  const [returnDate, setReturnDate] = useState(getWorkingDate());
   const [pickupType, setPickupType] = useState('CUSTOMER_BRING');
   const [collectors, setCollectors] = useState<{ employee_id: number; allocated_fee: number }[]>([]);
   const [addCollectorId, setAddCollectorId] = useState('');
@@ -47,7 +48,7 @@ export function ReturnModal({ order, open, onClose, onDone }: Props) {
 
   useEffect(() => {
     if (!open) return;
-    setReturnDate(todayISO());
+    setReturnDate(getWorkingDate());
     setPickupType('CUSTOMER_BRING');
     setCollectors([]);
     setShellsVoi('');

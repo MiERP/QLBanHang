@@ -11,6 +11,7 @@ import { useToast } from '../../components/ui/Toast';
 import { useReference } from '../../context/ReferenceContext';
 import { useApi } from '../../lib/hooks';
 import { formatCurrency, formatDate, todayISO } from '../../lib/format';
+import { getWorkingDate } from '../../lib/workingDate';
 import { paymentStatusMeta } from '../orders/orderStatus';
 import type { CustomerDebtOrderRow, RevenueTransaction } from '../../types';
 
@@ -46,7 +47,7 @@ export function ReceiptsTab() {
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [collectedBy, setCollectedBy] = useState('');
-  const [transactionDate, setTransactionDate] = useState(todayISO());
+  const [transactionDate, setTransactionDate] = useState(getWorkingDate());
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -55,7 +56,7 @@ export function ReceiptsTab() {
     setAmount(String(row.outstanding));
     setPaymentMethod('CASH');
     setCollectedBy('');
-    setTransactionDate(todayISO());
+    setTransactionDate(getWorkingDate());
     setNote('');
   };
 

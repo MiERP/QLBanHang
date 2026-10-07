@@ -11,6 +11,7 @@ import { useToast } from '../../components/ui/Toast';
 import { useReference } from '../../context/ReferenceContext';
 import { useApi } from '../../lib/hooks';
 import { formatDateTime, formatNumber, todayISO } from '../../lib/format';
+import { getWorkingDate } from '../../lib/workingDate';
 import type { ShellMovement } from '../../types';
 
 const MOVEMENT_LABEL: Record<string, string> = {
@@ -77,7 +78,7 @@ export function ShellStockTab() {
     bottle_type: 'VOI',
     quantity: '',
     performed_by: '',
-    movement_date: todayISO(),
+    movement_date: getWorkingDate(),
     note: '',
   });
 

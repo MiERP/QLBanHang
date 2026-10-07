@@ -11,7 +11,8 @@ import { SubTable, type SubColumn } from '../../components/ui/SubTable';
 import { useToast } from '../../components/ui/Toast';
 import { useReference } from '../../context/ReferenceContext';
 import { useApi } from '../../lib/hooks';
-import { formatCurrency, formatDate, formatNumber, todayISO } from '../../lib/format';
+import { formatCurrency, formatDate, formatNumber } from '../../lib/format';
+import { getWorkingDate } from '../../lib/workingDate';
 import { paymentStatusMeta } from '../orders/orderStatus';
 import type { CustomerDebtOrderRow, CustomerDebtRow } from '../../types';
 
@@ -38,7 +39,7 @@ export function CustomerDebtTab() {
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [collectedBy, setCollectedBy] = useState('');
-  const [transactionDate, setTransactionDate] = useState(todayISO());
+  const [transactionDate, setTransactionDate] = useState(getWorkingDate());
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -49,7 +50,7 @@ export function CustomerDebtTab() {
     setAmount(String(order.outstanding));
     setPaymentMethod('CASH');
     setCollectedBy('');
-    setTransactionDate(todayISO());
+    setTransactionDate(getWorkingDate());
     setNote('');
   };
 
@@ -86,7 +87,7 @@ export function CustomerDebtTab() {
     setAmount(String(openingDebt));
     setPaymentMethod('CASH');
     setCollectedBy('');
-    setTransactionDate(todayISO());
+    setTransactionDate(getWorkingDate());
     setNote('');
   };
 

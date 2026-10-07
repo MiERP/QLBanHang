@@ -4,7 +4,8 @@ import { Button } from '../../components/ui/Button';
 import { Field, FormGrid, Input, Select } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Modal';
 import { useToast } from '../../components/ui/Toast';
-import { formatNumber, todayISO } from '../../lib/format';
+import { formatNumber } from '../../lib/format';
+import { getWorkingDate } from '../../lib/workingDate';
 
 export interface StockCountRow {
   product_id: number;
@@ -29,7 +30,7 @@ export function StockCountModal({ open, onClose, warehouseId, warehouses, onWare
   const toast = useToast();
   const [counts, setCounts] = useState<Record<number, string>>({});
   const [note, setNote] = useState('');
-  const [date, setDate] = useState(todayISO());
+  const [date, setDate] = useState(getWorkingDate());
   const [saving, setSaving] = useState(false);
 
   const close = () => {
@@ -44,7 +45,7 @@ export function StockCountModal({ open, onClose, warehouseId, warehouses, onWare
     for (const row of rows) next[row.product_id] = String(row.current);
     setCounts(next);
     setNote(defaultNote);
-    setDate(todayISO());
+    setDate(getWorkingDate());
     // Chỉ khởi tạo lại khi mở/đổi kho — không phụ thuộc rows để không xoá số người dùng đang gõ.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, warehouseId]);

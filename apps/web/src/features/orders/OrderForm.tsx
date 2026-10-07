@@ -8,6 +8,7 @@ import { useToast } from '../../components/ui/Toast';
 import { useReference } from '../../context/ReferenceContext';
 import { useApi } from '../../lib/hooks';
 import { formatCurrency, formatNumber, todayISO } from '../../lib/format';
+import { getWorkingDate } from '../../lib/workingDate';
 import { withPromotions } from '../../lib/promotions';
 import { freeShipForCustomer, freeShipWithoutShipper } from '../../lib/settings';
 import { stockWarehouses } from '../../lib/warehouses';
@@ -33,8 +34,8 @@ const blankHeader = () => ({
   seller_employee_id: '',
   support_station_id: '',
   shipping_fee_id: '',
-  order_date: todayISO(),
-  delivery_date: todayISO(),
+  order_date: getWorkingDate(),
+  delivery_date: getWorkingDate(),
   payment_method: 'CASH',
   payment_status: 'UNPAID',
   discount_amount: 0,

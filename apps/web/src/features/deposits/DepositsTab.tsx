@@ -10,7 +10,8 @@ import { PageHeader } from '../../components/ui/PageHeader';
 import { useToast } from '../../components/ui/Toast';
 import { useReference } from '../../context/ReferenceContext';
 import { useApi } from '../../lib/hooks';
-import { formatCurrency, formatDate, todayISO } from '../../lib/format';
+import { formatCurrency, formatDate } from '../../lib/format';
+import { getWorkingDate } from '../../lib/workingDate';
 import type { DepositTransaction, ReportPeriod } from '../../types';
 
 export function DepositsTab({ period }: { period: ReportPeriod }) {
@@ -31,7 +32,7 @@ export function DepositsTab({ period }: { period: ReportPeriod }) {
   const totalRefund = rows.filter((r) => r.transaction_type === 'REFUND').reduce((a, r) => a + r.amount, 0);
 
   const openCreate = () => {
-    setForm({ transaction_type: 'COLLECT', amount: '', customer_id: '', payment_method: 'CASH', handled_by: '', transaction_date: todayISO(), note: '' });
+    setForm({ transaction_type: 'COLLECT', amount: '', customer_id: '', payment_method: 'CASH', handled_by: '', transaction_date: getWorkingDate(), note: '' });
     setOpen(true);
   };
 
