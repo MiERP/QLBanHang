@@ -111,8 +111,8 @@ const LABEL_TO_PROD: Record<string, string> = {
   'Vỉ 350ml': 'Vỉ 350ml',
   'Hộp 500ml': 'Hộp 500ml',
   'Hộp 350ml': 'Hộp 350ml',
-  'Bình kiềm': 'Bình kiềm (bình vòi)',
-  'Bình RO': 'Bình RO (bình vòi)',
+  'Bình kiềm': 'Bình Kiềm-Vòi',
+  'Bình RO': 'Bình RO-Vòi',
 };
 
 const dry = JSON.parse(fs.readFileSync(path.join(ROOT, '.migrate', 'dryrun.json'), 'utf8')) as {

@@ -122,12 +122,16 @@ const tplRows = (name) => {
 };
 const warehouseSheet = tplRows('warehouses');
 const productSheet = tplRows('products');
-// Tên chai 350/500ml: giữ (Vỉ)/(Hộp) để phân biệt, bỏ phần "6 chai"/"24 chai".
+// Tên sản phẩm rõ ràng để dễ nhận biết Vỉ/Hộp/Vòi/Úp (áp cho cả khi sinh tệp nhập).
 const PRODUCT_NAME_FIX = {
-  VI_350ML: 'Nước Chai QAROMI 350ml (Vỉ)',
-  HOP_350ML: 'Nước Chai QAROMI 350ml (Hộp)',
-  VI_500ML: 'Nước Chai QAROMI 500ml (Vỉ)',
-  HOP_500ML: 'Nước Chai QAROMI 500ml (Hộp)',
+  RO_19L_VOI: 'Bình RO-Vòi',
+  RO_19L_UP: 'Bình RO-Úp',
+  KIEM_19L_VOI: 'Bình Kiềm-Vòi',
+  KIEM_19L_UP: 'Bình Kiềm-Úp',
+  VI_350ML: 'Vỉ 350ml',
+  HOP_350ML: 'Hộp 350ml',
+  VI_500ML: 'Vỉ 500ml',
+  HOP_500ML: 'Hộp 500ml',
 };
 for (const p of productSheet.rows) {
   const fixed = PRODUCT_NAME_FIX[String(p.code)];

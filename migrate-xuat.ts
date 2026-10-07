@@ -47,11 +47,11 @@ const prodId = (n: string) => {
 
 // Tồn cuối 18/9 theo TỒN TỔNG!D33:H37 (đã truy công thức; bộ tính kiểm chứng 565/565 ô)
 const CLOSING: Record<string, Record<string, number>> = {
-  'Kho Huế': { 'Bình RO (bình vòi)': 3, 'Bình kiềm (bình vòi)': 9, 'Hộp 500ml': 0, 'Vỉ 500ml': 106, 'Vỉ 350ml': 25 },
-  'Kho Tăng Áp': { 'Bình RO (bình vòi)': 0, 'Bình kiềm (bình vòi)': 0, 'Hộp 500ml': 0, 'Vỉ 500ml': 191, 'Vỉ 350ml': 26 },
-  'Kho Văn Phòng': { 'Bình RO (bình vòi)': 0, 'Bình kiềm (bình vòi)': 0, 'Hộp 500ml': 0, 'Vỉ 500ml': 18, 'Vỉ 350ml': 0 },
-  'Kho Xe Điện': { 'Bình RO (bình vòi)': 0, 'Bình kiềm (bình vòi)': 0, 'Hộp 500ml': 0, 'Vỉ 500ml': 0, 'Vỉ 350ml': 0 },
-  'Kho Hà Lầm': { 'Bình RO (bình vòi)': 0, 'Bình kiềm (bình vòi)': 0, 'Hộp 500ml': 0, 'Vỉ 500ml': 17, 'Vỉ 350ml': 30 },
+  'Kho Huế': { 'Bình RO-Vòi': 3, 'Bình Kiềm-Vòi': 9, 'Hộp 500ml': 0, 'Vỉ 500ml': 106, 'Vỉ 350ml': 25 },
+  'Kho Tăng Áp': { 'Bình RO-Vòi': 0, 'Bình Kiềm-Vòi': 0, 'Hộp 500ml': 0, 'Vỉ 500ml': 191, 'Vỉ 350ml': 26 },
+  'Kho Văn Phòng': { 'Bình RO-Vòi': 0, 'Bình Kiềm-Vòi': 0, 'Hộp 500ml': 0, 'Vỉ 500ml': 18, 'Vỉ 350ml': 0 },
+  'Kho Xe Điện': { 'Bình RO-Vòi': 0, 'Bình Kiềm-Vòi': 0, 'Hộp 500ml': 0, 'Vỉ 500ml': 0, 'Vỉ 350ml': 0 },
+  'Kho Hà Lầm': { 'Bình RO-Vòi': 0, 'Bình Kiềm-Vòi': 0, 'Hộp 500ml': 0, 'Vỉ 500ml': 17, 'Vỉ 350ml': 30 },
 };
 
 // ---------- 2. Đọc kết quả chuyển đổi ----------
@@ -66,8 +66,8 @@ const LABEL_TO_PROD: Record<string, string> = {
   'Vỉ 350ml': 'Vỉ 350ml',
   'Hộp 500ml': 'Hộp 500ml',
   'Hộp 350ml': 'Hộp 350ml',
-  'Bình kiềm': 'Bình kiềm (bình vòi)',
-  'Bình RO': 'Bình RO (bình vòi)',
+  'Bình kiềm': 'Bình Kiềm-Vòi',
+  'Bình RO': 'Bình RO-Vòi',
 };
 
 const sold = new Map<string, number>();
