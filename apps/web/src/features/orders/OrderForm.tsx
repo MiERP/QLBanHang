@@ -1,5 +1,5 @@
 import { Plus, ShoppingCart, Trash2, UserPlus } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as api from '../../api';
 import { Button } from '../../components/ui/Button';
 import { Field, FormGrid, Input, Select, Textarea } from '../../components/ui/Field';
@@ -150,6 +150,10 @@ export function OrderForm({ order, readOnly = false, showActions = true, onSaved
   const [quickForm, setQuickForm] = useState<Record<string, unknown>>({ ...emptyCustomerForm });
   const [quickStaffOpen, setQuickStaffOpen] = useState(false);
   const [quickStaffForm, setQuickStaffForm] = useState<Record<string, unknown>>({ full_name: '', org_unit_id: '', position_id: '', phone: '' });
+  const [autosaveState, setAutosaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  // Id đơn nháp đang được lưu tự động (đơn mới tạo sẽ được gán sau lần lưu đầu tiên).
+  const draftIdRef = useRef<number | null>(order?.id ?? null);
+  const savingRef = useRef(false);
   const [addShipperId, setAddShipperId] = useState('');
   // Phí ship của đơn đã tạo là số đã lưu; chỉ tính lại theo tuyến khi tạo đơn mới
   // hoặc khi người dùng đổi tuyến phí / dòng hàng.
@@ -329,28 +333,35 @@ export function OrderForm({ order, readOnly = false, showActions = true, onSaved
 
   const save = async () => {
     const valid = shownItems.filter((it) => it.product_id && Number(it.quantity) > 0);
-    const err = validate(valid);
-    if (err) return toast.error(err);
+    // Đơn ĐÃ XÁC NHẬN phải giữ đủ trường (không phá vỡ đơn đã chốt); đơn nháp/tạo mới lưu không ràng buộc,
+    // việc kiểm tra đầy đủ thuộc bước Xác nhận đơn.
+    if (order && order.order_status === 'CONFIRMED') {
+      const err = validate(valid);
+      if (err) return toast.error(err);
+    }
     setSaving(true);
+    savingRef.current = true;
     try {
       const payload = buildPayload(valid);
-      if (editing && order) {
+      if (order) {
         await api.updateOrder(order.id, payload);
+        draftIdRef.current = order.id;
         toast.success('Đã lưu thay đổi đơn hàng');
         onSaved?.({ id: order.id, orderCode: order.order_code });
+      } else if (draftIdRef.current) {
+        await api.updateOrder(draftIdRef.current, payload);
+        toast.success('Đã lưu nháp đơn');
       } else {
         const res = await api.createOrder(payload);
+        draftIdRef.current = res.orderId;
         toast.success(`Đã lưu nháp đơn ${res.orderCode}`);
-        setForm(blankHeader());
-        setItems([blankLine()]);
-        setFeeAuto(true);
-        setShippers([]);
-        setAddShipperId('');
         onSaved?.({ id: res.orderId, orderCode: res.orderCode });
       }
+      setAutosaveState('saved');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Không lưu được đơn');
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -395,6 +406,40 @@ export function OrderForm({ order, readOnly = false, showActions = true, onSaved
       toast.error(e instanceof Error ? e.message : 'Không thêm được nhân viên');
     }
   };
+
+  // Lưu nháp tự động (không thông báo, không ràng buộc trường): chỉ lưu khi đơn đang Nháp và đã chọn khách hàng.
+  const runAutoSave = async () => {
+    if (readOnly || savingRef.current) return;
+    if (order && order.order_status !== 'DRAFT') return;
+    if (!form.customer_id) return;
+    const valid = shownItems.filter((it) => it.product_id && Number(it.quantity) > 0);
+    const payload = buildPayload(valid);
+    savingRef.current = true;
+    setAutosaveState('saving');
+    try {
+      if (draftIdRef.current) {
+        await api.updateOrder(draftIdRef.current, payload);
+      } else {
+        const res = await api.createOrder(payload);
+        draftIdRef.current = res.orderId;
+      }
+      setAutosaveState('saved');
+    } catch {
+      setAutosaveState('error');
+    } finally {
+      savingRef.current = false;
+    }
+  };
+
+  // Gõ xong ~0.9s thì lưu nền; dừng lại khi đang xem (readOnly) hoặc đơn đã xác nhận.
+  useEffect(() => {
+    if (readOnly) return;
+    if (order && order.order_status !== 'DRAFT') return;
+    if (!form.customer_id) return;
+    const timer = setTimeout(() => { void runAutoSave(); }, 900);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form, items, shippers]);
 
   return (
     <>
@@ -834,6 +879,11 @@ export function OrderForm({ order, readOnly = false, showActions = true, onSaved
               <span className="text-slate-600">
                 Tổng cộng: <b className="text-base text-brand-navy">{formatCurrency(total)}</b>
               </span>
+              {!readOnly && autosaveState !== 'idle' && (
+                <span className={`text-xs ${autosaveState === 'error' ? 'text-brand-red' : 'text-slate-400'}`}>
+                  {autosaveState === 'saving' ? 'Đang lưu nháp…' : autosaveState === 'saved' ? 'Đã lưu nháp tự động' : 'Chưa lưu được nháp'}
+                </span>
+              )}
               {showActions && (
                 <>
                   {editing && onCancel && (

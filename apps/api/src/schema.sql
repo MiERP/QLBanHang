@@ -140,7 +140,8 @@ CREATE TABLE IF NOT EXISTS orders (
     partner_unit_id INTEGER,
     target_scope TEXT CHECK(target_scope IN ('COMPANY', 'ENTERPRISE')) DEFAULT 'ENTERPRISE',
     shipper_employee_id INTEGER REFERENCES employees(id),
-    warehouse_id INTEGER REFERENCES warehouses(id) NOT NULL,
+    -- Cho phép NULL: đơn nháp được lưu trước, chọn kho sau (bắt buộc có kho vật lý khi xác nhận).
+    warehouse_id INTEGER REFERENCES warehouses(id),
     order_date DATE NOT NULL,
     delivery_date DATE,
     order_status TEXT CHECK(order_status IN ('DRAFT', 'CONFIRMED', 'SHIPPING', 'COMPLETED', 'CANCELLED', 'RETURNED')) DEFAULT 'DRAFT',

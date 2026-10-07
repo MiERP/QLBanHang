@@ -3,7 +3,7 @@ import { loanWarehouseId } from '../db.js';
 import { orderCode, today } from './codes.js';
 import { badRequest } from './http.js';
 import { applyOrderPromotions } from './promotions.js';
-import { assertPhysicalOrderWarehouse, getOrder, paymentStatus, recalcTotals, shipperRequired, syncOrderCashLedger } from './orderStatus.js';
+import { assertPhysicalOrderWarehouse, getOrder, paymentStatus, recalcTotals, syncOrderCashLedger } from './orderStatus.js';
 
 export interface RawItem {
   product_id: number;
@@ -134,12 +134,11 @@ export function createOrder(db: Database.Database, body: Record<string, unknown>
   // Đơn bốc xếp: hàng của đơn vị thuê nên không dùng kho của mình (điểm lấy hàng là kho đối tác).
   const isHired = orderType === 'HIRED_LOAD';
   const partnerUnitId = body.partner_unit_id ? Number(body.partner_unit_id) : null;
+  // Đơn luôn được tạo ở trạng thái NHÁP: chỉ cần khách hàng. Các trường còn lại (kho, đối tác,
+  // người bán, người giao, tuyến phí, mặt hàng) điền sau — kiểm tra đầy đủ khi XÁC NHẬN.
   if (!body.customer_id) throw badRequest('Khách hàng là bắt buộc');
-  if (orderType !== 'SALE' && !partnerUnitId) {
-    throw badRequest('Đối tác liên kết là bắt buộc với đơn mượn / cho mượn / bốc xếp');
-  }
-  if (!isBorrow && !isHired && !body.warehouse_id) throw badRequest('Kho xuất hàng là bắt buộc');
-  if (!isBorrow && !isHired) assertPhysicalOrderWarehouse(db, orderType, Number(body.warehouse_id));
+  // Nếu đã chọn kho thì kho phải là kho vật lý (đơn bán / cho mượn); chưa chọn thì để trống.
+  if (!isBorrow && !isHired && body.warehouse_id) assertPhysicalOrderWarehouse(db, orderType, Number(body.warehouse_id));
 
   const orderDate = String(body.order_date || today());
   const items = Array.isArray(body.items) ? (body.items as RawItem[]) : [];
@@ -148,11 +147,10 @@ export function createOrder(db: Database.Database, body: Record<string, unknown>
     ? (body.shippers as Record<string, unknown>[]).reduce((sum, s) => sum + Math.max(0, Number(s.allocated_fee) || 0), 0)
     : 0);
   const shippers = normalizeShippers(body, feeHint);
-  // Đơn miễn ship mới được để trống người giao; còn lại phải chọn ngay khi lưu đơn.
-  if (shipperRequired(db, orderType) && !shippers.length) throw badRequest('Chọn nhân viên vận chuyển cho đơn hàng');
 
   return db.transaction(() => {
-    const warehouseId = isBorrow || isHired ? loanWarehouseId() : Number(body.warehouse_id);
+    // Chưa chọn kho thì để trống (NULL); đơn mượn/bốc xếp dùng kho ảo.
+    const warehouseId = isBorrow || isHired ? loanWarehouseId() : Number(body.warehouse_id) || null;
     const code = orderCode(db, orderDate);
     const insert = db
       .prepare(

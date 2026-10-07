@@ -70,7 +70,7 @@ const ORDER_SELECT = `SELECT o.*,
                      LEFT JOIN partner_units pu ON o.partner_unit_id = pu.id
                      LEFT JOIN org_units ou ON o.support_station_id = ou.id
                      LEFT JOIN orders mi ON o.merged_into_id = mi.id
-                     JOIN warehouses w ON o.warehouse_id = w.id`;
+                     LEFT JOIN warehouses w ON o.warehouse_id = w.id`;
 
 function attachOrderDetails(db: ReturnType<typeof getDb>, orders: Record<string, unknown>[]) {
   const getItems = db.prepare(
@@ -689,7 +689,9 @@ export function ordersRouter(): Router {
         if (fresh.order_type === 'LEND_OUT' && order.order_type !== 'LEND_OUT') {
           db.prepare('UPDATE orders SET discount_amount = 0 WHERE id = ?').run(id);
         }
-        assertPhysicalOrderWarehouse(db, fresh.order_type, getOrder(db, id)!.warehouse_id);
+        // Đơn nháp có thể chưa chọn kho (NULL) — chỉ kiểm khi đã có kho; xác nhận mới buộc kho vật lý.
+        const freshWarehouseId = getOrder(db, id)!.warehouse_id;
+        if (freshWarehouseId != null) assertPhysicalOrderWarehouse(db, fresh.order_type, freshWarehouseId);
         // Đơn nháp có thể vượt tồn hiện tại; đơn xác nhận kiểm tồn khi xác nhận/sửa và khi giao.
         let totals = recalcTotals(db, id);
         const after = getOrder(db, id)!;

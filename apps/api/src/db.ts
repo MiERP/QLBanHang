@@ -546,16 +546,19 @@ function rebuildOrdersIfNeeded(db: Database.Database) {
   const needsReturned = !tableRow || !tableRow.sql.includes('RETURNED');
   const needsTargetScope = !tableRow || !tableRow.sql.includes("'COMPANY'");
   const needsSellerNullable = !!seller && seller.notnull === 1;
-  if (!needsStatus && !needsSellerNullable && !needsHiredLoad && !needsReturned && !needsTargetScope) return;
+  // Đơn nháp được để trống kho (lưu trước, chọn kho sau) → warehouse_id phải cho phép NULL.
+  const warehouse = cols.find((c) => c.name === 'warehouse_id');
+  const needsWarehouseNullable = !!warehouse && warehouse.notnull === 1;
+  if (!needsStatus && !needsSellerNullable && !needsHiredLoad && !needsReturned && !needsTargetScope && !needsWarehouseNullable) return;
 
   const newCols = [
     'id', 'order_code', 'customer_id', 'seller_employee_id', 'order_type', 'partner_unit_id', 'target_scope',
     'shipper_employee_id', 'warehouse_id', 'order_date', 'delivery_date', 'order_status', 'payment_status',
     'payment_method', 'is_vat_invoice', 'vat_rate', 'vat_number', 'company_name_vat', 'tax_code_vat',
     'address_vat', 'personal_id_vat', 'budget_relation_code_vat', 'subtotal_amount', 'shipping_fee',
-    'discount_amount', 'deposit_amount', 'total_amount', 'paid_amount', 'shipping_receiver', 'shipping_phone',
+    'discount_amount', 'deposit_amount', 'deposit_override', 'total_amount', 'paid_amount', 'shipping_receiver', 'shipping_phone',
     'shipping_address', 'shipping_note', 'shipping_fee_id', 'returned_shells_voi', 'returned_shells_up', 'merged_into_id', 'invoice_status', 'loan_settled_at',
-    'loan_settle_type', 'loan_due_date', 'note', 'created_at',
+    'loan_settle_type', 'loan_due_date', 'support_station_id', 'note', 'created_at',
   ];
   const existing = cols.map((c) => c.name);
   const copyCols = newCols.filter((c) => existing.includes(c));
@@ -581,7 +584,7 @@ function rebuildOrdersIfNeeded(db: Database.Database) {
         partner_unit_id INTEGER,
         target_scope TEXT CHECK(target_scope IN ('COMPANY', 'ENTERPRISE')) DEFAULT 'ENTERPRISE',
         shipper_employee_id INTEGER REFERENCES employees(id),
-        warehouse_id INTEGER REFERENCES warehouses(id) NOT NULL,
+        warehouse_id INTEGER REFERENCES warehouses(id),
         order_date DATE NOT NULL,
         delivery_date DATE,
         order_status TEXT CHECK(order_status IN ('DRAFT', 'CONFIRMED', 'SHIPPING', 'COMPLETED', 'CANCELLED', 'RETURNED')) DEFAULT 'DRAFT',
@@ -599,6 +602,7 @@ function rebuildOrdersIfNeeded(db: Database.Database) {
         shipping_fee REAL DEFAULT 0.0,
         discount_amount REAL DEFAULT 0.0,
         deposit_amount REAL DEFAULT 0.0,
+        deposit_override REAL,
         total_amount REAL NOT NULL,
         paid_amount REAL DEFAULT 0.0,
         shipping_receiver TEXT,
@@ -613,6 +617,7 @@ function rebuildOrdersIfNeeded(db: Database.Database) {
         loan_settled_at DATETIME,
         loan_settle_type TEXT CHECK(loan_settle_type IN ('RETURN_GOODS', 'PAYMENT')),
         loan_due_date DATE,
+        support_station_id INTEGER REFERENCES org_units(id),
         note TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );

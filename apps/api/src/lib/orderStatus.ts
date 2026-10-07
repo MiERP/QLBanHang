@@ -123,16 +123,31 @@ export function assertPhysicalOrderWarehouse(db: Database.Database, orderType: s
   }
 }
 
-export function validateForConfirm(db: Database.Database, order: OrderRecord) {
-  assertPhysicalOrderWarehouse(db, order.order_type, order.warehouse_id);
+// Gom TẤT CẢ trường còn thiếu rồi báo một lần, để người dùng biết cần bổ sung gì trước khi xác nhận.
+export function missingFieldsForConfirm(db: Database.Database, order: OrderRecord): string[] {
+  const missing: string[] = [];
+  if (order.order_type === 'SALE' || order.order_type === 'LEND_OUT') {
+    const warehouse = db.prepare('SELECT type, is_active FROM warehouses WHERE id = ?')
+      .get(order.warehouse_id) as { type: string; is_active: number } | undefined;
+    if (!warehouse || !warehouse.is_active || warehouse.type === 'VIRTUAL' || warehouse.type === 'CUSTOMER') {
+      missing.push('kho xuất hàng (kho vật lý)');
+    }
+  }
   const count = (db.prepare('SELECT COUNT(*) as cnt FROM order_items WHERE order_id = ?').get(order.id) as { cnt: number }).cnt;
-  if (!count) throw badRequest('Đơn hàng phải có ít nhất một mặt hàng');
+  if (!count) missing.push('mặt hàng');
   // Đơn cho mượn và đơn bốc xếp không gắn với nhân viên bán (không tính doanh thu bán hàng).
   const needsSeller = order.order_type !== 'LEND_OUT' && order.order_type !== 'HIRED_LOAD';
-  if (needsSeller && !order.seller_employee_id) throw badRequest('Thiếu nhân viên bán hàng');
-  if (order.order_type !== 'SALE' && !order.partner_unit_id) throw badRequest('Thiếu đối tác liên kết');
-  if ((order.order_type !== 'BORROW_IN' || hasDeliveryShipper(db, order.id)) && !order.shipping_fee_id) throw badRequest('Thiếu tuyến phí vận chuyển');
-  assertShipperSelected(db, order.order_type, order.id);
+  if (needsSeller && !order.seller_employee_id) missing.push('nhân viên bán hàng');
+  if (order.order_type !== 'SALE' && !order.partner_unit_id) missing.push('đối tác liên kết');
+  const hasShipper = hasDeliveryShipper(db, order.id);
+  if ((order.order_type !== 'BORROW_IN' || hasShipper) && !order.shipping_fee_id) missing.push('tuyến phí vận chuyển');
+  if (shipperRequired(db, order.order_type) && !hasShipper) missing.push('nhân viên vận chuyển');
+  return missing;
+}
+
+export function validateForConfirm(db: Database.Database, order: OrderRecord) {
+  const missing = missingFieldsForConfirm(db, order);
+  if (missing.length) throw badRequest(`Đơn còn thiếu: ${missing.join(', ')}. Vui lòng bổ sung trước khi xác nhận.`);
   if (order.order_type === 'SALE' || order.order_type === 'LEND_OUT') {
     const needed = new Map<number, number>();
     for (const item of itemRows(db, order.id)) {
