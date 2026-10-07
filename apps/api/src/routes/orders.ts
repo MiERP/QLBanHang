@@ -210,21 +210,25 @@ export function ordersRouter(): Router {
         .all() as { id: number; order_date: string; order_type: string; order_status: string; customer_name: string; phone: string; address: string; warehouse_name: string | null; target_scope: string | null; support_station_name: string | null }[];
 
       const orderIds = orders.map((o) => o.id);
-      const itemsByOrder = new Map<number, { name: string; quantity: number }[]>();
+      // 8 cột sản phẩm theo đúng mẫu điều phối: Vỉ 350/500, Hộp 350/500, Bình RO Vòi/Úp, Bình kiềm Vòi/Úp.
+      const QTY_CODES = ['VI_350ML', 'VI_500ML', 'HOP_350ML', 'HOP_500ML', 'RO_19L_VOI', 'RO_19L_UP', 'KIEM_19L_VOI', 'KIEM_19L_UP'];
+      const qtyByOrder = new Map<number, number[]>();
       const shippersByOrder = new Map<number, string[]>();
       if (orderIds.length) {
         const ph = orderIds.map(() => '?').join(',');
         const items = db
           .prepare(
-            `SELECT oi.order_id, p.name, oi.quantity
+            `SELECT oi.order_id, p.code, COALESCE(SUM(oi.quantity), 0) as quantity
              FROM order_items oi JOIN products p ON p.id = oi.product_id
-             WHERE oi.order_id IN (${ph}) ORDER BY oi.id ASC`
+             WHERE oi.order_id IN (${ph}) GROUP BY oi.order_id, p.code`
           )
-          .all(...orderIds) as { order_id: number; name: string; quantity: number }[];
+          .all(...orderIds) as { order_id: number; code: string; quantity: number }[];
         for (const it of items) {
-          const list = itemsByOrder.get(it.order_id) ?? [];
-          list.push({ name: it.name, quantity: Number(it.quantity) || 0 });
-          itemsByOrder.set(it.order_id, list);
+          const slot = QTY_CODES.indexOf(it.code);
+          if (slot < 0) continue;
+          const list = qtyByOrder.get(it.order_id) ?? [0, 0, 0, 0, 0, 0, 0, 0];
+          list[slot] += Number(it.quantity) || 0;
+          qtyByOrder.set(it.order_id, list);
         }
         const shippers = db
           .prepare(
@@ -243,39 +247,70 @@ export function ordersRouter(): Router {
 
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet('Điều phối đơn');
+      // Bề rộng cột theo mẫu điều phối.
       ws.columns = [
-        { header: 'Ngày tạo đơn', width: 14 },
-        { header: 'Tên khách hàng', width: 30 },
-        { header: 'Số điện thoại', width: 16 },
-        { header: 'Địa chỉ', width: 36 },
-        { header: 'Loại đơn', width: 16 },
-        { header: 'Kho', width: 22 },
-        { header: 'Chỉ tiêu', width: 14 },
-        { header: 'Sản phẩm bán', width: 42 },
-        { header: 'Số lượng', width: 10 },
-        { header: 'Người vận chuyển', width: 22 },
-        { header: 'Trạm hỗ trợ', width: 20 },
-        { header: 'Trạng thái đơn', width: 14 },
+        { width: 14 }, { width: 26 }, { width: 36 }, { width: 10 }, { width: 31 }, { width: 13 },
+        { width: 6 }, { width: 6 }, { width: 6 }, { width: 6 }, { width: 5 }, { width: 5 }, { width: 5.5 }, { width: 5.5 },
+        { width: 17 }, { width: 11 }, { width: 13.5 },
       ];
-      ws.getRow(1).font = { bold: true };
+      // Tiêu đề 3 dòng, gộp ô: 9 cột đơn gộp dọc, nhóm "Sản phẩm bán" gộp ngang và tách 4 nhóm con.
+      const setCell = (r: number, c: number, v: string) => { ws.getRow(r).getCell(c).value = v; };
+      setCell(1, 1, 'Ngày tạo đơn');
+      setCell(1, 2, 'Tên khách hàng\nSố điện thoại');
+      setCell(1, 3, 'Địa chỉ');
+      setCell(1, 4, 'Loại đơn');
+      setCell(1, 5, 'Kho');
+      setCell(1, 6, 'Chỉ tiêu');
+      setCell(1, 7, 'Sản phẩm bán');
+      setCell(1, 15, 'Người vận chuyển');
+      setCell(1, 16, 'Trạm hỗ trợ');
+      setCell(1, 17, 'Trạng thái đơn');
+      setCell(2, 7, 'Vỉ');
+      setCell(2, 9, 'Hộp');
+      setCell(2, 11, 'Bình RO');
+      setCell(2, 13, 'Bình kiềm');
+      ['350ml', '500ml', '350ml', '500ml', 'Vòi', 'Úp', 'Vòi', 'Úp'].forEach((v, i) => setCell(3, 7 + i, v));
+      for (const c of [1, 2, 3, 4, 5, 6, 15, 16, 17]) ws.mergeCells(1, c, 3, c);
+      ws.mergeCells(1, 7, 1, 14);
+      ws.mergeCells(2, 7, 2, 8);
+      ws.mergeCells(2, 9, 2, 10);
+      ws.mergeCells(2, 11, 2, 12);
+      ws.mergeCells(2, 13, 2, 14);
+      const thin = { style: 'thin' as const, color: { argb: 'FFB7B7B7' } };
+      for (let r = 1; r <= 3; r++) {
+        for (let c = 1; c <= 17; c++) {
+          const cell = ws.getRow(r).getCell(c);
+          cell.font = { bold: true };
+          cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+          cell.border = { top: thin, left: thin, bottom: thin, right: thin };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
+        }
+      }
+      const blankQty = [0, 0, 0, 0, 0, 0, 0, 0];
       for (const o of orders) {
-        const products = itemsByOrder.get(o.id) ?? [];
-        const productText = products.map((p) => `${p.name} × ${p.quantity}`).join('; ');
-        const totalQty = products.reduce((a, p) => a + p.quantity, 0);
+        const qty = qtyByOrder.get(o.id) ?? blankQty;
         ws.addRow([
           o.order_date,
-          o.customer_name,
-          o.phone,
+          o.phone ? `${o.customer_name}\n${o.phone}` : o.customer_name,
           o.address,
           ORDER_TYPE_LABEL[o.order_type] ?? o.order_type,
           o.warehouse_name ?? '',
           TARGET_SCOPE_LABEL[o.target_scope ?? ''] ?? '',
-          productText,
-          totalQty,
+          qty[0] || '', qty[1] || '', qty[2] || '', qty[3] || '',
+          qty[4] || '', qty[5] || '', qty[6] || '', qty[7] || '',
           (shippersByOrder.get(o.id) ?? []).join(', '),
           o.support_station_name ?? '',
           ORDER_STATUS_LABEL[o.order_status] ?? o.order_status,
         ]);
+      }
+      // Kẻ khung phần dữ liệu; ô tên khách hàng xuống dòng (tên / SĐT).
+      for (let r = 4; r <= ws.rowCount; r++) {
+        for (let c = 1; c <= 17; c++) {
+          const cell = ws.getRow(r).getCell(c);
+          cell.border = { top: thin, left: thin, bottom: thin, right: thin };
+          if (c === 2) cell.alignment = { vertical: 'top', wrapText: true };
+          else if (c >= 7 && c <= 14) cell.alignment = { horizontal: 'center' };
+        }
       }
 
       const buffer = await wb.xlsx.writeBuffer();
