@@ -176,6 +176,86 @@ export function returnCustomerShells(db: Database.Database, input: ShellReturnIn
 }
 
 /**
+ * Thu hồi vỏ ở MỨC KHÁCH HÀNG: tự chia số vỏ khách trả về từng đơn còn nợ, trừ dần từ đơn
+ * nợ ít đến đơn nợ nhiều (đơn ít trả hết trước), mỗi đơn ghi một dòng sổ vỏ riêng để đối chiếu
+ * được "đơn này giao bao nhiêu, đã trả bao nhiêu, còn lại bao nhiêu".
+ * Số nào không gắn được với đơn nào (nợ đầu kỳ) thì ghi thành dòng không kèm đơn.
+ */
+export function returnCustomerShellsAllocated(
+  db: Database.Database,
+  input: ShellReturnInput
+): ShellReturnResult & { allocations: { orderId: number | null; voi: number; up: number }[] } {
+  const shellsVoi = Math.max(0, Math.floor(Number(input.shellsVoi) || 0));
+  const shellsUp = Math.max(0, Math.floor(Number(input.shellsUp) || 0));
+  if (!shellsVoi && !shellsUp) throw badRequest('Số lượng vỏ thu hồi phải lớn hơn 0');
+
+  const customer = db
+    .prepare('SELECT bottle_debt_voi, bottle_debt_up FROM customers WHERE id = ?')
+    .get(input.customerId) as { bottle_debt_voi: number; bottle_debt_up: number } | undefined;
+  if (!customer) throw badRequest('Không tìm thấy khách hàng');
+  const debtVoi = Number(customer.bottle_debt_voi) || 0;
+  const debtUp = Number(customer.bottle_debt_up) || 0;
+  if (shellsVoi > debtVoi) throw badRequest(`Vỏ Vòi thu hồi (${shellsVoi}) vượt nợ vỏ hiện tại của khách (${debtVoi})`);
+  if (shellsUp > debtUp) throw badRequest(`Vỏ Úp thu hồi (${shellsUp}) vượt nợ vỏ hiện tại của khách (${debtUp})`);
+
+  // Nợ còn lại từng đơn = vỏ đã giao theo đơn − vỏ đã ghi trả của đơn đó.
+  const orderRows = db
+    .prepare(
+      `SELECT o.id AS order_id, o.order_date,
+              COALESCE((SELECT SUM(oi.quantity + COALESCE(oi.quantity_promo, 0))
+                        FROM order_items oi JOIN products p ON p.id = oi.product_id
+                        WHERE oi.order_id = o.id AND p.bottle_type = 'VOI'), 0)
+                - COALESCE((SELECT SUM(l.returned_voi) FROM customer_bottle_ledgers l WHERE l.order_id = o.id), 0) AS remaining_voi,
+              COALESCE((SELECT SUM(oi.quantity + COALESCE(oi.quantity_promo, 0))
+                        FROM order_items oi JOIN products p ON p.id = oi.product_id
+                        WHERE oi.order_id = o.id AND p.bottle_type = 'UP'), 0)
+                - COALESCE((SELECT SUM(l.returned_up) FROM customer_bottle_ledgers l WHERE l.order_id = o.id), 0) AS remaining_up
+       FROM orders o
+       WHERE o.customer_id = ? AND o.order_type IN ('SALE', 'BORROW_IN')
+         AND o.order_status IN ('COMPLETED', 'RETURNED')`
+    )
+    .all(input.customerId) as { order_id: number; order_date: string; remaining_voi: number; remaining_up: number }[];
+
+  const withDebt = orderRows
+    .map((r) => ({
+      order_id: r.order_id,
+      order_date: r.order_date,
+      remaining_voi: Math.max(0, Number(r.remaining_voi) || 0),
+      remaining_up: Math.max(0, Number(r.remaining_up) || 0),
+    }))
+    .filter((r) => r.remaining_voi + r.remaining_up > 0)
+    .sort(
+      (a, b) =>
+        a.remaining_voi + a.remaining_up - (b.remaining_voi + b.remaining_up) ||
+        a.order_date.localeCompare(b.order_date) ||
+        a.order_id - b.order_id
+    );
+
+  const allocations: { orderId: number | null; voi: number; up: number }[] = [];
+  let leftVoi = shellsVoi;
+  let leftUp = shellsUp;
+  for (const order of withDebt) {
+    if (!leftVoi && !leftUp) break;
+    const takeVoi = Math.min(order.remaining_voi, leftVoi);
+    const takeUp = Math.min(order.remaining_up, leftUp);
+    if (takeVoi || takeUp) {
+      allocations.push({ orderId: order.order_id, voi: takeVoi, up: takeUp });
+      leftVoi -= takeVoi;
+      leftUp -= takeUp;
+    }
+  }
+  // Phần còn lại là nợ không gắn đơn (nợ đầu kỳ) → ghi một dòng không kèm đơn.
+  if (leftVoi || leftUp) allocations.push({ orderId: null, voi: leftVoi, up: leftUp });
+
+  let result: ShellReturnResult | null = null;
+  for (const a of allocations) {
+    result = returnCustomerShells(db, { ...input, orderId: a.orderId, shellsVoi: a.voi, shellsUp: a.up });
+  }
+  if (!result) throw badRequest('Không có vỏ để thu hồi');
+  return { ...result, allocations };
+}
+
+/**
  * Vỏ khách không trả lại (mất vỏ / khách mua đứt / bồi thường): giảm nợ vỏ nhưng KHÔNG hoàn cọc
  * — tiền cọc đã thu được giữ lại, sổ vỏ ghi rõ lý do để đối chiếu.
  */

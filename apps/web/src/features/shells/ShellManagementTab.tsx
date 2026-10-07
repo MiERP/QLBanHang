@@ -63,6 +63,17 @@ export function ShellManagementTab({ period }: { period: ReportPeriod }) {
       render: (r) => <b className="text-brand-navy">{formatCurrency(r.deposit_balance)}</b>,
       sortValue: (r) => r.deposit_balance,
     },
+    {
+      key: 'actions',
+      header: 'Thao tác',
+      align: 'right',
+      render: (r) => (
+        <ShellActions
+          target={{ customerId: r.customer_id, customerName: r.name, debtVoi: r.debt_voi, debtUp: r.debt_up }}
+          onDone={reload}
+        />
+      ),
+    },
   ];
 
   return (
@@ -152,8 +163,8 @@ function CustomerOrders({ orders, onDone }: { orders: ShellOrderRow[]; onDone: (
           <tr>
             <th className="px-3 py-2">Ngày</th>
             <th className="px-3 py-2">Mã đơn</th>
-            <th className="px-3 py-2 text-right">Vỏ Vòi</th>
-            <th className="px-3 py-2 text-right">Vỏ Úp</th>
+            <th className="px-3 py-2 text-right">Nợ Vòi</th>
+            <th className="px-3 py-2 text-right">Nợ Úp</th>
             <th className="px-3 py-2 text-right">Tiền cọc</th>
             <th className="px-3 py-2 text-right">Đã trả (Vòi/Úp)</th>
             <th className="px-3 py-2 text-right">Còn lại của đơn (Vòi/Úp)</th>

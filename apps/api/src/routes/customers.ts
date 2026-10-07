@@ -4,7 +4,7 @@ import { getDb } from '../db.js';
 import { customerCode, revenueCode, today } from '../lib/codes.js';
 import { ORDER_DEBT_EXPR, TOTAL_DEBT_EXPR } from '../lib/customerDebt.js';
 import { ApiError, badRequest, handle } from '../lib/http.js';
-import { returnCustomerShells, shellDepositFees, writeOffCustomerShells } from '../lib/shells.js';
+import { returnCustomerShells, returnCustomerShellsAllocated, shellDepositFees, writeOffCustomerShells } from '../lib/shells.js';
 import { recordShellMovement } from '../lib/shellStock.js';
 
 export function customersRouter(): Router {
@@ -220,18 +220,20 @@ export function customersRouter(): Router {
       const customerId = Number(req.params.id);
       const body = req.body ?? {};
       // Thu hồi vỏ đi qua đúng một cơ chế dùng chung: giảm nợ vỏ + ghi sổ vỏ + hoàn cọc theo loại vỏ.
+      // Có đơn cụ thể thì ghi vào đúng đơn; không có đơn thì chia dần theo từng đơn còn nợ (ít trước, nhiều sau).
+      const shellInput = {
+        customerId,
+        shellsVoi: Number(body.returned_voi) || 0,
+        shellsUp: Number(body.returned_up) || 0,
+        date: String(body.transaction_date || today()),
+        orderId: body.order_id ? Number(body.order_id) : null,
+        note: String(body.note || 'Thu hồi vỏ bình'),
+        handledBy: body.handled_by ? Number(body.handled_by) : null,
+        paymentMethod: String(body.payment_method || 'CASH'),
+        refundDeposit: body.refund_deposit !== false,
+      };
       const result = db.transaction(() =>
-        returnCustomerShells(db, {
-          customerId,
-          shellsVoi: Number(body.returned_voi) || 0,
-          shellsUp: Number(body.returned_up) || 0,
-          date: String(body.transaction_date || today()),
-          orderId: body.order_id ? Number(body.order_id) : null,
-          note: String(body.note || 'Thu hồi vỏ bình (không kèm đơn hàng)'),
-          handledBy: body.handled_by ? Number(body.handled_by) : null,
-          paymentMethod: String(body.payment_method || 'CASH'),
-          refundDeposit: body.refund_deposit !== false,
-        })
+        shellInput.orderId ? returnCustomerShells(db, shellInput) : returnCustomerShellsAllocated(db, shellInput)
       )();
       res.json({
         success: true,
@@ -259,7 +261,8 @@ export function customersRouter(): Router {
         return {
           shellsVoi,
           shellsUp,
-          result: returnCustomerShells(db, {
+          // Tất toán: chia đều theo từng đơn còn nợ để mỗi đơn hiện đúng số đã trả.
+          result: returnCustomerShellsAllocated(db, {
             customerId,
             shellsVoi,
             shellsUp,
