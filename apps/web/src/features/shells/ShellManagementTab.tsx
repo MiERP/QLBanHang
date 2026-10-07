@@ -46,20 +46,6 @@ export function ShellManagementTab({ period }: { period: ReportPeriod }) {
     },
     { key: 'order_count', header: 'Số đơn', align: 'right', sortValue: (r) => r.order_count },
     {
-      key: 'period',
-      header: scope === 'period' ? 'Vỏ giao trong kỳ (Vòi/Úp)' : 'Vỏ giao (Vòi/Úp)',
-      align: 'right',
-      render: (r) => `${formatNumber(r.period_voi)} / ${formatNumber(r.period_up)}`,
-      sortValue: (r) => r.period_voi + r.period_up,
-    },
-    {
-      key: 'period_deposit',
-      header: scope === 'period' ? 'Cọc thu trong kỳ' : 'Cọc đã thu',
-      align: 'right',
-      render: (r) => formatCurrency(r.period_deposit),
-      sortValue: (r) => r.period_deposit,
-    },
-    {
       key: 'held',
       header: 'Khách đang giữ (Vòi/Úp)',
       align: 'right',
