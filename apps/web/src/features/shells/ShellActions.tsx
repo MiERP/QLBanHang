@@ -2,57 +2,40 @@ import { RotateCcw } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import * as api from '../../api';
 import { Button } from '../../components/ui/Button';
-import { DataTable, type Column } from '../../components/ui/DataTable';
 import { Field, FormGrid, Input, Select } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Modal';
 import { useToast } from '../../components/ui/Toast';
 import { useReference } from '../../context/ReferenceContext';
-import { formatCurrency, formatDate } from '../../lib/format';
+import { formatCurrency } from '../../lib/format';
 import { useApi } from '../../lib/hooks';
-import type { BottleLedger } from '../../types';
+import { getWorkingDate } from '../../lib/workingDate';
 
-const ledgerColumns: Column<BottleLedger>[] = [
-  { key: 'transaction_date', header: 'Ngày', render: (r) => formatDate(r.transaction_date), sortValue: (r) => r.transaction_date },
-  { key: 'order_code', header: 'Đơn hàng', render: (r) => r.order_code ?? '—' },
-  { key: 'borrowed_voi', header: 'Xuất Vòi', align: 'center' },
-  { key: 'borrowed_up', header: 'Xuất Úp', align: 'center' },
-  { key: 'returned_voi', header: 'Trả Vòi', align: 'center' },
-  { key: 'returned_up', header: 'Trả Úp', align: 'center' },
-  { key: 'remaining_balance_voi', header: 'Còn Vòi', align: 'center', render: (r) => <b className="text-brand-navy">{r.remaining_balance_voi}</b> },
-  { key: 'remaining_balance_up', header: 'Còn Úp', align: 'center', render: (r) => <b className="text-indigo-600">{r.remaining_balance_up}</b> },
-  { key: 'handler_name', header: 'Người xử lý', render: (r) => r.handler_name ?? '—' },
-];
-
-export interface ShellCustomerRef {
-  id: number;
-  name: string;
-  debt_voi: number;
-  debt_up: number;
+export interface ShellActionTarget {
+  customerId: number;
+  customerName: string;
+  debtVoi: number;
+  debtUp: number;
+  /** Đơn đang thao tác (nếu có) — phiếu thu hồi sẽ gắn vào đơn này. */
+  orderId?: number | null;
+  /** Số vỏ gợi ý sẵn cho phiếu thu hồi (số còn lại của đơn). */
+  defaultVoi?: number;
+  defaultUp?: number;
 }
 
-// Khối thao tác vỏ của MỘT khách: nhật ký vỏ + 3 nghiệp vụ (thu hồi/hoàn cọc, tất toán, mất/mua đứt).
-// Dùng trong màn "Vỏ bình & cọc" → tab Theo khách (mở rộng từng dòng), là nơi quản lý duy nhất.
-export function CustomerShellPanel({ customer, onChanged }: { customer: ShellCustomerRef; onChanged?: () => void }) {
+// Cụm 3 nghiệp vụ vỏ của một khách: thu hồi (trả vỏ), tất toán toàn bộ, và vỏ mất / mua đứt.
+// Dùng chung cho bảng vỏ & cọc để mỗi dòng đơn đều thao tác được ngay.
+export function ShellActions({ target, onDone }: { target: ShellActionTarget; onDone?: () => void }) {
   const { staff, products } = useReference();
   const shellDepositsApi = useApi(() => api.shellDeposits.list(), []);
-  const ledgersApi = useApi(() => api.fetchBottleLedgers(customer.id), [customer.id]);
   const toast = useToast();
 
   const [returnOpen, setReturnOpen] = useState(false);
   const [settleOpen, setSettleOpen] = useState(false);
   const [writeOffOpen, setWriteOffOpen] = useState(false);
+  const [returnForm, setReturnForm] = useState({ returned_voi: '', returned_up: '', handled_by: '', refund_deposit: '1', payment_method: 'CASH', note: '' });
   const [settleForm, setSettleForm] = useState({ payment_method: 'CASH', handled_by: '', note: '' });
   const [writeOffForm, setWriteOffForm] = useState({ shells_voi: '', shells_up: '', reason: 'Vỏ mất', handled_by: '', note: '' });
-  const [returnForm, setReturnForm] = useState({
-    returned_voi: '',
-    returned_up: '',
-    handled_by: '',
-    refund_deposit: '1',
-    payment_method: 'CASH',
-    note: '',
-  });
 
-  // Phí cọc theo loại vỏ: lấy từ danh mục "Cọc vỏ bình", chưa cấu hình thì theo sản phẩm bình đang bán.
   const shellFee = useMemo(() => {
     const feeOf = (type: 'VOI' | 'UP') => {
       const configured = (shellDepositsApi.data ?? []).find((row) => row.bottle_type === type);
@@ -63,65 +46,67 @@ export function CustomerShellPanel({ customer, onChanged }: { customer: ShellCus
     return { feeVoi: feeOf('VOI'), feeUp: feeOf('UP') };
   }, [shellDepositsApi.data, products]);
 
-  const afterChange = () => {
-    ledgersApi.reload();
-    onChanged?.();
+  const openReturn = () => {
+    const voi = Math.min(Number(target.defaultVoi) || 0, target.debtVoi);
+    const up = Math.min(Number(target.defaultUp) || 0, target.debtUp);
+    setReturnForm({
+      returned_voi: voi ? String(voi) : '',
+      returned_up: up ? String(up) : '',
+      handled_by: '',
+      refund_deposit: '1',
+      payment_method: 'CASH',
+      note: '',
+    });
+    setReturnOpen(true);
+  };
+
+  const run = async (fn: () => Promise<unknown>, okMessage: (res: never) => string, fail: string) => {
+    try {
+      const res = (await fn()) as never;
+      toast.success(okMessage(res));
+      setReturnOpen(false);
+      setSettleOpen(false);
+      setWriteOffOpen(false);
+      onDone?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : fail);
+    }
   };
 
   return (
     <>
-      <DataTable
-        columns={ledgerColumns}
-        data={ledgersApi.data ?? []}
-        rowKey={(r) => r.id}
-        loading={ledgersApi.loading}
-        searchable={false}
-        initialSortKey="transaction_date"
-        initialSortDir="desc"
-        emptyTitle="Chưa có phát sinh vỏ"
-        emptyMessage="Khách hàng này chưa có lịch sử vỏ bình."
-        toolbar={
-          <>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                setReturnForm({ returned_voi: '', returned_up: '', handled_by: '', refund_deposit: '1', payment_method: 'CASH', note: '' });
-                setReturnOpen(true);
-              }}
-            >
-              <RotateCcw className="h-3.5 w-3.5" /> Ghi nhận thu hồi vỏ
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setSettleForm({ payment_method: 'CASH', handled_by: '', note: '' });
-                setSettleOpen(true);
-              }}
-            >
-              Tất toán vỏ
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setWriteOffForm({ shells_voi: '', shells_up: '', reason: 'Vỏ mất', handled_by: '', note: '' });
-                setWriteOffOpen(true);
-              }}
-            >
-              Vỏ mất / mua đứt
-            </Button>
-          </>
-        }
-      />
+      <div className="flex flex-wrap justify-end gap-1.5">
+        <Button variant="secondary" size="sm" onClick={openReturn}>
+          <RotateCcw className="h-3.5 w-3.5" /> Trả vỏ
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setSettleForm({ payment_method: 'CASH', handled_by: '', note: '' });
+            setSettleOpen(true);
+          }}
+        >
+          Tất toán
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setWriteOffForm({ shells_voi: '', shells_up: '', reason: 'Vỏ mất', handled_by: '', note: '' });
+            setWriteOffOpen(true);
+          }}
+        >
+          Mất / mua đứt
+        </Button>
+      </div>
 
       <Modal
         open={returnOpen}
         onClose={() => setReturnOpen(false)}
         size="sm"
-        title="Ghi nhận thu hồi vỏ bình"
-        subtitle={`${customer.name} · Vòi ${customer.debt_voi} / Úp ${customer.debt_up}`}
+        title="Thu hồi vỏ bình"
+        subtitle={`${target.customerName} · khách đang giữ Vòi ${target.debtVoi} / Úp ${target.debtUp}`}
         footer={
           <>
             <Button variant="outline" size="sm" onClick={() => setReturnOpen(false)}>
@@ -129,20 +114,14 @@ export function CustomerShellPanel({ customer, onChanged }: { customer: ShellCus
             </Button>
             <Button
               size="sm"
-              onClick={async () => {
-                try {
-                  const res = await api.returnBottles(customer.id, returnForm);
-                  toast.success(
-                    res.deposit_refund
-                      ? `Đã thu hồi vỏ và hoàn cọc ${formatCurrency(res.deposit_refund)}`
-                      : 'Đã ghi nhận thu hồi vỏ (không hoàn cọc)'
-                  );
-                  setReturnOpen(false);
-                  afterChange();
-                } catch (e) {
-                  toast.error(e instanceof Error ? e.message : 'Không thực hiện được');
-                }
-              }}
+              onClick={() =>
+                run(
+                  () => api.returnBottles(target.customerId, { ...returnForm, order_id: target.orderId ?? undefined, transaction_date: getWorkingDate() }),
+                  (res: { deposit_refund: number }) =>
+                    res.deposit_refund ? `Đã thu hồi vỏ và hoàn cọc ${formatCurrency(res.deposit_refund)}` : 'Đã ghi nhận thu hồi vỏ (không hoàn cọc)',
+                  'Không thực hiện được'
+                )
+              }
             >
               Xác nhận thu hồi
             </Button>
@@ -174,12 +153,9 @@ export function CustomerShellPanel({ customer, onChanged }: { customer: ShellCus
               </Field>
             </FormGrid>
             <p className="mt-1 text-right text-[11px] text-slate-500">
-              Tiền cọc hoàn theo phí cọc đang áp: Vòi {formatCurrency(shellFee.feeVoi)} · Úp {formatCurrency(shellFee.feeUp)} — tiền hoàn dự
-              kiến{' '}
+              Tiền hoàn dự kiến:{' '}
               <b className="text-slate-700">
-                {formatCurrency(
-                  (Number(returnForm.returned_voi) || 0) * shellFee.feeVoi + (Number(returnForm.returned_up) || 0) * shellFee.feeUp
-                )}
+                {formatCurrency((Number(returnForm.returned_voi) || 0) * shellFee.feeVoi + (Number(returnForm.returned_up) || 0) * shellFee.feeUp)}
               </b>
             </p>
           </div>
@@ -204,7 +180,7 @@ export function CustomerShellPanel({ customer, onChanged }: { customer: ShellCus
         onClose={() => setSettleOpen(false)}
         size="sm"
         title="Tất toán vỏ bình"
-        subtitle={`${customer.name} · Vòi ${customer.debt_voi} / Úp ${customer.debt_up}`}
+        subtitle={`${target.customerName} · Vòi ${target.debtVoi} / Úp ${target.debtUp}`}
         footer={
           <>
             <Button variant="outline" size="sm" onClick={() => setSettleOpen(false)}>
@@ -212,18 +188,14 @@ export function CustomerShellPanel({ customer, onChanged }: { customer: ShellCus
             </Button>
             <Button
               size="sm"
-              onClick={async () => {
-                try {
-                  const res = await api.settleShells(customer.id, settleForm);
-                  toast.success(
-                    `Đã thu hồi ${res.shells_voi} vỏ Vòi + ${res.shells_up} vỏ Úp và hoàn cọc ${formatCurrency(res.deposit_refund)}`
-                  );
-                  setSettleOpen(false);
-                  afterChange();
-                } catch (e) {
-                  toast.error(e instanceof Error ? e.message : 'Không tất toán được');
-                }
-              }}
+              onClick={() =>
+                run(
+                  () => api.settleShells(target.customerId, { ...settleForm, transaction_date: getWorkingDate() }),
+                  (res: { shells_voi: number; shells_up: number; deposit_refund: number }) =>
+                    `Đã thu hồi ${res.shells_voi} vỏ Vòi + ${res.shells_up} vỏ Úp, hoàn cọc ${formatCurrency(res.deposit_refund)}`,
+                  'Không tất toán được'
+                )
+              }
             >
               Xác nhận tất toán
             </Button>
@@ -232,13 +204,11 @@ export function CustomerShellPanel({ customer, onChanged }: { customer: ShellCus
       >
         <div className="space-y-3 p-5">
           <p className="text-xs text-slate-600">
-            Hệ thống thu hồi <b>toàn bộ</b> vỏ khách đang giữ, nhập về kho vỏ bình và hoàn lại tiền cọc theo phí cọc đang áp.
+            Thu hồi <b>toàn bộ</b> vỏ khách đang giữ và hoàn lại tiền cọc theo phí cọc đang áp.
           </p>
           <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-            Thu hồi: Vòi <b>{customer.debt_voi}</b> · Úp <b>{customer.debt_up}</b> — tiền cọc hoàn dự kiến{' '}
-            <b className="text-brand-navy">
-              {formatCurrency(customer.debt_voi * shellFee.feeVoi + customer.debt_up * shellFee.feeUp)}
-            </b>
+            Thu hồi: Vòi <b>{target.debtVoi}</b> · Úp <b>{target.debtUp}</b> — tiền cọc hoàn dự kiến{' '}
+            <b className="text-brand-navy">{formatCurrency(target.debtVoi * shellFee.feeVoi + target.debtUp * shellFee.feeUp)}</b>
           </p>
           <Field label="Hình thức hoàn cọc">
             <Select value={settleForm.payment_method} onChange={(e) => setSettleForm({ ...settleForm, payment_method: e.target.value })}>
@@ -267,7 +237,7 @@ export function CustomerShellPanel({ customer, onChanged }: { customer: ShellCus
         onClose={() => setWriteOffOpen(false)}
         size="sm"
         title="Vỏ không trả lại"
-        subtitle={`${customer.name} · Vòi ${customer.debt_voi} / Úp ${customer.debt_up}`}
+        subtitle={`${target.customerName} · Vòi ${target.debtVoi} / Úp ${target.debtUp}`}
         footer={
           <>
             <Button variant="outline" size="sm" onClick={() => setWriteOffOpen(false)}>
@@ -275,16 +245,13 @@ export function CustomerShellPanel({ customer, onChanged }: { customer: ShellCus
             </Button>
             <Button
               size="sm"
-              onClick={async () => {
-                try {
-                  const res = await api.writeOffShells(customer.id, writeOffForm);
-                  toast.success(`Đã trừ nợ vỏ (còn Vòi ${res.newVoi} · Úp ${res.newUp}) — tiền cọc được giữ lại`);
-                  setWriteOffOpen(false);
-                  afterChange();
-                } catch (e) {
-                  toast.error(e instanceof Error ? e.message : 'Không ghi nhận được');
-                }
-              }}
+              onClick={() =>
+                run(
+                  () => api.writeOffShells(target.customerId, { ...writeOffForm, transaction_date: getWorkingDate() }),
+                  (res: { newVoi: number; newUp: number }) => `Đã trừ nợ vỏ (còn Vòi ${res.newVoi} · Úp ${res.newUp}) — tiền cọc được giữ lại`,
+                  'Không ghi nhận được'
+                )
+              }
             >
               Xác nhận
             </Button>
@@ -293,7 +260,7 @@ export function CustomerShellPanel({ customer, onChanged }: { customer: ShellCus
       >
         <div className="space-y-3 p-5">
           <p className="text-xs text-slate-600">
-            Dùng khi khách báo mất vỏ hoặc mua đứt vỏ: nợ vỏ giảm nhưng <b>tiền cọc đã thu được giữ lại</b> (không hoàn).
+            Khách báo mất vỏ hoặc mua đứt: nợ vỏ giảm nhưng <b>tiền cọc đã thu được giữ lại</b> (không hoàn).
           </p>
           <FormGrid cols={2}>
             <Field label="Số vỏ Vòi">

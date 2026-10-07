@@ -139,6 +139,33 @@ export interface ShellDepositReportRow {
   pending_deposit: number;
 }
 
+export interface ShellOrderRow {
+  order_id: number;
+  order_code: string;
+  order_date: string;
+  customer_id: number;
+  customer_code: string;
+  customer_name: string;
+  voi: number;
+  up: number;
+  deposit: number;
+  returned_voi: number;
+  returned_up: number;
+  debt_voi: number;
+  debt_up: number;
+}
+
+export interface ShellOrdersReport {
+  scope: 'all' | 'period';
+  from: string;
+  to: string;
+  feeVoi: number;
+  feeUp: number;
+  rows: ShellOrderRow[];
+  totals: { voi: number; up: number; deposit: number; returned_voi: number; returned_up: number };
+  held: { debt_voi: number; debt_up: number; deposit_balance: number };
+}
+
 export interface ShellDepositReport {
   from: string;
   to: string;

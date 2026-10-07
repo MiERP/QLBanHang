@@ -226,6 +226,7 @@ export function customersRouter(): Router {
           shellsVoi: Number(body.returned_voi) || 0,
           shellsUp: Number(body.returned_up) || 0,
           date: String(body.transaction_date || today()),
+          orderId: body.order_id ? Number(body.order_id) : null,
           note: String(body.note || 'Thu hồi vỏ bình (không kèm đơn hàng)'),
           handledBy: body.handled_by ? Number(body.handled_by) : null,
           paymentMethod: String(body.payment_method || 'CASH'),

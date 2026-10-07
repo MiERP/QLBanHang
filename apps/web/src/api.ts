@@ -34,6 +34,7 @@ import type {
   ShellDeposit,
   ShellDepositReport,
   ShellMovement,
+  ShellOrdersReport,
   ShellStockReport,
   ShippingFee,
   StockItem,
@@ -280,7 +281,10 @@ export const fetchCashAudit = (params: { customer_id?: number; from?: string; to
 // Đối chiếu vỏ bình & cọc vỏ: nợ vỏ khách đang giữ ↔ tiền cọc đang giữ.
 export const fetchShellDepositReport = () =>
   request<ShellDepositReport>('/reports/shell-deposits');
-export const shellDepositExportUrl = () => `${API_BASE}/reports/shell-deposits.xlsx`;
+export const fetchShellOrders = (params: { scope?: 'all' | 'period' } = {}) =>
+  request<ShellOrdersReport>(`/reports/shell-orders${qs(params)}`);
+export const shellDepositExportUrl = (mode?: 'debt') =>
+  `${API_BASE}/reports/shell-deposits.xlsx${mode === 'debt' ? '?mode=debt' : ''}`;
 
 // Sổ vỏ bình: vỏ xí nghiệp đang giữ (một pool theo loại vỏ) + vỏ khách/đối tác đang giữ.
 export const fetchShellStock = () => request<ShellStockReport>('/shell-stock');

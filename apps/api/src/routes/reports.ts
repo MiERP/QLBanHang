@@ -1762,7 +1762,7 @@ export function reportsRouter(): Router {
     pending_deposit: number;
   }
 
-  const shellDepositReportData = (db: Database.Database, from: string, to: string) => {
+  const shellDepositReportData = (db: Database.Database, from: string, to: string, mode = 'all') => {
     const { feeVoi, feeUp } = shellDepositFees(db);
     const raw = db
       .prepare(
@@ -1828,7 +1828,9 @@ export function reportsRouter(): Router {
       };
     });
 
-    const totals = rows.reduce(
+    // mode = 'debt' → chỉ khách còn nợ vỏ (dùng cho "Xuất danh sách nợ").
+    const scoped = mode === 'debt' ? rows.filter((row) => row.debt_voi + row.debt_up > 0) : rows;
+    const totals = scoped.reduce(
       (acc, row) => ({
         debt_voi: acc.debt_voi + row.debt_voi,
         debt_up: acc.debt_up + row.debt_up,
@@ -1858,8 +1860,8 @@ export function reportsRouter(): Router {
         refunded_month: 0,
       }
     );
-    const mismatchCount = rows.filter((row) => Math.abs(row.diff) > 0.5).length;
-    return { from, to, feeVoi, feeUp, rows, totals: { ...totals, mismatch_count: mismatchCount } };
+    const mismatchCount = scoped.filter((row) => Math.abs(row.diff) > 0.5).length;
+    return { from, to, feeVoi, feeUp, rows: scoped, totals: { ...totals, mismatch_count: mismatchCount } };
   };
 
   router.get(
@@ -1874,7 +1876,8 @@ export function reportsRouter(): Router {
     '/reports/shell-deposits.xlsx',
     handle(async (req, res) => {
       const { from, to } = resolveReportPeriod(req.query as Record<string, string | undefined>);
-      const data = shellDepositReportData(db, from, to);
+      const mode = (req.query.mode as string | undefined) === 'debt' ? 'debt' : 'all';
+      const data = shellDepositReportData(db, from, to, mode);
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet('Cọc vỏ bình');
       ws.columns = [
@@ -1953,8 +1956,83 @@ export function reportsRouter(): Router {
 
       const buffer = await wb.xlsx.writeBuffer();
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', `attachment; filename="doi-chieu-vo-coc-${from}_${to}.xlsx"`);
+      res.setHeader('Content-Disposition', `attachment; filename="doi-chieu-vo-coc-${from}_${to}${mode === 'debt' ? '-danh-sach-no' : ''}.xlsx"`);
       res.send(Buffer.from(buffer));
+    })
+  );
+
+  // --- Bảng vỏ bình theo TỪNG ĐƠN: số vỏ giao, tiền cọc, đã trả, và số khách đang giữ ---
+  interface ShellOrderRow {
+    order_id: number;
+    order_code: string;
+    order_date: string;
+    customer_id: number;
+    customer_code: string;
+    customer_name: string;
+    voi: number;
+    up: number;
+    deposit: number;
+    returned_voi: number;
+    returned_up: number;
+    debt_voi: number;
+    debt_up: number;
+  }
+
+  router.get(
+    '/reports/shell-orders',
+    handle((req, res) => {
+      const q = req.query as Record<string, string | undefined>;
+      const { from, to } = resolveReportPeriod(q);
+      const scope = q.scope === 'period' ? 'period' : 'all';
+      const dateClause = scope === 'period' ? 'AND o.order_date >= ? AND o.order_date <= ?' : '';
+      const params = scope === 'period' ? [from, to] : [];
+      const rows = db
+        .prepare(
+          `SELECT o.id AS order_id, o.order_code, o.order_date,
+                  c.id AS customer_id, c.code AS customer_code, c.name AS customer_name,
+                  COALESCE(SUM(CASE WHEN p.bottle_type = 'VOI' THEN oi.quantity + COALESCE(oi.quantity_promo, 0) ELSE 0 END), 0) AS voi,
+                  COALESCE(SUM(CASE WHEN p.bottle_type = 'UP' THEN oi.quantity + COALESCE(oi.quantity_promo, 0) ELSE 0 END), 0) AS up,
+                  COALESCE(o.deposit_amount, 0) AS deposit,
+                  COALESCE(o.returned_shells_voi, 0) AS returned_voi,
+                  COALESCE(o.returned_shells_up, 0) AS returned_up,
+                  COALESCE(c.bottle_debt_voi, 0) AS debt_voi,
+                  COALESCE(c.bottle_debt_up, 0) AS debt_up
+           FROM orders o
+           JOIN customers c ON c.id = o.customer_id
+           JOIN order_items oi ON oi.order_id = o.id
+           JOIN products p ON p.id = oi.product_id
+           WHERE o.order_type IN ('SALE', 'BORROW_IN') AND o.order_status IN ('COMPLETED', 'RETURNED')
+             AND EXISTS (
+               SELECT 1 FROM order_items oi2 JOIN products p2 ON p2.id = oi2.product_id
+               WHERE oi2.order_id = o.id AND p2.bottle_type <> 'NONE'
+             )
+             ${dateClause}
+           GROUP BY o.id
+           ORDER BY o.order_date DESC, o.id DESC`
+        )
+        .all(...params) as ShellOrderRow[];
+
+      const totals = rows.reduce(
+        (acc, row) => ({
+          voi: acc.voi + row.voi,
+          up: acc.up + row.up,
+          deposit: acc.deposit + row.deposit,
+          returned_voi: acc.returned_voi + row.returned_voi,
+          returned_up: acc.returned_up + row.returned_up,
+        }),
+        { voi: 0, up: 0, deposit: 0, returned_voi: 0, returned_up: 0 }
+      );
+      // Số hiện đang giữ là trạng thái hiện tại, không phụ thuộc kỳ đang xem.
+      const held = db
+        .prepare(
+          `SELECT COALESCE((SELECT SUM(bottle_debt_voi) FROM customers), 0) AS debt_voi,
+                  COALESCE((SELECT SUM(bottle_debt_up) FROM customers), 0) AS debt_up,
+                  COALESCE((SELECT SUM(CASE WHEN transaction_type = 'COLLECT' THEN amount ELSE -amount END)
+                            FROM deposit_transactions), 0) AS deposit_balance`
+        )
+        .get() as { debt_voi: number; debt_up: number; deposit_balance: number };
+      const { feeVoi, feeUp } = shellDepositFees(db);
+      res.json({ scope, from, to, feeVoi, feeUp, rows, totals, held });
     })
   );
 
