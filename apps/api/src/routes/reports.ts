@@ -1993,8 +1993,8 @@ export function reportsRouter(): Router {
                   COALESCE(SUM(CASE WHEN p.bottle_type = 'VOI' THEN oi.quantity + COALESCE(oi.quantity_promo, 0) ELSE 0 END), 0) AS voi,
                   COALESCE(SUM(CASE WHEN p.bottle_type = 'UP' THEN oi.quantity + COALESCE(oi.quantity_promo, 0) ELSE 0 END), 0) AS up,
                   COALESCE(o.deposit_amount, 0) AS deposit,
-                  COALESCE(o.returned_shells_voi, 0) AS returned_voi,
-                  COALESCE(o.returned_shells_up, 0) AS returned_up,
+                  COALESCE((SELECT SUM(l.returned_voi) FROM customer_bottle_ledgers l WHERE l.order_id = o.id), 0) AS returned_voi,
+                  COALESCE((SELECT SUM(l.returned_up) FROM customer_bottle_ledgers l WHERE l.order_id = o.id), 0) AS returned_up,
                   COALESCE(c.bottle_debt_voi, 0) AS debt_voi,
                   COALESCE(c.bottle_debt_up, 0) AS debt_up
            FROM orders o
