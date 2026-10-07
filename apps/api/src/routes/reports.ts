@@ -2032,7 +2032,49 @@ export function reportsRouter(): Router {
         )
         .get() as { debt_voi: number; debt_up: number; deposit_balance: number };
       const { feeVoi, feeUp } = shellDepositFees(db);
-      res.json({ scope, from, to, feeVoi, feeUp, rows, totals, held });
+      // Gộp theo khách cho dòng chính; bấm vào khách sẽ sổ xuống danh sách đơn (rows).
+      const byCustomer = new Map<
+        number,
+        { period_voi: number; period_up: number; period_deposit: number; order_count: number }
+      >();
+      for (const row of rows) {
+        const acc = byCustomer.get(row.customer_id) ?? { period_voi: 0, period_up: 0, period_deposit: 0, order_count: 0 };
+        acc.period_voi += row.voi;
+        acc.period_up += row.up;
+        acc.period_deposit += row.deposit;
+        acc.order_count += 1;
+        byCustomer.set(row.customer_id, acc);
+      }
+      const allCustomers = db
+        .prepare(
+          `SELECT c.id AS customer_id, c.code, c.name,
+                  COALESCE(c.bottle_debt_voi, 0) AS debt_voi, COALESCE(c.bottle_debt_up, 0) AS debt_up,
+                  COALESCE((SELECT SUM(CASE WHEN d.transaction_type = 'COLLECT' THEN d.amount ELSE -d.amount END)
+                            FROM deposit_transactions d WHERE d.customer_id = c.id), 0) AS deposit_balance
+           FROM customers c`
+        )
+        .all() as {
+        customer_id: number;
+        code: string;
+        name: string;
+        debt_voi: number;
+        debt_up: number;
+        deposit_balance: number;
+      }[];
+      const customers = allCustomers
+        .filter(
+          (c) =>
+            byCustomer.has(c.customer_id) ||
+            c.debt_voi > 0 ||
+            c.debt_up > 0 ||
+            Math.abs(c.deposit_balance) > 0.5
+        )
+        .map((c) => {
+          const agg = byCustomer.get(c.customer_id) ?? { period_voi: 0, period_up: 0, period_deposit: 0, order_count: 0 };
+          return { ...c, ...agg };
+        })
+        .sort((a, b) => b.debt_voi + b.debt_up - (a.debt_voi + a.debt_up));
+      res.json({ scope, from, to, feeVoi, feeUp, rows, totals, held, customers });
     })
   );
 

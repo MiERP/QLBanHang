@@ -155,6 +155,19 @@ export interface ShellOrderRow {
   debt_up: number;
 }
 
+export interface ShellCustomerRow {
+  customer_id: number;
+  code: string;
+  name: string;
+  debt_voi: number;
+  debt_up: number;
+  deposit_balance: number;
+  period_voi: number;
+  period_up: number;
+  period_deposit: number;
+  order_count: number;
+}
+
 export interface ShellOrdersReport {
   scope: 'all' | 'period';
   from: string;
@@ -164,6 +177,7 @@ export interface ShellOrdersReport {
   rows: ShellOrderRow[];
   totals: { voi: number; up: number; deposit: number; returned_voi: number; returned_up: number };
   held: { debt_voi: number; debt_up: number; deposit_balance: number };
+  customers: ShellCustomerRow[];
 }
 
 export interface ShellDepositReport {

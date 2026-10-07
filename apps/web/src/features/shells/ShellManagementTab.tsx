@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import * as api from '../../api';
 import { Button } from '../../components/ui/Button';
 import { DataTable, type Column } from '../../components/ui/DataTable';
@@ -7,47 +7,61 @@ import { cn } from '../../lib/cn';
 import { formatCurrency, formatDate, formatNumber } from '../../lib/format';
 import { useApi } from '../../lib/hooks';
 import { ShellActions } from './ShellActions';
-import type { ReportPeriod, ShellOrderRow } from '../../types';
+import type { ReportPeriod, ShellCustomerRow, ShellOrderRow } from '../../types';
 
 type Scope = 'all' | 'period';
 
-// Một bảng duy nhất cho vỏ bình & cọc: mỗi dòng là một đơn có bình — số vỏ giao, tiền cọc,
-// số đã trả, số khách đang giữ, và thao tác ngay tại dòng (trả vỏ / tất toán / mất-mua đứt).
+// Một bảng duy nhất cho vỏ bình & cọc: dòng chính là KHÁCH HÀNG (số vỏ đang giữ, tiền cọc đang
+// giữ). Bấm vào một khách thì sổ xuống danh sách đơn của khách đó — mỗi đơn thao tác được ngay
+// (trả vỏ / tất toán / mất-mua đứt).
 export function ShellManagementTab({ period }: { period: ReportPeriod }) {
   const [scope, setScope] = useState<Scope>('all');
   const { data, loading, reload } = useApi(() => api.fetchShellOrders({ scope }), [scope]);
 
   const held = data?.held;
   const totals = data?.totals;
-  const rows = data?.rows ?? [];
+  const orders = useMemo(() => data?.rows ?? [], [data]);
 
-  const columns: Column<ShellOrderRow>[] = [
-    { key: 'order_date', header: 'Ngày', render: (r) => formatDate(r.order_date), sortValue: (r) => r.order_date },
-    { key: 'order_code', header: 'Mã đơn', className: 'font-mono font-semibold text-brand-navy', sortValue: (r) => r.order_code },
+  const ordersByCustomer = useMemo(() => {
+    const map = new Map<number, ShellOrderRow[]>();
+    for (const order of orders) {
+      const list = map.get(order.customer_id) ?? [];
+      list.push(order);
+      map.set(order.customer_id, list);
+    }
+    return map;
+  }, [orders]);
+
+  const columns: Column<ShellCustomerRow>[] = [
     {
-      key: 'customer_name',
+      key: 'name',
       header: 'Khách hàng',
       render: (r) => (
         <>
-          <span className="block">{r.customer_name}</span>
-          <span className="text-xs text-slate-400">{r.customer_code}</span>
+          <span className="block font-semibold text-slate-700">{r.name}</span>
+          <span className="text-xs text-slate-400">{r.code}</span>
         </>
       ),
-      sortValue: (r) => r.customer_name,
+      sortValue: (r) => r.name,
     },
-    { key: 'voi', header: 'Vỏ Vòi', align: 'right', render: (r) => (r.voi ? formatNumber(r.voi) : '—'), sortValue: (r) => r.voi },
-    { key: 'up', header: 'Vỏ Úp', align: 'right', render: (r) => (r.up ? formatNumber(r.up) : '—'), sortValue: (r) => r.up },
-    { key: 'deposit', header: 'Tiền cọc', align: 'right', render: (r) => formatCurrency(r.deposit), sortValue: (r) => r.deposit },
+    { key: 'order_count', header: 'Số đơn', align: 'right', sortValue: (r) => r.order_count },
     {
-      key: 'returned',
-      header: 'Đã trả (Vòi/Úp)',
+      key: 'period',
+      header: scope === 'period' ? 'Vỏ giao trong kỳ (Vòi/Úp)' : 'Vỏ giao (Vòi/Úp)',
       align: 'right',
-      render: (r) => (r.returned_voi || r.returned_up ? `${formatNumber(r.returned_voi)} / ${formatNumber(r.returned_up)}` : '—'),
-      sortValue: (r) => r.returned_voi + r.returned_up,
+      render: (r) => `${formatNumber(r.period_voi)} / ${formatNumber(r.period_up)}`,
+      sortValue: (r) => r.period_voi + r.period_up,
+    },
+    {
+      key: 'period_deposit',
+      header: scope === 'period' ? 'Cọc thu trong kỳ' : 'Cọc đã thu',
+      align: 'right',
+      render: (r) => formatCurrency(r.period_deposit),
+      sortValue: (r) => r.period_deposit,
     },
     {
       key: 'held',
-      header: 'Khách còn giữ (Vòi/Úp)',
+      header: 'Khách đang giữ (Vòi/Úp)',
       align: 'right',
       render: (r) => (
         <b className="text-brand-navy">
@@ -57,23 +71,11 @@ export function ShellManagementTab({ period }: { period: ReportPeriod }) {
       sortValue: (r) => r.debt_voi + r.debt_up,
     },
     {
-      key: 'actions',
-      header: 'Thao tác',
+      key: 'deposit_balance',
+      header: 'Cọc đang giữ',
       align: 'right',
-      render: (r) => (
-        <ShellActions
-          target={{
-            customerId: r.customer_id,
-            customerName: r.customer_name,
-            debtVoi: r.debt_voi,
-            debtUp: r.debt_up,
-            orderId: r.order_id,
-            defaultVoi: Math.max(0, r.voi - r.returned_voi),
-            defaultUp: Math.max(0, r.up - r.returned_up),
-          }}
-          onDone={reload}
-        />
-      ),
+      render: (r) => <b className="text-brand-navy">{formatCurrency(r.deposit_balance)}</b>,
+      sortValue: (r) => r.deposit_balance,
     },
   ];
 
@@ -119,6 +121,7 @@ export function ShellManagementTab({ period }: { period: ReportPeriod }) {
             Kỳ báo cáo: {formatDate(period.from)} → {formatDate(period.to)}
           </span>
         )}
+        <span className="text-xs text-slate-400">Bấm vào một khách hàng để sổ xuống danh sách đơn.</span>
       </div>
 
       <div className="mb-3 flex flex-wrap gap-5 text-sm text-slate-600">
@@ -138,15 +141,67 @@ export function ShellManagementTab({ period }: { period: ReportPeriod }) {
 
       <DataTable
         columns={columns}
-        data={rows}
-        rowKey={(r) => r.order_id}
+        data={data?.customers ?? []}
+        rowKey={(r) => r.customer_id}
         loading={loading}
-        searchPlaceholder="Tìm theo mã đơn, khách hàng..."
-        initialSortKey="order_date"
+        searchPlaceholder="Tìm theo tên hoặc mã khách hàng..."
+        initialSortKey="held"
         initialSortDir="desc"
         pageSize={20}
-        emptyMessage="Chưa có đơn bình nước nào"
+        emptyMessage="Chưa có khách hàng nào có vỏ bình"
+        renderExpanded={(customer) => <CustomerOrders orders={ordersByCustomer.get(customer.customer_id) ?? []} onDone={reload} />}
       />
     </>
+  );
+}
+
+function CustomerOrders({ orders, onDone }: { orders: ShellOrderRow[]; onDone: () => void }) {
+  if (!orders.length) {
+    return <p className="text-xs text-slate-400">Khách chưa có đơn bình nước nào trong phạm vi đang xem.</p>;
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left text-sm">
+        <thead className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <tr>
+            <th className="px-3 py-2">Ngày</th>
+            <th className="px-3 py-2">Mã đơn</th>
+            <th className="px-3 py-2 text-right">Vỏ Vòi</th>
+            <th className="px-3 py-2 text-right">Vỏ Úp</th>
+            <th className="px-3 py-2 text-right">Tiền cọc</th>
+            <th className="px-3 py-2 text-right">Đã trả (Vòi/Úp)</th>
+            <th className="px-3 py-2 text-right">Thao tác</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {orders.map((o) => (
+            <tr key={o.order_id} className="bg-white">
+              <td className="px-3 py-2">{formatDate(o.order_date)}</td>
+              <td className="px-3 py-2 font-mono text-xs font-semibold text-brand-navy">{o.order_code}</td>
+              <td className="px-3 py-2 text-right">{o.voi ? formatNumber(o.voi) : '—'}</td>
+              <td className="px-3 py-2 text-right">{o.up ? formatNumber(o.up) : '—'}</td>
+              <td className="px-3 py-2 text-right">{formatCurrency(o.deposit)}</td>
+              <td className="px-3 py-2 text-right">
+                {o.returned_voi || o.returned_up ? `${formatNumber(o.returned_voi)} / ${formatNumber(o.returned_up)}` : '—'}
+              </td>
+              <td className="px-3 py-2">
+                <ShellActions
+                  target={{
+                    customerId: o.customer_id,
+                    customerName: o.customer_name,
+                    debtVoi: o.debt_voi,
+                    debtUp: o.debt_up,
+                    orderId: o.order_id,
+                    defaultVoi: Math.max(0, o.voi - o.returned_voi),
+                    defaultUp: Math.max(0, o.up - o.returned_up),
+                  }}
+                  onDone={onDone}
+                />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
