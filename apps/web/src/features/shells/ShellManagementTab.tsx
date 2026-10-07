@@ -6,6 +6,7 @@ import { PageHeader } from '../../components/ui/PageHeader';
 import { cn } from '../../lib/cn';
 import { formatCurrency, formatDate, formatNumber } from '../../lib/format';
 import { useApi } from '../../lib/hooks';
+import { DepositVouchersTab } from './DepositVouchersTab';
 import { ShellActions } from './ShellActions';
 import type { ReportPeriod, ShellCustomerRow, ShellOrderRow } from '../../types';
 
@@ -15,6 +16,7 @@ type Scope = 'all' | 'period';
 // giữ). Bấm vào một khách thì sổ xuống danh sách đơn của khách đó — mỗi đơn thao tác được ngay
 // (trả vỏ / tất toán / mất-mua đứt).
 export function ShellManagementTab({ period }: { period: ReportPeriod }) {
+  const [tab, setTab] = useState<'shells' | 'vouchers'>('shells');
   const [scope, setScope] = useState<Scope>('all');
   const { data, loading, reload } = useApi(() => api.fetchShellOrders({ scope }), [scope]);
 
@@ -93,6 +95,30 @@ export function ShellManagementTab({ period }: { period: ReportPeriod }) {
         }
       />
 
+      <div className="mb-4 flex flex-wrap gap-2">
+        {(
+          [
+            { id: 'shells', label: 'Vỏ & cọc' },
+            { id: 'vouchers', label: 'Phiếu thu – chi cọc' },
+          ] as const
+        ).map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={cn(
+              'rounded-lg px-3.5 py-1.5 text-sm font-semibold transition-colors',
+              tab === t.id ? 'bg-brand-navy text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'vouchers' ? (
+        <DepositVouchersTab period={period} />
+      ) : (
+        <>
       <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-3">
         <div className="flex items-center gap-1.5">
           {(
@@ -148,6 +174,8 @@ export function ShellManagementTab({ period }: { period: ReportPeriod }) {
         emptyMessage="Chưa có khách hàng nào có vỏ bình"
         renderExpanded={(customer) => <CustomerOrders orders={ordersByCustomer.get(customer.customer_id) ?? []} onDone={reload} />}
       />
+        </>
+      )}
     </>
   );
 }
