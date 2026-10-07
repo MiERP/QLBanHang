@@ -1799,6 +1799,12 @@ export function reportsRouter(): Router {
                     WHERE order_status IN ('CONFIRMED','SHIPPING') AND order_type IN ('SALE','BORROW_IN')
                     GROUP BY customer_id) po ON po.customer_id = c.id
          WHERE c.is_active = 1
+           -- Chỉ khách CÓ quan hệ mua bán (đã từng đặt đơn hoặc có phát sinh cọc vỏ), gồm cả khách
+           -- đã thanh toán xong; khách chưa từng phát sinh thì không tổng hợp vào báo cáo.
+           AND (
+             EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.id)
+             OR EXISTS (SELECT 1 FROM deposit_transactions dt WHERE dt.customer_id = c.id)
+           )
          ORDER BY (c.bottle_debt_voi + c.bottle_debt_up) DESC, c.id ASC`
       )
       .all(from, to) as (Omit<ShellDepositReportRow, 'shell_value' | 'balance' | 'diff' | 'pending_voi' | 'pending_up'> & {
