@@ -7,7 +7,6 @@ import { CreateOrderTab } from './features/create-order/CreateOrderTab';
 import { CustomerDebtTab } from './features/customers/CustomerDebtTab';
 import { CustomerDetailTab } from './features/customers/CustomerDetailTab';
 import { CustomersTab } from './features/customers/CustomersTab';
-import { DepositsTab } from './features/deposits/DepositsTab';
 import { CashAuditTab } from './features/finance/CashAuditTab';
 import { ReceiptsTab } from './features/finance/ReceiptsTab';
 import { ExpensesTab } from './features/expenses/ExpensesTab';
@@ -23,15 +22,13 @@ import { ProductsTab } from './features/products/ProductsTab';
 import { PromotionsTab } from './features/promotions/PromotionsTab';
 import { ShippingReportTab } from './features/reports/ShippingReportTab';
 import { ServiceReportTab } from './features/reports/ServiceReportTab';
-import { ShellReportTab } from './features/shells/ShellReportTab';
-import { ShellStockTab } from './features/shells/ShellStockTab';
+import { ShellManagementTab } from './features/shells/ShellManagementTab';
 import { RevenueTab } from './features/revenue/RevenueTab';
 import { SettingsTab } from './features/settings/SettingsTab';
 import { ShippingFeesTab } from './features/shipping-fees/ShippingFeesTab';
 import { StaffTab } from './features/staff/StaffTab';
 import { ImportSourcesTab } from './features/warehouse/ImportSourcesTab';
 import { StockAuditTab } from './features/warehouse/StockAuditTab';
-import { ShellAuditTab } from './features/warehouse/ShellAuditTab';
 import { StockInTab } from './features/warehouse/StockInTab';
 import { StockMatrixTab } from './features/warehouse/StockMatrixTab';
 import { StockOutTab } from './features/warehouse/StockOutTab';
@@ -99,12 +96,11 @@ function Shell() {
             {tab === 'promotions' && <PromotionsTab />}
             {tab === 'partner-units' && <PartnerUnitsTab />}
             {tab === 'customers' && <CustomersTab />}
-            {tab === 'customer-detail' && <CustomerDetailTab />}
+            {tab === 'customer-detail' && <CustomerDetailTab onNavigate={openTab} />}
             {tab === 'stock-in' && <StockInTab />}
             {tab === 'stock-out' && <StockOutTab />}
             {tab === 'stock' && <StockMatrixTab focus={stockFocus} />}
             {tab === 'stock-audit' && <StockAuditTab />}
-            {tab === 'shell-audit' && <ShellAuditTab />}
             {tab === 'import-sources' && <ImportSourcesTab />}
             {tab === 'loans' && <LoansTab period={period} />}
             {tab === 'kpi' && <TargetsTab period={period} />}
@@ -132,9 +128,7 @@ function Shell() {
             {tab === 'cash-audit' && <CashAuditTab />}
             {tab === 'shipping-report' && <ShippingReportTab period={period} />}
             {tab === 'service-report' && <ServiceReportTab period={period} />}
-            {tab === 'shell-deposits' && <ShellReportTab period={period} />}
-            {tab === 'shell-stock' && <ShellStockTab />}
-            {tab === 'deposits' && <DepositsTab period={period} />}
+            {tab === 'shell-deposits' && <ShellManagementTab period={period} />}
             {tab === 'staff' && <StaffTab />}
             {tab === 'settings' && <SettingsTab />}
             {tab === 'audit-log' && <AuditLogTab />}

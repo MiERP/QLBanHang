@@ -1,18 +1,15 @@
-import { ArrowLeft, RotateCcw } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
+import { useState } from 'react';
 import * as api from '../../api';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { DataTable, type Column } from '../../components/ui/DataTable';
-import { Field, FormGrid, Input, Select } from '../../components/ui/Field';
-import { Modal } from '../../components/ui/Modal';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { Tabs } from '../../components/ui/Tabs';
-import { useToast } from '../../components/ui/Toast';
-import { useReference } from '../../context/ReferenceContext';
-import { useApi } from '../../lib/hooks';
 import { formatCurrency, formatDate, formatNumber } from '../../lib/format';
-import type { BottleLedger, Customer, Order, RevenueTransaction } from '../../types';
+import { useApi } from '../../lib/hooks';
+import type { TabId } from '../../layout';
+import type { Customer, Order, RevenueTransaction } from '../../types';
 import { paymentStatusMeta, statusMeta } from '../orders/orderStatus';
 
 const REV_TYPE: Record<string, string> = {
@@ -28,43 +25,17 @@ const REV_TYPE: Record<string, string> = {
 // Nợ tiền của khách = nợ đầu kỳ + phần chưa thu của các đơn đã hoàn thành (API trả sẵn ở `total_debt`).
 const customerDebt = (customer: Customer) => customer.total_debt ?? customer.current_debt;
 
-export function CustomerDetailTab() {
-  const { staff, products, reload: reloadRefs } = useReference();
+// Chi tiết khách hàng: đơn hàng + công nợ tiền. Quản lý & thao tác vỏ bình / cọc vỏ nằm ở màn
+// "Vỏ bình & cọc" (Báo cáo) — nút "Quản lý vỏ & cọc" ở tab Tổng quan dẫn sang đó.
+export function CustomerDetailTab({ onNavigate }: { onNavigate?: (tab: TabId) => void }) {
   const customersApi = useApi(() => api.customers.list(), []);
-  const shellDepositsApi = useApi(() => api.shellDeposits.list(), []);
-  const toast = useToast();
 
   const [selected, setSelected] = useState<Customer | null>(null);
   const [tab, setTab] = useState('overview');
-  const [returnOpen, setReturnOpen] = useState(false);
-  const [settleOpen, setSettleOpen] = useState(false);
-  const [writeOffOpen, setWriteOffOpen] = useState(false);
-  const [settleForm, setSettleForm] = useState({ payment_method: 'CASH', handled_by: '', note: '' });
-  const [writeOffForm, setWriteOffForm] = useState({ shells_voi: '', shells_up: '', reason: 'Vỏ mất', handled_by: '', note: '' });
-  const [returnForm, setReturnForm] = useState({
-    returned_voi: '',
-    returned_up: '',
-    handled_by: '',
-    refund_deposit: '1',
-    payment_method: 'CASH',
-    note: '',
-  });
-
-  // Phí cọc theo loại vỏ: lấy từ danh mục "Cọc vỏ bình", chưa cấu hình thì theo sản phẩm bình đang bán.
-  const shellFee = useMemo(() => {
-    const feeOf = (type: 'VOI' | 'UP') => {
-      const configured = (shellDepositsApi.data ?? []).find((row) => row.bottle_type === type);
-      if (configured && Number(configured.deposit_fee) > 0) return Number(configured.deposit_fee);
-      const product = (products ?? []).find((p) => p.bottle_type === type && Number(p.deposit_fee) > 0);
-      return Number(product?.deposit_fee) || 0;
-    };
-    return { feeVoi: feeOf('VOI'), feeUp: feeOf('UP') };
-  }, [shellDepositsApi.data, products]);
 
   const selectedId = selected?.id;
   const ordersApi = useApi(() => (selectedId ? api.fetchOrders({ customer_id: selectedId, limit: 200 }) : Promise.resolve([])), [selectedId]);
   const revenueApi = useApi(() => (selectedId ? api.fetchRevenue({ customer_id: selectedId }) : Promise.resolve([])), [selectedId]);
-  const ledgersApi = useApi(() => (selectedId ? api.fetchBottleLedgers(selectedId) : Promise.resolve([])), [selectedId]);
 
   if (!selected) {
     return (
@@ -124,7 +95,6 @@ export function CustomerDetailTab() {
           { id: 'overview', label: 'Tổng quan' },
           { id: 'orders', label: 'Đơn hàng', badge: totalOrders },
           { id: 'debt', label: 'Công nợ tiền' },
-          { id: 'bottles', label: 'Nợ vỏ bình' },
         ]}
         value={tab}
         onChange={setTab}
@@ -132,30 +102,46 @@ export function CustomerDetailTab() {
       />
 
       {tab === 'overview' && (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-          <StatCard label="Nợ tiền" value={formatCurrency(customerDebt(selected))} danger={customerDebt(selected) > selected.max_debt_limit} />
-          <StatCard label="Hạn mức" value={formatCurrency(selected.max_debt_limit)} />
-          <StatCard label="Nợ vỏ Vòi" value={String(selected.bottle_debt_voi)} />
-          <StatCard label="Nợ vỏ Úp" value={String(selected.bottle_debt_up)} />
-          <StatCard
-            label="Giá trị vỏ đang giữ"
-            value={formatCurrency(selected.shell_value ?? 0)}
-            danger={Math.abs(selected.shell_deposit_diff ?? 0) > 0.5}
-          />
-          <StatCard
-            label="Cọc vỏ đang giữ"
-            value={formatCurrency(selected.deposit_balance ?? 0)}
-            danger={Math.abs(selected.shell_deposit_diff ?? 0) > 0.5}
-          />
-          <StatCard label="Doanh thu (đơn đã xuất HĐ)" value={formatCurrency(totalRevenue)} />
-          <StatCard label="Số đơn (200 gần nhất)" value={formatNumber(totalOrders)} />
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+            <StatCard label="Nợ tiền" value={formatCurrency(customerDebt(selected))} danger={customerDebt(selected) > selected.max_debt_limit} />
+            <StatCard label="Hạn mức" value={formatCurrency(selected.max_debt_limit)} />
+            <StatCard label="Nợ vỏ Vòi" value={String(selected.bottle_debt_voi)} />
+            <StatCard label="Nợ vỏ Úp" value={String(selected.bottle_debt_up)} />
+            <StatCard
+              label="Giá trị vỏ đang giữ"
+              value={formatCurrency(selected.shell_value ?? 0)}
+              danger={Math.abs(selected.shell_deposit_diff ?? 0) > 0.5}
+            />
+            <StatCard
+              label="Cọc vỏ đang giữ"
+              value={formatCurrency(selected.deposit_balance ?? 0)}
+              danger={Math.abs(selected.shell_deposit_diff ?? 0) > 0.5}
+            />
+            <StatCard label="Doanh thu (đơn đã xuất HĐ)" value={formatCurrency(totalRevenue)} />
+            <StatCard label="Số đơn (200 gần nhất)" value={formatNumber(totalOrders)} />
+          </div>
+
+          {Math.abs(selected.shell_deposit_diff ?? 0) > 0.5 && (
+            <p className="text-xs font-semibold text-brand-red">
+              Lệch vỏ - cọc: {formatCurrency(selected.shell_deposit_diff ?? 0)} (cọc đang giữ trừ giá trị vỏ khách đang giữ) — khách mất vỏ
+              hoặc vỏ chưa thu cọc sẽ hiện ở đây.
+            </p>
+          )}
+
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4">
+            <div>
+              <p className="text-sm font-semibold text-slate-700">Vỏ bình &amp; cọc vỏ của khách</p>
+              <p className="text-xs text-slate-500">
+                Nợ vỏ: {selected.bottle_debt_voi} Vòi · {selected.bottle_debt_up} Úp — cọc đang giữ{' '}
+                {formatCurrency(selected.deposit_balance ?? 0)}. Thao tác thu hồi, tất toán, vỏ mất / mua đứt ở màn Vỏ bình &amp; cọc.
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => onNavigate?.('shell-deposits')}>
+              Quản lý vỏ &amp; cọc
+            </Button>
+          </div>
         </div>
-      )}
-      {tab === 'overview' && Math.abs(selected.shell_deposit_diff ?? 0) > 0.5 && (
-        <p className="mt-3 text-xs font-semibold text-brand-red">
-          Lệch vỏ - cọc: {formatCurrency(selected.shell_deposit_diff ?? 0)} (cọc đang giữ trừ giá trị vỏ khách đang giữ) — khách mất vỏ
-          hoặc vỏ chưa thu cọc sẽ hiện ở đây.
-        </p>
       )}
 
       {tab === 'orders' && (
@@ -197,268 +183,6 @@ export function CustomerDetailTab() {
           />
         </div>
       )}
-
-      {tab === 'bottles' && (
-        <DataTable
-          columns={ledgerColumns}
-          data={ledgersApi.data ?? []}
-          rowKey={(r) => r.id}
-          loading={ledgersApi.loading}
-          searchable={false}
-          initialSortKey="transaction_date"
-          initialSortDir="desc"
-          emptyTitle="Chưa có phát sinh vỏ"
-          emptyMessage="Khách hàng này chưa có lịch sử vỏ bình."
-          toolbar={
-            <>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  setReturnForm({ returned_voi: '', returned_up: '', handled_by: '', refund_deposit: '1', payment_method: 'CASH', note: '' });
-                  setReturnOpen(true);
-                }}
-              >
-                <RotateCcw className="h-3.5 w-3.5" /> Ghi nhận thu hồi vỏ
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setSettleForm({ payment_method: 'CASH', handled_by: '', note: '' });
-                  setSettleOpen(true);
-                }}
-              >
-                Tất toán vỏ
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setWriteOffForm({ shells_voi: '', shells_up: '', reason: 'Vỏ mất', handled_by: '', note: '' });
-                  setWriteOffOpen(true);
-                }}
-              >
-                Vỏ mất / mua đứt
-              </Button>
-            </>
-          }
-        />
-      )}
-
-      <Modal
-        open={returnOpen}
-        onClose={() => setReturnOpen(false)}
-        size="sm"
-        title="Ghi nhận thu hồi vỏ bình"
-        subtitle={`${selected.name} · Vòi ${selected.bottle_debt_voi} / Úp ${selected.bottle_debt_up}`}
-        footer={
-          <>
-            <Button variant="outline" size="sm" onClick={() => setReturnOpen(false)}>
-              Hủy bỏ
-            </Button>
-            <Button
-              size="sm"
-              onClick={async () => {
-                try {
-                  const res = await api.returnBottles(selected.id, returnForm);
-                  toast.success(
-                    res.deposit_refund
-                      ? `Đã thu hồi vỏ và hoàn cọc ${formatCurrency(res.deposit_refund)}`
-                      : 'Đã ghi nhận thu hồi vỏ (không hoàn cọc)'
-                  );
-                  setReturnOpen(false);
-                  customersApi.reload();
-                  ledgersApi.reload();
-                  reloadRefs();
-                } catch (e) {
-                  toast.error(e instanceof Error ? e.message : 'Không thực hiện được');
-                }
-              }}
-            >
-              Xác nhận thu hồi
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-3 p-5">
-          <FormGrid cols={2}>
-            <Field label="Số vỏ Vòi trả">
-              <Input type="number" value={returnForm.returned_voi} onChange={(e) => setReturnForm({ ...returnForm, returned_voi: e.target.value })} />
-            </Field>
-            <Field label="Số vỏ Úp trả">
-              <Input type="number" value={returnForm.returned_up} onChange={(e) => setReturnForm({ ...returnForm, returned_up: e.target.value })} />
-            </Field>
-          </FormGrid>
-          <div className="rounded-lg border border-slate-200 p-3">
-            <FormGrid cols={2}>
-              <Field label="Hoàn cọc">
-                <Select value={returnForm.refund_deposit} onChange={(e) => setReturnForm({ ...returnForm, refund_deposit: e.target.value })}>
-                  <option value="1">Hoàn tiền cọc cho số vỏ trả</option>
-                  <option value="0">Không hoàn (đã xử lý ở chỗ khác)</option>
-                </Select>
-              </Field>
-              <Field label="Hình thức hoàn">
-                <Select value={returnForm.payment_method} onChange={(e) => setReturnForm({ ...returnForm, payment_method: e.target.value })}>
-                  <option value="CASH">Tiền mặt</option>
-                  <option value="BANK_TRANSFER">Chuyển khoản</option>
-                </Select>
-              </Field>
-            </FormGrid>
-            <p className="mt-1 text-right text-[11px] text-slate-500">
-              Tiền cọc hoàn theo phí cọc đang áp: Vòi {formatCurrency(shellFee.feeVoi)} · Úp {formatCurrency(shellFee.feeUp)} — tiền hoàn dự
-              kiến{' '}
-              <b className="text-slate-700">
-                {formatCurrency(
-                  (Number(returnForm.returned_voi) || 0) * shellFee.feeVoi + (Number(returnForm.returned_up) || 0) * shellFee.feeUp
-                )}
-              </b>
-            </p>
-          </div>
-          <Field label="Người thu hồi">
-            <Select value={returnForm.handled_by} onChange={(e) => setReturnForm({ ...returnForm, handled_by: e.target.value })}>
-              <option value="">-- Không chỉ định --</option>
-              {staff.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.full_name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Ghi chú">
-            <Input value={returnForm.note} onChange={(e) => setReturnForm({ ...returnForm, note: e.target.value })} />
-          </Field>
-        </div>
-      </Modal>
-      <Modal
-        open={settleOpen}
-        onClose={() => setSettleOpen(false)}
-        size="sm"
-        title="Tất toán vỏ bình"
-        subtitle={`${selected.name} · Vòi ${selected.bottle_debt_voi} / Úp ${selected.bottle_debt_up}`}
-        footer={
-          <>
-            <Button variant="outline" size="sm" onClick={() => setSettleOpen(false)}>
-              Hủy bỏ
-            </Button>
-            <Button
-              size="sm"
-              onClick={async () => {
-                try {
-                  const res = await api.settleShells(selected.id, settleForm);
-                  toast.success(
-                    `Đã thu hồi ${res.shells_voi} vỏ Vòi + ${res.shells_up} vỏ Úp và hoàn cọc ${formatCurrency(res.deposit_refund)}`
-                  );
-                  setSettleOpen(false);
-                  customersApi.reload();
-                  ledgersApi.reload();
-                } catch (e) {
-                  toast.error(e instanceof Error ? e.message : 'Không tất toán được');
-                }
-              }}
-            >
-              Xác nhận tất toán
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-3 p-5">
-          <p className="text-xs text-slate-600">
-            Hệ thống thu hồi <b>toàn bộ</b> vỏ khách đang giữ, nhập về kho vỏ bình và hoàn lại tiền cọc theo phí cọc đang áp.
-          </p>
-          <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-            Thu hồi: Vòi <b>{selected.bottle_debt_voi}</b> · Úp <b>{selected.bottle_debt_up}</b> — tiền cọc hoàn dự kiến{' '}
-            <b className="text-brand-navy">
-              {formatCurrency(selected.bottle_debt_voi * shellFee.feeVoi + selected.bottle_debt_up * shellFee.feeUp)}
-            </b>
-          </p>
-          <Field label="Hình thức hoàn cọc">
-            <Select value={settleForm.payment_method} onChange={(e) => setSettleForm({ ...settleForm, payment_method: e.target.value })}>
-              <option value="CASH">Tiền mặt</option>
-              <option value="BANK_TRANSFER">Chuyển khoản</option>
-            </Select>
-          </Field>
-          <Field label="Người thực hiện">
-            <Select value={settleForm.handled_by} onChange={(e) => setSettleForm({ ...settleForm, handled_by: e.target.value })}>
-              <option value="">-- Không chỉ định --</option>
-              {staff.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.full_name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Ghi chú">
-            <Input value={settleForm.note} onChange={(e) => setSettleForm({ ...settleForm, note: e.target.value })} />
-          </Field>
-        </div>
-      </Modal>
-
-      <Modal
-        open={writeOffOpen}
-        onClose={() => setWriteOffOpen(false)}
-        size="sm"
-        title="Vỏ không trả lại"
-        subtitle={`${selected.name} · Vòi ${selected.bottle_debt_voi} / Úp ${selected.bottle_debt_up}`}
-        footer={
-          <>
-            <Button variant="outline" size="sm" onClick={() => setWriteOffOpen(false)}>
-              Hủy bỏ
-            </Button>
-            <Button
-              size="sm"
-              onClick={async () => {
-                try {
-                  const res = await api.writeOffShells(selected.id, writeOffForm);
-                  toast.success(`Đã trừ nợ vỏ (còn Vòi ${res.newVoi} · Úp ${res.newUp}) — tiền cọc được giữ lại`);
-                  setWriteOffOpen(false);
-                  customersApi.reload();
-                  ledgersApi.reload();
-                } catch (e) {
-                  toast.error(e instanceof Error ? e.message : 'Không ghi nhận được');
-                }
-              }}
-            >
-              Xác nhận
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-3 p-5">
-          <p className="text-xs text-slate-600">
-            Dùng khi khách báo mất vỏ hoặc mua đứt vỏ: nợ vỏ giảm nhưng <b>tiền cọc đã thu được giữ lại</b> (không hoàn).
-          </p>
-          <FormGrid cols={2}>
-            <Field label="Số vỏ Vòi">
-              <Input type="number" value={writeOffForm.shells_voi} onChange={(e) => setWriteOffForm({ ...writeOffForm, shells_voi: e.target.value })} />
-            </Field>
-            <Field label="Số vỏ Úp">
-              <Input type="number" value={writeOffForm.shells_up} onChange={(e) => setWriteOffForm({ ...writeOffForm, shells_up: e.target.value })} />
-            </Field>
-          </FormGrid>
-          <Field label="Lý do">
-            <Select value={writeOffForm.reason} onChange={(e) => setWriteOffForm({ ...writeOffForm, reason: e.target.value })}>
-              <option value="Vỏ mất">Vỏ mất</option>
-              <option value="Khách mua đứt">Khách mua đứt</option>
-              <option value="Hư hỏng">Hư hỏng</option>
-              <option value="Khác">Khác</option>
-            </Select>
-          </Field>
-          <Field label="Người ghi nhận">
-            <Select value={writeOffForm.handled_by} onChange={(e) => setWriteOffForm({ ...writeOffForm, handled_by: e.target.value })}>
-              <option value="">-- Không chỉ định --</option>
-              {staff.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.full_name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Ghi chú">
-            <Input value={writeOffForm.note} onChange={(e) => setWriteOffForm({ ...writeOffForm, note: e.target.value })} />
-          </Field>
-        </div>
-      </Modal>
     </>
   );
 }
@@ -528,16 +252,4 @@ const revenueColumns: Column<RevenueTransaction>[] = [
   { key: 'amount', header: 'Số tiền', align: 'right', render: (r) => formatCurrency(r.amount), sortValue: (r) => r.amount },
   { key: 'payment_method', header: 'Hình thức', render: (r) => (r.payment_method === 'BANK_TRANSFER' ? 'Chuyển khoản' : 'Tiền mặt') },
   { key: 'collected_by_name', header: 'Người thu', render: (r) => r.collected_by_name ?? '—' },
-];
-
-const ledgerColumns: Column<BottleLedger>[] = [
-  { key: 'transaction_date', header: 'Ngày', render: (r) => formatDate(r.transaction_date), sortValue: (r) => r.transaction_date },
-  { key: 'order_code', header: 'Đơn hàng', render: (r) => r.order_code ?? '—' },
-  { key: 'borrowed_voi', header: 'Xuất Vòi', align: 'center' },
-  { key: 'borrowed_up', header: 'Xuất Úp', align: 'center' },
-  { key: 'returned_voi', header: 'Trả Vòi', align: 'center' },
-  { key: 'returned_up', header: 'Trả Úp', align: 'center' },
-  { key: 'remaining_balance_voi', header: 'Còn Vòi', align: 'center', render: (r) => <b className="text-brand-navy">{r.remaining_balance_voi}</b> },
-  { key: 'remaining_balance_up', header: 'Còn Úp', align: 'center', render: (r) => <b className="text-indigo-600">{r.remaining_balance_up}</b> },
-  { key: 'handler_name', header: 'Người xử lý', render: (r) => r.handler_name ?? '—' },
 ];

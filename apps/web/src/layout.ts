@@ -15,8 +15,6 @@ import {
   MapPin,
   Package,
   Receipt,
-  Recycle,
-  Scale,
   Settings,
   ShoppingCart,
   Tags,
@@ -49,8 +47,6 @@ export type TabId =
   | 'stock'
   | 'stock-audit'
   | 'import-sources'
-  | 'shell-stock'
-  | 'shell-audit'
   | 'loans'
   | 'kpi'
   | 'revenue'
@@ -59,7 +55,6 @@ export type TabId =
   | 'receipts'
   | 'invoice-list'
   | 'cash-audit'
-  | 'deposits'
   | 'shipping-report'
   | 'service-report'
   | 'shell-deposits'
@@ -118,7 +113,6 @@ export const NAV_ITEMS: NavItem[] = [
       { id: 'receipts', label: 'Phiếu thu', icon: Receipt },
       { id: 'invoice-list', label: 'Danh sách hóa đơn', icon: Receipt },
       { id: 'cash-audit', label: 'Đối chiếu tiền', icon: Landmark },
-      { id: 'deposits', label: 'Dòng tiền cọc vỏ', icon: Coins },
     ],
   },
   {
@@ -130,8 +124,6 @@ export const NAV_ITEMS: NavItem[] = [
       { id: 'stock-out', label: 'Xuất kho', icon: ArrowUpFromLine },
       { id: 'stock', label: 'Tồn kho', icon: Boxes },
       { id: 'stock-audit', label: 'Đối soát kho', icon: ClipboardCheck },
-      { id: 'shell-stock', label: 'Vỏ bình', icon: Recycle },
-      { id: 'shell-audit', label: 'Đối chiếu vỏ', icon: Scale },
       { id: 'import-sources', label: 'Nguồn nhập', icon: Package },
       { id: 'loans', label: 'Quản lý mượn - trả', icon: ArrowUpFromLine },
     ],

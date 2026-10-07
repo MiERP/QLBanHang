@@ -1750,6 +1750,8 @@ export function reportsRouter(): Router {
     name: string;
     debt_voi: number;
     debt_up: number;
+    pending_voi: number;
+    pending_up: number;
     shell_value: number;
     collected: number;
     refunded: number;
@@ -1757,6 +1759,7 @@ export function reportsRouter(): Router {
     diff: number;
     collected_month: number;
     refunded_month: number;
+    pending_deposit: number;
   }
 
   const shellDepositReportData = (db: Database.Database, from: string, to: string) => {
@@ -1765,6 +1768,9 @@ export function reportsRouter(): Router {
       .prepare(
         `SELECT c.id as customer_id, c.code, c.name,
                 COALESCE(c.bottle_debt_voi,0) as debt_voi, COALESCE(c.bottle_debt_up,0) as debt_up,
+                COALESCE(b.bottles_voi,0) as bottles_voi, COALESCE(b.bottles_up,0) as bottles_up,
+                COALESCE(po.ret_voi,0) as ret_voi, COALESCE(po.ret_up,0) as ret_up,
+                COALESCE(po.pending_deposit,0) as pending_deposit,
                 COALESCE(d.collected,0) as collected, COALESCE(d.refunded,0) as refunded,
                 COALESCE(m.collected,0) as collected_month, COALESCE(m.refunded,0) as refunded_month
          FROM customers c
@@ -1777,10 +1783,30 @@ export function reportsRouter(): Router {
                            SUM(CASE WHEN transaction_type = 'REFUND' THEN amount ELSE 0 END) as refunded
                     FROM deposit_transactions WHERE transaction_date >= ? AND transaction_date <= ? GROUP BY customer_id) m
                 ON m.customer_id = c.id
+         LEFT JOIN (SELECT o.customer_id,
+                           SUM(CASE WHEN p.bottle_type = 'VOI' THEN oi.quantity + COALESCE(oi.quantity_promo,0) ELSE 0 END) as bottles_voi,
+                           SUM(CASE WHEN p.bottle_type = 'UP' THEN oi.quantity + COALESCE(oi.quantity_promo,0) ELSE 0 END) as bottles_up
+                    FROM orders o
+                    JOIN order_items oi ON oi.order_id = o.id
+                    JOIN products p ON p.id = oi.product_id
+                    WHERE o.order_status IN ('CONFIRMED','SHIPPING') AND o.order_type IN ('SALE','BORROW_IN')
+                    GROUP BY o.customer_id) b ON b.customer_id = c.id
+         LEFT JOIN (SELECT customer_id,
+                           SUM(COALESCE(returned_shells_voi,0)) as ret_voi,
+                           SUM(COALESCE(returned_shells_up,0)) as ret_up,
+                           SUM(COALESCE(deposit_amount,0)) as pending_deposit
+                    FROM orders
+                    WHERE order_status IN ('CONFIRMED','SHIPPING') AND order_type IN ('SALE','BORROW_IN')
+                    GROUP BY customer_id) po ON po.customer_id = c.id
          WHERE c.is_active = 1
          ORDER BY (c.bottle_debt_voi + c.bottle_debt_up) DESC, c.id ASC`
       )
-      .all(from, to) as Omit<ShellDepositReportRow, 'shell_value' | 'balance' | 'diff'>[];
+      .all(from, to) as (Omit<ShellDepositReportRow, 'shell_value' | 'balance' | 'diff' | 'pending_voi' | 'pending_up'> & {
+        bottles_voi: number;
+        bottles_up: number;
+        ret_voi: number;
+        ret_up: number;
+      })[];
 
     const rows: ShellDepositReportRow[] = raw.map((row) => {
       const shellValue = (Number(row.debt_voi) || 0) * feeVoi + (Number(row.debt_up) || 0) * feeUp;
@@ -1789,6 +1815,9 @@ export function reportsRouter(): Router {
         ...row,
         debt_voi: Number(row.debt_voi) || 0,
         debt_up: Number(row.debt_up) || 0,
+        pending_voi: Math.max(0, (Number(row.bottles_voi) || 0) - (Number(row.ret_voi) || 0)),
+        pending_up: Math.max(0, (Number(row.bottles_up) || 0) - (Number(row.ret_up) || 0)),
+        pending_deposit: Number(row.pending_deposit) || 0,
         collected: Number(row.collected) || 0,
         refunded: Number(row.refunded) || 0,
         collected_month: Number(row.collected_month) || 0,
@@ -1803,6 +1832,9 @@ export function reportsRouter(): Router {
       (acc, row) => ({
         debt_voi: acc.debt_voi + row.debt_voi,
         debt_up: acc.debt_up + row.debt_up,
+        pending_voi: acc.pending_voi + row.pending_voi,
+        pending_up: acc.pending_up + row.pending_up,
+        pending_deposit: acc.pending_deposit + row.pending_deposit,
         shell_value: acc.shell_value + row.shell_value,
         collected: acc.collected + row.collected,
         refunded: acc.refunded + row.refunded,
@@ -1814,6 +1846,9 @@ export function reportsRouter(): Router {
       {
         debt_voi: 0,
         debt_up: 0,
+        pending_voi: 0,
+        pending_up: 0,
+        pending_deposit: 0,
         shell_value: 0,
         collected: 0,
         refunded: 0,
@@ -1852,12 +1887,15 @@ export function reportsRouter(): Router {
         { width: 16 },
         { width: 16 },
         { width: 16 },
+        { width: 16 },
+        { width: 16 },
+        { width: 14 },
       ];
-      ws.mergeCells('A1:I1');
+      ws.mergeCells('A1:L1');
       ws.getCell('A1').value = `ĐỐI CHIẾU VỎ BÌNH - CỌC VỎ · KỲ ${from} → ${to}`;
       ws.getCell('A1').font = { bold: true, size: 13 };
       ws.getCell('A1').alignment = { horizontal: 'center' };
-      ws.mergeCells('A2:I2');
+      ws.mergeCells('A2:L2');
       ws.getCell('A2').value = `Phí cọc: vỏ Vòi ${Number(data.feeVoi).toLocaleString('vi-VN')}₫ · vỏ Úp ${Number(data.feeUp).toLocaleString('vi-VN')}₫`;
       ws.getCell('A2').font = { italic: true, size: 10 };
 
@@ -1871,6 +1909,9 @@ export function reportsRouter(): Router {
         'Đã hoàn cọc',
         'Cọc đang giữ',
         'Chênh lệch',
+        'Chờ ghi nhận Vòi',
+        'Chờ ghi nhận Úp',
+        'Cọc chờ thu',
       ];
       const headerRow = ws.addRow(header);
       headerRow.font = { bold: true };
@@ -1887,6 +1928,9 @@ export function reportsRouter(): Router {
           row.refunded,
           row.balance,
           row.diff,
+          row.pending_voi,
+          row.pending_up,
+          row.pending_deposit,
         ]);
       }
       const totalRow = ws.addRow([
@@ -1899,6 +1943,9 @@ export function reportsRouter(): Router {
         data.totals.refunded,
         data.totals.balance,
         data.totals.diff,
+        data.totals.pending_voi,
+        data.totals.pending_up,
+        data.totals.pending_deposit,
       ]);
       totalRow.font = { bold: true };
       ws.addRow([]);

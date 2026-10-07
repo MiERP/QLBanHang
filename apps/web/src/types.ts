@@ -127,6 +127,8 @@ export interface ShellDepositReportRow {
   name: string;
   debt_voi: number;
   debt_up: number;
+  pending_voi: number;
+  pending_up: number;
   shell_value: number;
   collected: number;
   refunded: number;
@@ -134,6 +136,7 @@ export interface ShellDepositReportRow {
   diff: number;
   collected_month: number;
   refunded_month: number;
+  pending_deposit: number;
 }
 
 export interface ShellDepositReport {
@@ -145,6 +148,9 @@ export interface ShellDepositReport {
   totals: {
     debt_voi: number;
     debt_up: number;
+    pending_voi: number;
+    pending_up: number;
+    pending_deposit: number;
     shell_value: number;
     collected: number;
     refunded: number;
