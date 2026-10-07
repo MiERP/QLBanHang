@@ -10,6 +10,7 @@ import { PageHeader } from '../../components/ui/PageHeader';
 import { useToast } from '../../components/ui/Toast';
 import { useReference } from '../../context/ReferenceContext';
 import { useApi } from '../../lib/hooks';
+import { cn } from '../../lib/cn';
 import { formatCurrency, formatDate } from '../../lib/format';
 import { getWorkingDate } from '../../lib/workingDate';
 import type { DepositTransaction, ReportPeriod } from '../../types';
@@ -18,9 +19,12 @@ export function DepositsTab({ period }: { period: ReportPeriod }) {
   const { customers, staff } = useReference();
   const toast = useToast();
 
-  const from = period.from;
-  const to = period.to;
   const [type, setType] = useState('');
+  // Mặc định xem LŨY KẾ để "cọc đang giữ" khớp với tab Theo khách và đúng số tiền xí nghiệp đang giữ.
+  // Đổi sang "Trong kỳ báo cáo" khi chỉ muốn xem phát sinh của kỳ.
+  const [scope, setScope] = useState<'all' | 'period'>('all');
+  const from = scope === 'period' ? period.from : undefined;
+  const to = scope === 'period' ? period.to : undefined;
 
   const { data, loading, reload } = useApi(() => api.fetchDeposits({ from, to, type: type || undefined }), [from, to, type]);
 
@@ -84,6 +88,25 @@ export function DepositsTab({ period }: { period: ReportPeriod }) {
       />
 
       <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-3">
+        <div className="flex items-center gap-1.5">
+          {(
+            [
+              { id: 'all', label: 'Toàn thời gian' },
+              { id: 'period', label: 'Trong kỳ báo cáo' },
+            ] as const
+          ).map((s) => (
+            <button
+              key={s.id}
+              onClick={() => setScope(s.id)}
+              className={cn(
+                'rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors',
+                scope === s.id ? 'bg-brand-navy text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+              )}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
         <Field label="Loại phiếu">
           <Select dense value={type} onChange={(e) => setType(e.target.value)}>
             <option value="">Tất cả</option>
@@ -91,18 +114,22 @@ export function DepositsTab({ period }: { period: ReportPeriod }) {
             <option value="REFUND">Hoàn cọc</option>
           </Select>
         </Field>
-        <span className="mb-1 text-xs text-slate-500">Kỳ báo cáo: {formatDate(from)} → {formatDate(to)}</span>
+        {scope === 'period' && (
+          <span className="mb-1 text-xs text-slate-500">
+            Kỳ báo cáo: {formatDate(period.from)} → {formatDate(period.to)}
+          </span>
+        )}
       </div>
 
       <div className="mb-3 flex flex-wrap gap-5 text-sm text-slate-600">
         <span>
-          Tổng thu cọc: <b className="text-emerald-600">{formatCurrency(totalCollect)}</b>
+          Tổng thu cọc ({scope === 'all' ? 'lũy kế' : 'trong kỳ'}): <b className="text-emerald-600">{formatCurrency(totalCollect)}</b>
         </span>
         <span>
-          Tổng hoàn cọc: <b className="text-brand-red">{formatCurrency(totalRefund)}</b>
+          Tổng hoàn cọc ({scope === 'all' ? 'lũy kế' : 'trong kỳ'}): <b className="text-brand-red">{formatCurrency(totalRefund)}</b>
         </span>
         <span>
-          Cọc đang giữ: <b className="text-brand-navy">{formatCurrency(totalCollect - totalRefund)}</b>
+          Cọc đang giữ ({scope === 'all' ? 'lũy kế' : 'trong kỳ'}): <b className="text-brand-navy">{formatCurrency(totalCollect - totalRefund)}</b>
         </span>
       </div>
 

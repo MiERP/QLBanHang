@@ -38,8 +38,8 @@ const columns: Column<ShellDepositReportRow>[] = [
     render: (r) => formatCurrency(r.shell_value),
     sortValue: (r) => r.shell_value,
   },
-  { key: 'collected', header: 'Đã thu cọc', align: 'right', render: (r) => formatCurrency(r.collected), sortValue: (r) => r.collected },
-  { key: 'refunded', header: 'Đã hoàn cọc', align: 'right', render: (r) => formatCurrency(r.refunded), sortValue: (r) => r.refunded },
+  { key: 'collected', header: 'Đã thu cọc (lũy kế)', align: 'right', render: (r) => formatCurrency(r.collected), sortValue: (r) => r.collected },
+  { key: 'refunded', header: 'Đã hoàn cọc (lũy kế)', align: 'right', render: (r) => formatCurrency(r.refunded), sortValue: (r) => r.refunded },
   {
     key: 'balance',
     header: 'Cọc đang giữ',
