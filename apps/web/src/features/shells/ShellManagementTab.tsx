@@ -156,6 +156,7 @@ function CustomerOrders({ orders, onDone }: { orders: ShellOrderRow[]; onDone: (
             <th className="px-3 py-2 text-right">Vỏ Úp</th>
             <th className="px-3 py-2 text-right">Tiền cọc</th>
             <th className="px-3 py-2 text-right">Đã trả (Vòi/Úp)</th>
+            <th className="px-3 py-2 text-right">Còn lại của đơn (Vòi/Úp)</th>
             <th className="px-3 py-2 text-right">Thao tác</th>
           </tr>
         </thead>
@@ -169,6 +170,11 @@ function CustomerOrders({ orders, onDone }: { orders: ShellOrderRow[]; onDone: (
               <td className="px-3 py-2 text-right">{formatCurrency(o.deposit)}</td>
               <td className="px-3 py-2 text-right">
                 {o.returned_voi || o.returned_up ? `${formatNumber(o.returned_voi)} / ${formatNumber(o.returned_up)}` : '—'}
+              </td>
+              <td className="px-3 py-2 text-right">
+                <b className="text-brand-navy">
+                  {formatNumber(Math.max(0, o.voi - o.returned_voi))} / {formatNumber(Math.max(0, o.up - o.returned_up))}
+                </b>
               </td>
               <td className="px-3 py-2">
                 <ShellActions
