@@ -218,7 +218,7 @@ export function ordersRouter(): Router {
         const ph = orderIds.map(() => '?').join(',');
         const items = db
           .prepare(
-            `SELECT oi.order_id, p.code, COALESCE(SUM(oi.quantity), 0) as quantity
+            `SELECT oi.order_id, p.code, COALESCE(SUM(oi.quantity + COALESCE(oi.quantity_promo, 0)), 0) as quantity
              FROM order_items oi JOIN products p ON p.id = oi.product_id
              WHERE oi.order_id IN (${ph}) GROUP BY oi.order_id, p.code`
           )
