@@ -199,15 +199,17 @@ export function ordersRouter(): Router {
                   COALESCE(o.shipping_address, c.address, '') as address,
                   w.name as warehouse_name,
                   o.target_scope,
+                  pu.name as partner_name,
                   ou.name as support_station_name
            FROM orders o
            JOIN customers c ON o.customer_id = c.id
            LEFT JOIN warehouses w ON o.warehouse_id = w.id
+           LEFT JOIN partner_units pu ON o.partner_unit_id = pu.id
            LEFT JOIN org_units ou ON o.support_station_id = ou.id
            WHERE o.order_status IN ('DRAFT', 'CONFIRMED', 'SHIPPING')
            ORDER BY o.order_date ASC, o.id ASC`
         )
-        .all() as { id: number; order_date: string; order_type: string; order_status: string; customer_name: string; phone: string; address: string; warehouse_name: string | null; target_scope: string | null; support_station_name: string | null }[];
+        .all() as { id: number; order_date: string; order_type: string; order_status: string; customer_name: string; phone: string; address: string; warehouse_name: string | null; target_scope: string | null; partner_name: string | null; support_station_name: string | null }[];
 
       const orderIds = orders.map((o) => o.id);
       // 8 cột sản phẩm theo đúng mẫu điều phối: Vỉ 350/500, Hộp 350/500, Bình RO Vòi/Úp, Bình kiềm Vòi/Úp.
@@ -249,7 +251,7 @@ export function ordersRouter(): Router {
       const ws = wb.addWorksheet('Điều phối đơn');
       // Bề rộng cột theo mẫu điều phối.
       ws.columns = [
-        { width: 14 }, { width: 26 }, { width: 36 }, { width: 10 }, { width: 31 }, { width: 13 },
+        { width: 14 }, { width: 26 }, { width: 36 }, { width: 10 }, { width: 31 }, { width: 16 },
         { width: 6 }, { width: 6 }, { width: 6 }, { width: 6 }, { width: 5 }, { width: 5 }, { width: 5.5 }, { width: 5.5 },
         { width: 17 }, { width: 11 }, { width: 13.5 },
       ];
@@ -260,7 +262,7 @@ export function ordersRouter(): Router {
       setCell(1, 3, 'Địa chỉ');
       setCell(1, 4, 'Loại đơn');
       setCell(1, 5, 'Kho');
-      setCell(1, 6, 'Chỉ tiêu');
+      setCell(1, 6, 'Chỉ tiêu/Đối tác');
       setCell(1, 7, 'Sản phẩm bán');
       setCell(1, 15, 'Người vận chuyển');
       setCell(1, 16, 'Trạm hỗ trợ');
@@ -295,7 +297,10 @@ export function ordersRouter(): Router {
           o.address,
           ORDER_TYPE_LABEL[o.order_type] ?? o.order_type,
           o.warehouse_name ?? '',
-          TARGET_SCOPE_LABEL[o.target_scope ?? ''] ?? '',
+          // Đơn bán: chỉ tiêu (Công ty / Xí nghiệp). Đơn mượn / cho mượn / bốc xếp: tên đối tác liên kết.
+          o.order_type === 'SALE'
+            ? (TARGET_SCOPE_LABEL[o.target_scope ?? ''] ?? '')
+            : (o.partner_name ?? TARGET_SCOPE_LABEL[o.target_scope ?? ''] ?? ''),
           qty[0] || '', qty[1] || '', qty[2] || '', qty[3] || '',
           qty[4] || '', qty[5] || '', qty[6] || '', qty[7] || '',
           (shippersByOrder.get(o.id) ?? []).join(', '),
