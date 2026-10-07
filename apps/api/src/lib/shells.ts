@@ -248,11 +248,14 @@ export function returnCustomerShellsAllocated(
   if (leftVoi || leftUp) allocations.push({ orderId: null, voi: leftVoi, up: leftUp });
 
   let result: ShellReturnResult | null = null;
+  let totalRefund = 0;
   for (const a of allocations) {
     result = returnCustomerShells(db, { ...input, orderId: a.orderId, shellsVoi: a.voi, shellsUp: a.up });
+    totalRefund += result.refundAmount;
   }
   if (!result) throw badRequest('Không có vỏ để thu hồi');
-  return { ...result, allocations };
+  // Trả về tổng tiền đã hoàn của MỌI phần chia (không phải chỉ phần cuối cùng).
+  return { ...result, refundAmount: totalRefund, allocations };
 }
 
 /**
