@@ -1,1 +1,0 @@
-{"kind":"region","sheet":"expense_transactions","address":"A1:K1","rows":1,"cols":11,"nonEmpty":11,"text":11,"maxTextLength":14,"preview":[["id","expense_code","category","amount","paid_to","paid_by","station_id","payment_method","expense_date","note","created_at"]],"previewAddress":"A1:K1","previewRows":1,"previewCols":11}

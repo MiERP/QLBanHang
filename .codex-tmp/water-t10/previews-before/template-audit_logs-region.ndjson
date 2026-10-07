@@ -1,1 +1,0 @@
-{"kind":"region","sheet":"audit_logs","address":"A1:L1","rows":1,"cols":12,"nonEmpty":12,"text":12,"maxTextLength":11,"preview":[["id","occurred_at","actor","action","entity","entity_id","entity_code","description","method","path","before_json","after_json"]],"previewAddress":"A1:L1","previewRows":1,"previewCols":12}

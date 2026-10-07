@@ -1,1 +1,0 @@
-{"kind":"region","sheet":"order_shippers","address":"A1:G1","rows":1,"cols":7,"nonEmpty":7,"text":7,"maxTextLength":13,"preview":[["id","order_id","employee_id","allocated_fee","kind","note","created_at"]],"previewAddress":"A1:G1","previewRows":1,"previewCols":7}

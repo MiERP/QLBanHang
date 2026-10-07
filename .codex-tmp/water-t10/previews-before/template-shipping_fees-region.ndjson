@@ -1,1 +1,0 @@
-{"kind":"region","sheet":"shipping_fees","address":"A1:G2","rows":2,"cols":7,"nonEmpty":13,"blank":1,"text":13,"maxTextLength":31,"preview":[["id","code","name","fee_per_unit","is_active","note","created_at"],["1","MAC_DINH_5000","Phí giao mặc định 5.000đ/đơn vị","5000","1",null,"2026-10-05 11:11:54"]],"previewAddress":"A1:G2","previewRows":2,"previewCols":7}
