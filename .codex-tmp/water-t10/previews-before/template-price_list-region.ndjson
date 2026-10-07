@@ -1,0 +1,1 @@
+{"kind":"region","sheet":"price_list","address":"A1:I1","rows":1,"cols":9,"nonEmpty":9,"text":9,"maxTextLength":17,"preview":[["id","product_id","category_id","customer_group_id","unit_price","effective_date","is_active","note","created_at"]],"previewAddress":"A1:I1","previewRows":1,"previewCols":9}

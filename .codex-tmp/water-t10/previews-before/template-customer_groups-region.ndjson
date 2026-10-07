@@ -1,0 +1,1 @@
+{"kind":"region","sheet":"customer_groups","address":"A1:C4","rows":4,"cols":3,"nonEmpty":12,"text":12,"maxTextLength":27,"preview":[["id","code","name"],["1","GRP_CORP","Doanh Nghiệp / Cơ Quan"],["2","GRP_AGENCY","Đại Lý / Cửa Hàng Phân Phối"],["3","GRP_RETAIL","Hộ Gia Đình / Khách Lẻ"]],"previewAddress":"A1:C4","previewRows":4,"previewCols":3}

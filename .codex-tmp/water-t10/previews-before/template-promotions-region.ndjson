@@ -1,0 +1,1 @@
+{"kind":"region","sheet":"promotions","address":"A1:M1","rows":1,"cols":13,"nonEmpty":13,"text":13,"maxTextLength":15,"preview":[["id","code","name","product_id","category_id","buy_quantity","free_quantity","free_product_id","start_date","end_date","is_active","note","created_at"]],"previewAddress":"A1:M1","previewRows":1,"previewCols":13}

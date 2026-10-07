@@ -1,0 +1,1 @@
+{"kind":"region","sheet":"delivery_dispatches","address":"A1:K1","rows":1,"cols":11,"nonEmpty":11,"text":11,"maxTextLength":24,"preview":[["id","dispatch_code","order_id","shipper_employee_id","warehouse_id","shipping_fee","stair_carrying_allowance","status","dispatched_at","completed_at","note"]],"previewAddress":"A1:K1","previewRows":1,"previewCols":11}

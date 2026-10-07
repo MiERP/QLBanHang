@@ -732,7 +732,9 @@ for (const [sheetName, whCode] of STOCK_SHEETS) {
   let rowsUsed = 0;
   for (let r = Math.max(blockRow, productRow) + 1; r <= ws.rowCount; r++) {
     const date = parseDateCell(ws.getRow(r).getCell(2));
-    if (!date || date <= '2026-09-28') continue;
+    // Cửa sổ dữ liệu kỳ T10: tồn đầu kỳ 28/9, mọi phát sinh 29/9 → 6/10.
+    // Bỏ ngày nhiễu/tương lai (ví dụ ô "9/10" bị hiểu thành 2026-10-09) và mọi ngày trước 29/9.
+    if (!date || date < '2026-09-29' || date > '2026-10-06') continue;
     rowsUsed++;
     for (const column of columns) {
       const product = productByCode.get(column.code);

@@ -1,0 +1,1 @@
+{"kind":"region","sheet":"stock_ticket_items","address":"A1:H1","rows":1,"cols":8,"nonEmpty":8,"text":8,"maxTextLength":14,"preview":[["id","ticket_id","product_id","order_item_id","quantity","quantity_promo","quality","note"]],"previewAddress":"A1:H1","previewRows":1,"previewCols":8}

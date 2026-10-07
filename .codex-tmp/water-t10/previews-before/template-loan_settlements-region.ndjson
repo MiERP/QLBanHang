@@ -1,0 +1,1 @@
+{"kind":"region","sheet":"loan_settlements","address":"A1:J1","rows":1,"cols":10,"nonEmpty":10,"text":10,"maxTextLength":13,"preview":[["id","order_id","settle_type","settle_date","warehouse_id","ticket_id","settled_value","amount","note","created_at"]],"previewAddress":"A1:J1","previewRows":1,"previewCols":10}
