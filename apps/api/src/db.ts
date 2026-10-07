@@ -6,6 +6,7 @@ import { FREE_SHIP_FOR_CUSTOMER, FREE_SHIP_WITHOUT_SHIPPER, SETTING_DEFS } from 
 import { dateKey, nextCode } from './lib/codes.js';
 import { vatRateAt } from './lib/vat.js';
 import { recalcTotals } from './lib/orderStatus.js';
+import { shellDepositFees } from './lib/shells.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -370,20 +371,32 @@ function normalizeCompanySourceOrders(db: Database.Database): void {
   }
 }
 
-// Đơn bán của khách Công ty phải có đủ sổ sách như đơn bán của xí nghiệp: vỏ giao cho khách được ghi
-// vào nợ vỏ của khách, tiền cọc vỏ đã thu được ghi vào sổ cọc (khoản phải trả cho khách). Idempotent.
-function backfillCompanySourceShells(db: Database.Database): void {
+// Ghi bù vỏ/cọc cho đơn ĐÃ HOÀN TẤT nhưng thiếu bút toán — xảy ra khi dữ liệu được nhập từ Excel
+// (khôi phục theo ID ghi thẳng dòng, không chạy nghiệp vụ hoàn tất nên không sinh nợ vỏ/phiếu cọc).
+// Nguồn số liệu là chính các dòng hàng của đơn, KHÔNG cần sổ vỏ lịch sử:
+//   nợ vỏ = số bình giao (SL + KM) − số vỏ khách trả;  cọc = phần bình mượn × phí cọc đang áp.
+function backfillImportedOrderShells(db: Database.Database): void {
+  // Cổng chặn: chỉ vá khi CSDL KHÔNG có sổ vỏ nào — đúng dấu hiệu dữ liệu nhập từ Excel (khôi phục
+  // theo ID) thiếu cả lớp vỏ. CSDL vận hành bình thường hoặc dữ liệu mẫu đều có sổ vỏ, không suy diễn.
+  const hasShellLedger = (db.prepare('SELECT COUNT(*) AS c FROM shell_movements').get() as { c: number }).c > 0;
+  if (hasShellLedger) return;
+
   const orders = db
     .prepare(
-      `SELECT o.id, o.order_code, o.order_date, o.customer_id, o.deposit_amount, o.payment_method,
-              o.shipper_employee_id, o.seller_employee_id
+      `SELECT o.id, o.order_code, o.order_date, o.customer_id, o.deposit_amount, o.deposit_override,
+              o.payment_method, o.shipper_employee_id, o.seller_employee_id,
+              o.returned_shells_voi, o.returned_shells_up
        FROM orders o
-       WHERE o.order_type = 'SALE' AND o.target_scope = 'COMPANY' AND o.partner_unit_id IS NULL
+       WHERE o.order_type IN ('SALE', 'BORROW_IN')
          -- Chỉ đơn đã HOÀN TẤT mới phát sinh cọc và nợ vỏ. Đơn còn Nháp/chưa giao thì chưa thu gì,
          -- nếu ghi ở đây sẽ tạo phiếu thu cọc và nợ vỏ khống cho đơn chưa giao cho khách.
          AND o.order_status IN ('COMPLETED', 'RETURNED')
          AND NOT EXISTS (SELECT 1 FROM customer_bottle_ledgers l WHERE l.order_id = o.id)
-       ORDER BY o.id`
+         AND EXISTS (
+           SELECT 1 FROM order_items oi JOIN products p ON p.id = oi.product_id
+           WHERE oi.order_id = o.id AND p.bottle_type <> 'NONE'
+         )
+       ORDER BY o.order_date, o.id`
     )
     .all() as {
     id: number;
@@ -391,24 +404,31 @@ function backfillCompanySourceShells(db: Database.Database): void {
     order_date: string;
     customer_id: number;
     deposit_amount: number;
+    deposit_override: number | null;
     payment_method: string;
     shipper_employee_id: number | null;
     seller_employee_id: number | null;
+    returned_shells_voi: number | null;
+    returned_shells_up: number | null;
   }[];
   if (!orders.length) return;
 
-  // Sổ vỏ kho là nguồn: số vỏ đã xuất theo đơn chính là số vỏ khách đang giữ.
-  const shellsOf = db.prepare(
-    `SELECT bottle_type, COALESCE(SUM(quantity), 0) as quantity FROM shell_movements
-     WHERE order_id = ? AND movement_type = 'OUT' GROUP BY bottle_type`
+  const { feeVoi, feeUp } = shellDepositFees(db);
+  // Số bình giao theo đơn = tổng (số lượng + khuyến mãi) các dòng hàng là bình, theo loại vỏ.
+  const bottleRowsOf = db.prepare(
+    `SELECT p.bottle_type, COALESCE(SUM(oi.quantity + COALESCE(oi.quantity_promo, 0)), 0) as quantity
+     FROM order_items oi JOIN products p ON p.id = oi.product_id
+     WHERE oi.order_id = ? AND p.bottle_type <> 'NONE'
+     GROUP BY p.bottle_type`
   );
   const debtOf = db.prepare('SELECT bottle_debt_voi, bottle_debt_up FROM customers WHERE id = ?');
   const setDebt = db.prepare('UPDATE customers SET bottle_debt_voi = ?, bottle_debt_up = ? WHERE id = ?');
+  const setDeposit = db.prepare('UPDATE orders SET deposit_amount = ? WHERE id = ?');
   const insertLedger = db.prepare(
     `INSERT INTO customer_bottle_ledgers
       (customer_id, order_id, transaction_date, borrowed_voi, borrowed_up, returned_voi, returned_up,
        deposit_amount, refund_deposit_amount, remaining_balance_voi, remaining_balance_up, handled_by, note)
-     VALUES (?, ?, ?, ?, ?, 0, 0, ?, 0, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`
   );
   const hasDeposit = db.prepare(`SELECT id FROM deposit_transactions WHERE order_id = ? AND transaction_type = 'COLLECT'`);
   const insertDeposit = db.prepare(
@@ -421,16 +441,29 @@ function backfillCompanySourceShells(db: Database.Database): void {
   let deposits = 0;
   db.transaction(() => {
     for (const order of orders) {
-      const rows = shellsOf.all(order.id) as { bottle_type: string; quantity: number }[];
+      const rows = bottleRowsOf.all(order.id) as { bottle_type: string; quantity: number }[];
       const voi = Number(rows.find((r) => r.bottle_type === 'VOI')?.quantity) || 0;
       const up = Number(rows.find((r) => r.bottle_type === 'UP')?.quantity) || 0;
-      const deposit = Number(order.deposit_amount) || 0;
+      const retVoi = Number(order.returned_shells_voi) || 0;
+      const retUp = Number(order.returned_shells_up) || 0;
+      const netVoi = Math.max(0, voi - retVoi);
+      const netUp = Math.max(0, up - retUp);
+      // Cọc: giữ số đã lưu; chưa có thì dùng số nhập tay (nếu có), còn lại tính theo phí cọc đang áp.
+      const deposit =
+        Number(order.deposit_amount) > 0
+          ? Number(order.deposit_amount)
+          : order.deposit_override != null
+            ? Math.max(0, Number(order.deposit_override) || 0)
+            : netVoi * feeVoi + netUp * feeUp;
       const handledBy = order.shipper_employee_id ?? order.seller_employee_id ?? null;
+      if (deposit > 0 && Number(order.deposit_amount) !== deposit) {
+        setDeposit.run(deposit, order.id);
+      }
 
-      if (voi || up) {
+      if (voi || up || retVoi || retUp) {
         const customer = debtOf.get(order.customer_id) as { bottle_debt_voi: number; bottle_debt_up: number } | undefined;
-        const newVoi = (Number(customer?.bottle_debt_voi) || 0) + voi;
-        const newUp = (Number(customer?.bottle_debt_up) || 0) + up;
+        const newVoi = Math.max(0, (Number(customer?.bottle_debt_voi) || 0) + voi - retVoi);
+        const newUp = Math.max(0, (Number(customer?.bottle_debt_up) || 0) + up - retUp);
         setDebt.run(newVoi, newUp, order.customer_id);
         insertLedger.run(
           order.customer_id,
@@ -438,6 +471,8 @@ function backfillCompanySourceShells(db: Database.Database): void {
           order.order_date,
           voi,
           up,
+          retVoi,
+          retUp,
           deposit,
           newVoi,
           newUp,
@@ -463,7 +498,7 @@ function backfillCompanySourceShells(db: Database.Database): void {
     }
   })();
   console.log(
-    `[API Database] Ghi bổ sung cho đơn khách Công ty: ${shells} vỏ vào nợ vỏ khách, ${deposits} phiếu thu cọc vỏ (${orders.length} đơn).`
+    `[API Database] Ghi bù vỏ/cọc cho đơn đã hoàn tất thiếu bút toán: ${shells} vỏ vào nợ vỏ khách, ${deposits} phiếu thu cọc (${orders.length} đơn).`
   );
 }
 
@@ -961,7 +996,7 @@ function initializeDatabase(dbInstance: Database.Database, forceSeed: boolean): 
   ensureAppSettings(dbInstance);
   normalizeOrderTotals(dbInstance);
   normalizeCompanySourceOrders(dbInstance);
-  backfillCompanySourceShells(dbInstance);
+  backfillImportedOrderShells(dbInstance);
   ensureColumn(dbInstance, 'invoices', 'personal_id', 'TEXT');
   ensureColumn(dbInstance, 'invoices', 'budget_relation_code', 'TEXT');
 
